@@ -1,0 +1,35 @@
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+// إنشاء عميل Gemini الرسمي
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+/**
+ * إرسال Prompt إلى نموذج Gemini 2.0 Flash
+ *
+ * @param {string} prompt
+ * @returns {Promise<string>}
+ */
+export async function sendToGemini(prompt) {
+  try {
+    // اختر النموذج
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.0-flash",
+    });
+
+    // إرسال النص مباشرة بدون contents/parts
+    const result = await model.generateContent(prompt);
+
+    // 🔥 أهم شيء: استخراج النص بالتنسيق الجديد
+    const text = await result.response.text();
+
+    console.log("📤 Gemini Output:", text.slice(0, 200)); // أول 200 حرف لمعاينة
+
+    return text.trim();
+  } catch (error) {
+    console.error("❌ Gemini API Error:", error);
+    return "";
+  }
+}
