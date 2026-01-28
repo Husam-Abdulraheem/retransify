@@ -14,9 +14,10 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
  */
 export async function sendToGemini(prompt) {
   try {
-    // اختر النموذج
+    // اختر النموذج - الأولوية للمتغير البيئي AI_MODEL إذا كان المزود gemini أو غير محدد، وإلا الافتراضي
+    const modelName = process.env.AI_PROVIDER === 'gemini' && process.env.AI_MODEL ? process.env.AI_MODEL : "gemini-2.0-flash";
     const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
+      model: modelName,
     });
 
     // إرسال النص مباشرة بدون contents/parts
