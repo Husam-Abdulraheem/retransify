@@ -16,6 +16,13 @@ export function buildDependencyGraph(parsedFiles) {
   // تحويل المسارات النسبية إلى شكل موحد
   const normalize = (p) => p.replace(/\\/g, "/");
 
+  // تجميع كل المسارات في Set لتسريع البحث والتأكد من الوجود
+  const allFilesSet = new Set();
+  for (const file of parsedFiles) {
+    const filePath = normalize(file.relativeToSrc || file.filePath);
+    allFilesSet.add(filePath);
+  }
+
   // الخطوة 1: تعبئة importsGraph
   for (const file of parsedFiles) {
     const filePath = normalize(file.relativeToSrc || file.filePath);
@@ -24,7 +31,8 @@ export function buildDependencyGraph(parsedFiles) {
     importsGraph[filePath] = [];
 
     for (const imp of file.imports) {
-      let resolved = resolveImportPath(imp.source, filePath);
+      // Pass the set of all known files to resolve against
+      let resolved = resolveImportPath(imp.source, filePath, allFilesSet);
       if (resolved) {
         importsGraph[filePath].push(resolved);
       }
@@ -54,18 +62,25 @@ export function buildDependencyGraph(parsedFiles) {
  * محاولة حل مسار import بالنسبة لمسار الملف الأصلي
  * @param {string} importPath - القيمة داخل from "..."
  * @param {string} currentFile - المسار النسبي للملف الذي يستورد
+ * @param {Set<string>} allFilesSet - مجموعة بكل الملفات الموجودة في المشروع
  * @returns {string|null}
  */
-function resolveImportPath(importPath, currentFile) {
+function resolveImportPath(importPath, currentFile, allFilesSet) {
   // لو import من مكتبة خارجية نتركه
   if (!importPath.startsWith(".")) return null;
 
   const currentDir = path.dirname(currentFile);
 
-  // مسار نسبي
+  // مسار نسبي بسيط
   let full = normalizePath(path.join(currentDir, importPath));
 
-  // جرب الامتدادات المحتملة
+  // 1. هل الامتداد موجود أصلاً في الـ import؟
+  // مثلاً import ... from './file.js'
+  if (allFilesSet.has(full)) {
+    return full;
+  }
+
+  // 2. تجربة الامتدادات المحتملة
   const candidates = [
     full + ".js",
     full + ".jsx",
@@ -77,9 +92,8 @@ function resolveImportPath(importPath, currentFile) {
     full + "/index.tsx"
   ];
 
-  // اختر أول ملف منطقي
   for (const c of candidates) {
-    return c;
+    if (allFilesSet.has(c)) return c;
   }
 
   return null;

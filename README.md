@@ -4,10 +4,14 @@ A powerful CLI tool to convert React (web) projects into optimized React Native 
 
 ## Features
 
+- **3-Phase Agentic Workflow**:
+  - **Analyzer**: deeply understands project structure & tech stack.
+  - **Planner**: creates a dependency-aware migration strategy.
+  - **Executor**: implements changes with state persistence & recovery.
 - **Automated Scanning**: Scans your React project structure and files.
 - **AST Parsing**: Understands your code's Abstract Syntax Tree (AST) for accurate analysis.
 - **Dependency Graph**: Builds a dependency graph to managing imports and component relationships.
-- **Context-Aware Conversion**: Generates intelligent prompts for the AI based on the full project context, not just individual files.
+- **Context-Aware Conversion**: Generates intelligent prompts for the AI based on the full project context.
 - **AI-Powered**: Uses Google's Gemini or Groq to perform the code conversion.
 - **Expo Ready**: Automatically creates a new Expo project and writes the converted files into it.
 
@@ -41,23 +45,42 @@ If you are a developer who wants to convert your React application to React Nati
     # API Keys
     GEMINI_API_KEY=your_gemini_api_key
     GROQ_API_KEY=your_groq_api_key
-
-    # Model Selection (Optional)
-    # AI_MODEL=gemini-2.0-flash
-    # AI_MODEL=qwen/qwen3-32b
     ```
 
 ### Usage
 
-To convert a React project, run the following command:
+To convert a React project, run the main command. The CLI is now **interactive** and will ask you to select an AI model.
 
 ```bash
-# If installed/linked globally
-retransify convert ./path-to-your-react-app
+# General Usage
+node cli.js convert <path-to-react-project> [--sdk <version>]
 
-# Or using node directly
-node cli.js convert ./path-to-your-react-app
+# Examples
+# 1. Start conversion (Interactive Model Selection)
+node cli.js convert ./my-react-app
+
+# 2. Target specific Expo SDK (e.g., SDK 50)
+node cli.js convert ./my-react-app --sdk 50
 ```
+
+### Supported Models
+
+You can select from the following models during the interactive CLI session:
+
+- **Gemini**:
+    - Gemini 3.0 Flash
+    - Gemini 2.5 Flash
+    - Gemini 2.5 Flash Lite
+- **Groq (Llama/Mixtral)**:
+    - Llama 3.3 70B (Versatile)
+    - Llama 3.1 8B (Instant)
+    - Mixtral 8x7b
+
+### New Features (v2.0)
+- **Smart Pathing**: Automatically restructures your project (`app/`, `components/`) instead of mirroring `src/`.
+- **Expo Router Support**: Configures file-based routing automatically.
+- **Strict TypeScript**: Generates `.tsx` files with strict typing interfaces.
+
 
 The tool will:
 1.  Scan and analyze the target React app.
@@ -93,9 +116,13 @@ If you want to contribute to `retransify-local` or modify its core logic.
 - `cli.js`: Entry point for the CLI.
 - `src/cli`: CLI specific logic and command handling.
 - `src/core`: Core logic.
-    - `ai`: AI client implementations (Gemini, Groq) and factory.
-    - `prompt`: Prompt generation logic (`promptBuilder.js`).
-    - `helpers`: Utility helper functions.
+    - `phases/`: The heart of the agentic workflow.
+        - `analyzer.js`: Scans and detects tech stack.
+        - `planner.js`: Creates the execution plan.
+        - `executor.js`: Executes the conversion and manages state.
+    - `ai/`: AI client implementations (Gemini, Groq) and factory.
+    - `prompt/`: Prompt generation logic (`promptBuilder.js`).
+    - `helpers/`: Utility helper functions.
     - `fileScanner.js`: Handles file system scanning.
     - `astParser.js`: Parses JS/JSX files into AST.
     - `graphBuilder.js`: Builds dependency graphs.

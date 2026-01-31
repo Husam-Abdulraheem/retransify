@@ -3,6 +3,9 @@ export function cleanAIResponse(text = "") {
 
   let output = text.trim();
 
+  // إزالة بلوكات التفكير <think>...</think>
+  output = output.replace(/<think>[\s\S]*?<\/think>/g, "");
+
   // إزالة ```js أو ``` أو أي Markdown
   output = output.replace(/```[\s\S]*?```/g, "");
   output = output.replace(/```/g, "");

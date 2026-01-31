@@ -19,7 +19,7 @@ export async function sendToGroq(prompt, modelName) {
     try {
         const model = modelName || process.env.AI_MODEL || "llama-3.1-8b-instant"; // Default fallback
         
-        console.log(`🤖 Sending to Groq (Model: ${model})...`);
+        console.log(`🔷 Actual Groq Model Used: ${model}`); // Standardized debug log
 
         const completion = await groq.chat.completions.create({
             messages: [
