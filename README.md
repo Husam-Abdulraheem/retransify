@@ -1,153 +1,131 @@
 # Retransify Local (React 2 Native CLI)
 
-A powerful CLI tool to convert React (web) projects into optimized React Native (Expo) applications using AI (Gemini or Groq).
+### 🚀 Transform React Web Projects into Native Mobile Apps with AI
 
-## Features
+![License](https://img.shields.io/badge/license-ISC-blue.svg) ![Node](https://img.shields.io/badge/node-v18%2B-green.svg) ![Platform](https://img.shields.io/badge/platform-React%20Native%20%7C%20Expo-blueviolet.svg)
 
-- **3-Phase Agentic Workflow**:
-  - **Analyzer**: deeply understands project structure & tech stack.
-  - **Planner**: creates a dependency-aware migration strategy.
-  - **Executor**: implements changes with state persistence & recovery.
-- **Automated Scanning**: Scans your React project structure and files.
-- **AST Parsing**: Understands your code's Abstract Syntax Tree (AST) for accurate analysis.
-- **Dependency Graph**: Builds a dependency graph to managing imports and component relationships.
-- **Context-Aware Conversion**: Generates intelligent prompts for the AI based on the full project context.
-- **AI-Powered**: Uses Google's Gemini or Groq to perform the code conversion.
-- **Expo Ready**: Automatically creates a new Expo project and writes the converted files into it.
+## 📋 Table of Contents
+- [📖 Overview](#-overview)
+- [🚀 Why Retransify?](#-why-retransify)
+- [✨ Key Features](#-key-features)
+- [🔒 Privacy & Security](#-privacy--security)
+- [🏗️ Architecture](#-architecture)
+- [🛠️ Tech Stack](#-tech-stack)
+- [🏁 Getting Started](#-getting-started)
+- [📱 Usage](#-usage)
+- [📂 Project Structure](#-project-structure)
+- [🤝 Contributing](#-contributing)
+- [📄 License](#-license)
 
-## Getting Started (For Users)
+## 📖 Overview
+**Retransify Local** is a powerful CLI tool designed to autonomously convert existing React (web) projects into optimized React Native (Expo) applications. By leveraging advanced AI models (Gemini or Groq), it deeply analyzes your codebase, understands component relationships, and rewrites them for mobile, ensuring a smooth migration from web to native.
 
-If you are a developer who wants to convert your React application to React Native.
+## 🚀 Why Retransify?
+Migrating a codebase from web to mobile is often a tedious, manual process. Retransify solves this by:
+- **Saving Time**: Automates the repetitive work of rewriting JSX to React Native primitives.
+- **Context-Awareness**: Unlike simple code modders, it understands the *intent* of your code through full-project analysis.
+- **Modern Standards**: Generates clean, TypeScript-ready code compatible with the latest Expo SDKs.
+
+## ✨ Key Features
+- **🤖 3-Phase Agentic Workflow**:
+  - **Analyzer**: Deeply scans project structure & tech stack.
+  - **Planner**: Formulates a dependency-aware migration strategy.
+  - **Executor**: Implements changes with state persistence & recovery.
+- **🔍 Automated Scanning & AST Parsing**: Precision analysis of your code's abstract syntax tree.
+- **🧠 Context-Aware Conversion**: Intelligent prompts based on full project context, not just isolated files.
+- **📱 Expo Ready**: Automatically scaffolds a new Expo project with router configuration.
+- **⚡ Multiple AI Providers**: Support for Google's **Gemini** (3.0 Flash, 2.5) and **Groq** (Llama 3, Mixtral).
+- **🛤️ Smart Pathing**: Automatically restructures `src/` to Expo's `app/` and `components/` best practices.
+
+## 🔒 Privacy & Security
+Your code's privacy is paramount. Retransify is designed with security in mind:
+- **Local Execution**: The CLI runs entirely on your local machine. No code is stored on our servers.
+- **Direct AI connection**: Data is sent directly from your machine to the chosen AI provider (Google or Groq) via their official APIs.
+- **API Key Safety**: Your API keys are stored locally in your `.env` file and are never shared or logged.
+
+## 🏗️ Architecture
+The tool follows a robust agentic architecture to ensure reliability:
+
+1.  **Analysis Phase**: Scans files, parses AST, and builds a dependency graph.
+2.  **Planning Phase**: prioritizes files based on dependencies (e.g., utils -> lower-level components -> screens).
+3.  **Execution Phase**: Iterates through the plan, converting files and maintaining state in case of interruptions.
+
+## 🛠️ Tech Stack
+- **Runtime**: [Node.js](https://nodejs.org/)
+- **AI Integration**: [Google Generative AI SDK](https://github.com/google/generative-ai-js), [Groq SDK](https://console.groq.com/docs/libraries/js)
+- **Parsing**: [Babel Parser](https://babeljs.io/docs/en/babel-parser) & Traverse
+- **File System**: [fs-extra](https://github.com/jprichardson/node-fs-extra)
+- **CLI**: [Commander.js](https://github.com/tj/commander.js/)
+
+## 🏁 Getting Started
+
+### Prerequisites
+- [Node.js](https://nodejs.org/) (v18+ recommended)
+- [npm](https://www.npmjs.com/) or [yarn](https://yarnpkg.com/)
+- API Key for **Gemini** or **Groq**
 
 ### Installation
 
-1.  Clone this repository or install the package if available (assuming local usage for now).
+1.  **Clone the repository**:
     ```bash
     git clone <repository-url>
     cd retransify-local
     npm install
     ```
 
-2.  Link the CLI locally (optional, but recommended for easy access):
+2.  **Link locally (optional)**:
     ```bash
     npm link
     ```
 
 ### Configuration
 
-1.  Create a `.env` file in the root directory.
-2.  Add your AI provider keys and configuration:
+Create a `.env` file in the root directory:
 
-    ```env
-    # Choose your provider: gemini or groq
-    AI_PROVIDER=gemini
-    
-    # API Keys
-    GEMINI_API_KEY=your_gemini_api_key
-    GROQ_API_KEY=your_groq_api_key
-    ```
+```env
+# Choose your provider: gemini or groq
+AI_PROVIDER=gemini
 
-### Usage
-
-To convert a React project, run the main command. The CLI is now **interactive** and will ask you to select an AI model.
-
-```bash
-# General Usage
-node cli.js convert <path-to-react-project> [--sdk <version>]
-
-# Examples
-# 1. Start conversion (Interactive Model Selection)
-node cli.js convert ./my-react-app
-
-# 2. Target specific Expo SDK (e.g., SDK 50)
-node cli.js convert ./my-react-app --sdk 50
+# API Keys
+GEMINI_API_KEY=your_gemini_api_key
+GROQ_API_KEY=your_groq_api_key
 ```
 
-### Supported Models
+## 📱 Usage
 
-You can select from the following models during the interactive CLI session:
+The CLI is **interactive**. Run the convert command to start the wizard:
 
-- **Gemini**:
-    - Gemini 3.0 Flash
-    - Gemini 2.5 Flash
-    - Gemini 2.5 Flash Lite
-- **Groq (Llama/Mixtral)**:
-    - Llama 3.3 70B (Versatile)
-    - Llama 3.1 8B (Instant)
-    - Mixtral 8x7b
+```bash
+# Start conversion (Interactive)
+node cli.js convert ./path-to-your-react-app
+```
 
-### New Features (v2.0)
-- **Smart Pathing**: Automatically restructures your project (`app/`, `components/`) instead of mirroring `src/`.
-- **Expo Router Support**: Configures file-based routing automatically.
-- **Strict TypeScript**: Generates `.tsx` files with strict typing interfaces.
+**Options:**
+- `--sdk <version>`: Target a specific Expo SDK version (e.g., `--sdk 50`).
 
+## 📂 Project Structure
 
-The tool will:
-1.  Scan and analyze the target React app.
-2.  Create a `converted-expo-app` directory (if it doesn't exist).
-3.  Convert source files one by one and save them to the new project.
+```
+retransify-local/
+├── cli.js              # CLI Entry Point
+├── src/
+│   ├── cli/            # Command handling
+│   ├── core/
+│   │   ├── phases/     # Analyzer, Planner, Executor
+│   │   ├── ai/         # AI Client Wrappers
+│   │   ├── prompt/     # Prompt Engineering
+│   │   └── helpers/    # Utilities (AST, Graph, etc.)
+│   └── utils/          # General utils
+└── package.json
+```
 
----
-
-## Development (For Contributors)
-
-If you want to contribute to `retransify-local` or modify its core logic.
-
-### Prerequisites
-
-- Node.js (v18+ recommended)
-- npm or yarn
-
-### Setup
-
-1.  **Clone the repository**:
-    ```bash
-    git clone <repository-url>
-    cd retransify-local
-    ```
-
-2.  **Install dependencies**:
-    ```bash
-    npm install
-    ```
-
-### Project Structure
-
-- `cli.js`: Entry point for the CLI.
-- `src/cli`: CLI specific logic and command handling.
-- `src/core`: Core logic.
-    - `phases/`: The heart of the agentic workflow.
-        - `analyzer.js`: Scans and detects tech stack.
-        - `planner.js`: Creates the execution plan.
-        - `executor.js`: Executes the conversion and manages state.
-    - `ai/`: AI client implementations (Gemini, Groq) and factory.
-    - `prompt/`: Prompt generation logic (`promptBuilder.js`).
-    - `helpers/`: Utility helper functions.
-    - `fileScanner.js`: Handles file system scanning.
-    - `astParser.js`: Parses JS/JSX files into AST.
-    - `graphBuilder.js`: Builds dependency graphs.
-    - `contextBuilder.js`: Assembles context for the AI.
-    - `nativeWriter.js`: Handles file writing to the React Native project.
-
-### Running Locally
-
-To test your changes against a sample React project:
-
-1.  Create a dummy React app or have one ready for testing.
-2.  Run the CLI from the source:
-    ```bash
-    node cli.js convert ../path/to/test-react-app
-    ```
-
-### Key Components
-
-- **`src/core/prompt/promptBuilder.js`**: This file contains the logic for constructing the prompt sent to the AI. Modify this if you want to improve how the AI understands the code or change the conversion rules.
-- **`src/core/ai/aiFactory.js`**: Handles switching between different AI providers.
-
-### Contributing
-
+## 🤝 Contributing
+Contributions are welcome! Please follow these steps:
 1.  Fork the repository.
 2.  Create a feature branch (`git checkout -b feature/amazing-feature`).
 3.  Commit your changes.
 4.  Push to the branch.
 5.  Open a Pull Request.
+
+## 📄 License
+This project is licensed under the ISC License.
