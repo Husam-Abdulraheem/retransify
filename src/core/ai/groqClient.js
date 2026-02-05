@@ -29,10 +29,11 @@ export async function sendToGroq(prompt, modelName) {
                 }
             ],
             model: model,
-            temperature: 0.6,
-            max_completion_tokens: 4096,
-            top_p: 0.95,
+            temperature: 0.2,
+            max_completion_tokens: 8192,
+            top_p: 1,
             stream: false, // Usage in non-streaming context for file conversion
+            response_format: { type: "json_object" }, // FORCE JSON
             stop: null
         });
 
@@ -41,6 +42,26 @@ export async function sendToGroq(prompt, modelName) {
         return text.trim();
 
     } catch (error) {
+        // Attempt to recover from JSON validation errors
+        if (error?.error?.code === 'json_validate_failed' && error?.error?.failed_generation) {
+            console.warn("⚠️ Groq JSON Validation Failed. Attempting to recover...");
+            let raw = error.error.failed_generation;
+
+            // Fix common issue: Double closing braces "}}" at the end
+            if (raw.trim().endsWith('}}')) {
+                 raw = raw.replace(/}}\s*$/, '}');
+            }
+
+            try {
+                // Verify if it's valid JSON now
+                JSON.parse(raw); 
+                console.log("✅ Recovered valid JSON from failed generation.");
+                return raw;
+            } catch (jsonError) {
+                console.error("❌ Recovery failed. JSON is still invalid.");
+            }
+        }
+
         console.error("❌ Groq API Error:", error);
         return "";
     }

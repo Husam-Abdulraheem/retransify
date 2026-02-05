@@ -1,0 +1,19 @@
+export const COMMON_DEPENDENCIES = [
+  "expo-router",
+  "react-native-safe-area-context",
+  "react-native-screens",
+  "expo-linking",
+  "expo-constants",
+  "expo-status-bar",
+  "react-native-gesture-handler",
+  "react-native-reanimated",
+  "expo-image",
+  "expo-linear-gradient",
+  "react-native-svg",
+  "@react-native-async-storage/async-storage",
+  "expo-crypto",
+  "react-native-get-random-values",
+  "@expo/vector-icons",
+  "clsx",
+  "tailwind-merge"
+];

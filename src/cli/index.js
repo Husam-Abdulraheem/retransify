@@ -120,6 +120,7 @@ async function promptModelSelection() {
     { name: "Gemini 3 Flash", value: "gemini-3.0-flash", provider: "gemini" },
     { name: "Gemini 2.5 Flash", value: "gemini-2.5-flash", provider: "gemini" },
     { name: "Gemini 2.5 Flash Lite", value: "gemini-2.5-flash-lite", provider: "gemini" },
+    { name: "GPT OSS 120B", value: "openai/gpt-oss-120b", provider: "groq" },
     { name: "Llama 3.3 70B (Versatile)", value: "llama-3.3-70b-versatile", provider: "groq" },
     { name: "Llama 3.1 8B (Instant)", value: "llama-3.1-8b-instant", provider: "groq" },
     { name: "Mixtral 8x7b", value: "mixtral-8x7b-32768", provider: "groq" }

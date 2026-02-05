@@ -30,6 +30,9 @@ export async function sendToGemini(prompt, modelName = null) {
         // الاستخدام الجديد حسب وثائق @google/genai
         const response = await ai.models.generateContent({
           model: selectedModel,
+          config: {
+            responseMimeType: "application/json",
+          },
           contents: prompt,
         });
 

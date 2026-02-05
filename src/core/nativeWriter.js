@@ -1,50 +1,39 @@
 import path from "path";
 import fs from "fs-extra";
-import { execSync } from "child_process";
+import { COMMON_DEPENDENCIES } from './constants/commonDependencies.js';
+import { runSilentCommand } from './helpers/shell.js';
 
 /**
- * 1) إنشاء مشروع Expo React Native إذا لم يكن موجودًا
- *
- * @param {string} sdkVersion (Optional) specific SDK version
- * @returns {string} projectPath
+ * 1) Ensure Native Expo Project Exists
+ * Uses 'blank-typescript' template for quick setup.
  */
 export async function ensureNativeProject(sdkVersion) {
   const projectPath = path.join(process.cwd(), "converted-expo-app");
 
-  // المشروع موجود مسبقًا؟
+  // Check if project already exists
   if (await fs.pathExists(projectPath)) {
     console.log("🟡 Using existing Expo project:", projectPath);
-    // Even if exists, ensure Router is set up
     await setupExpoRouter(projectPath);
     return projectPath;
   }
 
-  console.log("🟢 Creating new Expo project...");
   if (sdkVersion) console.log(`ℹ️  Using SDK Version: ${sdkVersion}`);
 
-  const sdkFlag = sdkVersion ? `--sdk-version ${sdkVersion}` : "";
-  // Note: create-expo-app supports --sdk-version (or --sdk in newer versions, check docs but --sdk-version is safer for older create-expo-app)
-  // Actually, standard `create-expo-app` might not support --sdk-version directly in all versions, 
-  // but it usually respects it if passed to the internal template or if we assume modern create-expo-app.
-  // Actually, `create-expo-app` uses the latest stable SDK by default. 
-  // To specify a version, one often uses: `npx create-expo-app my-app --template blank@sdk-49` or similar.
-  // OR `npx create-expo-app my-app --sdk-version 49`. Let's assume the flag works.
+  // Use typescript template directly
+  const template = sdkVersion ? `blank-typescript@${sdkVersion}` : "blank-typescript";
   
-  execSync(`npx create-expo-app ${projectPath} --template blank ${sdkFlag}`, {
-    stdio: "inherit",
-  });
-
-  console.log("📦 Installing TypeScript definitions...");
-
   try {
-      execSync(`npm install --save-dev typescript @types/react @types/react-native --prefix "${projectPath}"`, {
-        stdio: "inherit",
-      });
+      runSilentCommand(
+        `npx create-expo-app@latest ${projectPath} --template ${template} --yes`,
+        process.cwd(),
+        "🟢 Creating new Expo project (TypeScript)..."
+      );
   } catch (e) {
-      console.warn("⚠️ Failed to install types automatically.");
+      console.error("❌ Failed to create Expo project.");
+      throw e;
   }
 
-  // Setup Expo Router (Deps + package.json)
+  // Setup libraries
   await setupExpoRouter(projectPath);
 
   console.log("✅ Expo project created at:", projectPath);
@@ -52,107 +41,142 @@ export async function ensureNativeProject(sdkVersion) {
 }
 
 /**
- * Configure Expo Router dependencies and entry point
+ * Configure Expo Router dependencies
  */
 async function setupExpoRouter(projectPath) {
-  console.log("🚀 Ensuring Expo Router is set up...");
+  console.log("🚀 Ensuring Expo Router & Standard Libs are set up...");
   try {
-    // 1. Install dependencies (idempotent-ish, npm handles it)
-    // We check if package.json already has expo-router to avoid slow install every time? 
-    // For now, let's just run it. It might be slow but guarantees correctness.
-    // Or better: Checking 'main' in package.json as a proxy.
+    // 1. Initial Sync & Sanitization
+    // Essential to ensure Expo CLI sees a valid environment.
+    console.log("🧹 [1/2] Syncing environment...");
+    // Update: Added --legacy-peer-deps to handle React 19 conflicts in the base template
+    await runSilentCommand('npm install --legacy-peer-deps', projectPath, "🧹 Syncing node_modules...");
     
-    const packageJsonPath = path.join(projectPath, "package.json");
-    if (!fs.existsSync(packageJsonPath)) return;
+    // 2. Install dependencies
+    const depsToInstall = COMMON_DEPENDENCIES.join(' ');
+    console.log("📦 [2/2] Installing dependencies via Expo...");
     
-    const packageJson = await fs.readJson(packageJsonPath);
-    
-    // Check if configured
-    if (packageJson.main === "expo-router/entry") {
-        console.log("✅ Expo Router already configured in package.json.");
-    } else {
-        console.log("⚙️  Configuring package.json for Expo Router...");
-        // Install dependencies only if we are configuring for the first time or forcing
-        execSync(`npx expo install expo-router react-native-safe-area-context react-native-screens expo-linking expo-constants expo-status-bar`, {
-            stdio: "inherit",
-            cwd: projectPath
-        });
-        
-        packageJson.main = "expo-router/entry";
-        await fs.writeJson(packageJsonPath, packageJson, { spaces: 2 });
+    try {
+        // محاولة التثبيت المباشر باستخدام Expo (الطريقة المثالية)
+        await runSilentCommand(
+            `npx expo install ${depsToInstall}`,
+            projectPath,
+            "📦 Installing Standard Dependencies..."
+        );
+    } catch (expoError) {
+        // شبكة أمان: إذا فشلت الطريقة الرسمية بسبب تعارضات Peer Deps (مثل مشكلة React 19)
+        // نلجأ للخطة البديلة (npm force install) تلقائياً بدلاً من انهيار الأداة.
+        console.warn("⚠️ Expo install hit a conflict. Switching to robust install...");
+        await runSilentCommand(
+            `npm install ${depsToInstall} --legacy-peer-deps`,
+            projectPath,
+            "� Fallback: Force installing dependencies..."
+        );
+        // إصلاح النسخ بعد الإجبار
+        await runSilentCommand(`npx expo install --fix`, projectPath, "🔧 Fixing versions...");
     }
 
-    // 2. Remove/Rename default App.js
-    const defaultAppJs = path.join(projectPath, "App.js");
-    if (await fs.pathExists(defaultAppJs)) {
-        console.log("🗑️  Renaming default App.js to avoid conflict...");
-        await fs.rename(defaultAppJs, path.join(projectPath, "App_backup.js"));
+    // ---------------------------------------------------------
+    // إعدادات الملفات (Configuration)
+    // ---------------------------------------------------------
+    
+    // 1. package.json entry point
+    const packageJsonPath = path.join(projectPath, "package.json");
+    if (await fs.pathExists(packageJsonPath)) {
+        const packageJson = await fs.readJson(packageJsonPath);
+        if (packageJson.main !== "expo-router/entry") {
+            packageJson.main = "expo-router/entry";
+            await fs.writeJson(packageJsonPath, packageJson, { spaces: 2 });
+            console.log("✅ Configured package.json entry point.");
+        }
     }
+
+    // 2. حذف App.tsx أو App.js الافتراضي
+    // بما أننا نستخدم blank-typescript، الملف الافتراضي سيكون App.tsx
+    const potentialFiles = ["App.tsx", "App.js", "App.ts"];
+    for (const file of potentialFiles) {
+        const filePath = path.join(projectPath, file);
+        if (await fs.pathExists(filePath)) {
+            console.log(`🗑️  Renaming default ${file}...`);
+            await fs.rename(filePath, path.join(projectPath, `Backup_${file}`));
+        }
+    }
+
+    // 3. إعداد app.json
+    const appJsonPath = path.join(projectPath, "app.json");
+    if (await fs.pathExists(appJsonPath)) {
+        const appJson = await fs.readJson(appJsonPath);
+        if (appJson.expo && !appJson.expo.scheme) {
+            appJson.expo.scheme = "retransify-app";
+            appJson.expo.web = { bundler: "metro" };
+            await fs.writeJson(appJsonPath, appJson, { spaces: 2 });
+            console.log("🔧 Configured app.json scheme.");
+        }
+    }
+
+    console.log("✅ Expo Router setup completed successfully.");
 
   } catch (e) {
       console.error("❌ Failed to setup Expo Router:", e.message);
   }
 }
 
-/**
- * 2) إنشاء المجلدات تلقائيًا (Recursive)
- *
- * @param {string} dirPath
- */
-async function ensureDirectory(dirPath) {
-  await fs.mkdirp(dirPath);
-}
+// ---------------------------------------------------------
+// الدوال المساعدة (كما هي)
+// ---------------------------------------------------------
 
-/**
- * 3) كتابة ملف React Native محوّل داخل المشروع الجديد
- *
- * @param {string} rnProjectPath - مسار مشروع Expo
- * @param {string} relativePath - مسار الملف داخل src (مثال: components/Button.jsx)
- * @param {string} code - الكود المحوّل الناتج من الذكاء الاصطناعي
- */
+
+
 export async function writeConvertedFile(rnProjectPath, relativePath, code) {
   try {
-    // We treat relativePath as relative to the RN project root.
-    // This supports both 'src/...' layout and Smart Pathing ('app/...', 'components/...')
     const destPath = path.join(rnProjectPath, relativePath);
-
-    // Create directories
-    const destDir = path.dirname(destPath);
-    await ensureDirectory(destDir);
-
-    // Write file
+    await fs.ensureDir(path.dirname(destPath));
     await fs.writeFile(destPath, code, "utf-8");
-
     console.log(`📁 File written: ${relativePath}`);
   } catch (err) {
     console.error("❌ Failed to write converted file:", err.message);
   }
 }
 
-/**
- * 4) تهيئة مجلد src داخل مشروع Expo لو لم يكن موجودًا
- *
- * @param {string} rnProjectPath
- */
 export async function ensureRNProjectSrc(rnProjectPath) {
   const srcPath = path.join(rnProjectPath, "src");
-
   if (!(await fs.pathExists(srcPath))) {
     console.log("📦 Creating RN src directory...");
     await fs.mkdir(srcPath);
   }
 }
 
-/**
- * 5) دالة تحوّل ملف معيّن وتكتبه مباشرة في المشروع الجديد
- *
- * @param {string} relativePath
- * @param {string} convertedCode
- * @param {string} sdkVersion
- */
 export async function saveConvertedFile(relativePath, convertedCode, sdkVersion) {
   const rnProjectPath = await ensureNativeProject(sdkVersion);
   await ensureRNProjectSrc(rnProjectPath);
-
   await writeConvertedFile(rnProjectPath, relativePath, convertedCode);
+}
+
+export async function setupNativeWind(projectPath) {
+    console.log("🌪️  Configuring NativeWind...");
+    const tailwindConfigPath = path.join(projectPath, "tailwind.config.js");
+    if (!(await fs.pathExists(tailwindConfigPath))) {
+        const configContent = `/** @type {import('tailwindcss').Config} */
+module.exports = {
+  content: ["./app/**/*.{js,jsx,ts,tsx}", "./src/**/*.{js,jsx,ts,tsx}"],
+  theme: { extend: {} },
+  plugins: [],
+};`;
+        await fs.writeFile(tailwindConfigPath, configContent);
+        console.log("✅ Created tailwind.config.js");
+    }
+    
+    const babelConfigPath = path.join(projectPath, "babel.config.js");
+    if (await fs.pathExists(babelConfigPath)) {
+        let babelContent = await fs.readFile(babelConfigPath, 'utf-8');
+        if (!babelContent.includes('nativewind/babel')) {
+             if (babelContent.includes("plugins: [")) {
+                babelContent = babelContent.replace("plugins: [", "plugins: ['nativewind/babel', ");
+            } else {
+                babelContent = babelContent.replace(/presets:\s*\[.*?\]/s, match => `${match},\n    plugins: ['nativewind/babel']`);
+            }
+            await fs.writeFile(babelConfigPath, babelContent);
+            console.log("✅ Updated babel.config.js");
+        }
+    }
 }
