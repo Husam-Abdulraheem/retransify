@@ -3,6 +3,7 @@ import fs from 'fs-extra';
 import { runSilentCommand } from './shell.js';
 import { COMMON_DEPENDENCIES } from '../constants/commonDependencies.js';
 import { setupNativeWind } from '../nativeWriter.js';
+import { autoConfigureBabel } from '../utils/babelManager.js';
 
 export class DependencyManager {
   constructor() {
@@ -107,10 +108,13 @@ export class DependencyManager {
         );
         console.log('✅ Dependencies installed successfully.');
 
-        // [NEW] Configure NativeWind if installed
+        // [NEW] Configure NativeWind if installed (for tailwind.config.js)
         if (toInstall.includes('nativewind')) {
              await setupNativeWind(projectPath);
         }
+
+        // [NEW] Auto-Configure Babel for ALL dependencies (NativeWind, Reanimated, etc.)
+        await autoConfigureBabel(projectPath);
 
         this.pendingPackages.clear();
     } catch (error) {
@@ -143,6 +147,9 @@ export class DependencyManager {
             await setupNativeWind(projectPath);
         }
         
+        // [NEW] Auto-Configure Babel (Retry in catch block too)
+        await autoConfigureBabel(projectPath);
+
         this.pendingPackages.clear();
     }
     } catch (outerError) {

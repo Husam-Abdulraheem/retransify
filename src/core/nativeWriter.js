@@ -2,6 +2,7 @@ import path from "path";
 import fs from "fs-extra";
 import { COMMON_DEPENDENCIES } from './constants/commonDependencies.js';
 import { runSilentCommand } from './helpers/shell.js';
+import { autoConfigureBabel } from './utils/babelManager.js';
 
 /**
  * 1) Ensure Native Expo Project Exists
@@ -76,7 +77,7 @@ async function setupExpoRouter(projectPath) {
         await runSilentCommand(`npx expo install --fix`, projectPath, "🔧 Fixing versions...");
     }
 
-    // ---------------------------------------------------------
+// ---------------------------------------------------------
     // إعدادات الملفات (Configuration)
     // ---------------------------------------------------------
     
@@ -113,6 +114,10 @@ async function setupExpoRouter(projectPath) {
             console.log("🔧 Configured app.json scheme.");
         }
     }
+
+    // 4. Configure Babel (Last step)
+    console.log("🔧 Configuring Babel...");
+    await autoConfigureBabel(projectPath);
 
     console.log("✅ Expo Router setup completed successfully.");
 
