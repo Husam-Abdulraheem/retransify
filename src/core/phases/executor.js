@@ -6,6 +6,7 @@ import { saveConvertedFile, ensureNativeProject } from '../nativeWriter.js';
 import { DependencyManager } from '../helpers/dependencyManager.js';
 import { Verifier } from './verifier.js';
 import { Healer } from './healer.js';
+import { Doctor } from '../utils/doctor.js';
 
 /**
  * @typedef {import('../../types').MigrationPlan} MigrationPlan
@@ -136,6 +137,14 @@ export class Executor {
     // --- Batch Install Dependencies ---
     console.log('\n📦 Installing collected dependencies...');
     await this.dependencyManager.installAll(rnProjectPath);
+
+    // --- Final Health Check ---
+    console.log('\n🩺 Performing final health check...');
+    const isHealthy = await Doctor.checkHealth(rnProjectPath);
+    if (!isHealthy) {
+        console.log('🚑 Issues detected. Auto-fixing...');
+        await Doctor.fixDependencies(rnProjectPath);
+    }
 
     console.log('\n🎉 Execution phase complete!');
   }

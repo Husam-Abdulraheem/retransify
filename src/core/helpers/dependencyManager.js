@@ -4,6 +4,7 @@ import { runSilentCommand } from './shell.js';
 import { COMMON_DEPENDENCIES } from '../constants/commonDependencies.js';
 import { setupNativeWind } from '../nativeWriter.js';
 import { autoConfigureBabel } from '../utils/babelManager.js';
+import { Doctor } from '../utils/doctor.js';
 
 export class DependencyManager {
   constructor() {
@@ -129,16 +130,21 @@ export class DependencyManager {
                   `📦 Installing ${pkg}...`
                 );
             } catch (innerError) {
-                console.warn(`⚠️ 'expo install ${pkg}' failed. Trying 'npm install'...`);
+                console.warn(`⚠️ 'expo install ${pkg}' failed. Invoking Doctor...`);
+                
+                // [NEW] Call the Doctor instead of blindly forcing install
                 try {
-                     // Attempt 3: NPM fallback
-                    runSilentCommand(
-                      `npm install ${pkg} --legacy-peer-deps`, 
-                      projectPath, 
-                      `📦 Fallback Installing ${pkg}...`
-                    );
-                } catch (npmError) {
-                    console.error(`❌ Failed to install ${pkg}. Skipping.`);
+                     await Doctor.fixDependencies(projectPath);
+                     
+                     // Retry install one last time after doctor fixes things
+                     runSilentCommand(
+                        `npx expo install ${pkg}`, 
+                        projectPath, 
+                        `📦 Re-installing ${pkg} after Doctor fix...`
+                     );
+
+                } catch (doctorError) {
+                    console.error(`❌ Doctor failed to rescue installation of ${pkg}.`);
                 }
             }
         }

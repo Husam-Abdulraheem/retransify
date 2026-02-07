@@ -11,6 +11,7 @@ import { Analyzer } from "../core/phases/analyzer.js";
 import { Planner } from "../core/phases/planner.js";
 import { Executor } from "../core/phases/executor.js";
 import { StateManager } from "../core/stateManager.js";
+import { Doctor } from "../core/utils/doctor.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -48,6 +49,21 @@ export async function runCLI() {
     return;
   }
 
+  if (command === "doctor") {
+    const projectPath = args[1] ? path.resolve(args[1]) : process.cwd();
+    console.log(`👨‍⚕️ Calling the Doctor for: ${projectPath}`);
+    
+    // Check health
+    const isHealthy = await Doctor.checkHealth(projectPath);
+    if (!isHealthy) {
+        console.log("🤒 Project is sick. Attempting treatment...");
+        await Doctor.fixDependencies(projectPath);
+    } else {
+        console.log("💪 Project is in great shape!");
+    }
+    return;
+  }
+
   printHelp();
 }
 
@@ -60,6 +76,8 @@ Usage:
 
 Example:
   node cli.js convert ./my-react-app --sdk 50
+
+  node cli.js doctor <path-to-expo-project>
 `);
 }
 
