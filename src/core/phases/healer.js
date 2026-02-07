@@ -1,5 +1,5 @@
 import { buildFixPrompt } from '../prompt/promptBuilder.js';
-import { sendToAI } from '../ai/aiFactory.js';
+import { createSession } from '../ai/aiFactory.js';
 import { saveConvertedFile, ensureNativeProject } from '../nativeWriter.js';
 import { cleanAIResponse } from '../helpers/cleanAIResponse.js'; // Fallback cleaner
 
@@ -20,6 +20,9 @@ export class Healer {
   async heal(projectPath, filePath, code, initialErrors) {
     console.log(`🚑 Attempting to heal ${filePath}...`);
     
+    // 1. Initialize Stateful Session
+    const session = createSession(this.aiOptions.model, this.aiOptions.provider);
+
     let currentCode = code;
     let currentErrors = initialErrors;
 
@@ -27,11 +30,29 @@ export class Healer {
     for (let attempt = 1; attempt <= 2; attempt++) {
         console.log(`   🩹 Healing Attempt ${attempt}/2...`);
         
-        // 1. Build Prompt
-        const prompt = buildFixPrompt(currentCode, currentErrors);
+        // 2. Build Prompt
+        // Note: For stateful sessions, we might just need to send the "Update" on subsequent turns,
+        // but re-sending context is safer for now unless we optimize promptBuilder specifically for chat.
+        // However, promptBuilder.js builds a full prompt. 
+        // In a chat flow, the history will accumulate.
+        // Attempt 1: "Here is code + errors. Fix it."
+        // Attempt 2: "That didn't work. New errors: [...]. Fix it again."
+        
+        let prompt;
+        if (attempt === 1) {
+            prompt = buildFixPrompt(currentCode, currentErrors);
+        } else {
+             // For subsequent attempts, we can be more conversational if we wanted, 
+             // but buildFixPrompt provides a structured "Here is the situation" block.
+             // Since we are pushing to history, the AI sees:
+             // User: Fix this (Code A, Errors A)
+             // AI: (Code B)
+             // User: Fix this (Code B, Errors B) -> This works naturally.
+             prompt = buildFixPrompt(currentCode, currentErrors);
+        }
 
-        // 2. Query AI
-        const response = await sendToAI(prompt, this.aiOptions.model, this.aiOptions.provider);
+        // 3. Query AI (Using Session)
+        const response = await session.sendMessage(prompt);
         let fixedCode = "";
 
         // Parse JSON (Reusing logic from aiClient roughly, or simple parse)
@@ -53,15 +74,11 @@ export class Healer {
              fixedCode = cleanAIResponse(response);
         }
 
-        // 3. Save Candidate Fix
+        // 4. Save Candidate Fix
         // We overwrite the file locally to let 'tsc' check it again
-        // We don't know the exact SDK version here easily without passing it down, 
-        // but 'saveConvertedFile' mostly needs it for init. If project exists, it ignores it.
-        // We'll pass '50' or undefined as a dummy if mostly project exists.
-        // Better: ensureNativeProject is already run.
         await saveConvertedFile(`src/${filePath}`, fixedCode, this.aiOptions.sdkVersion); 
 
-        // 4. Verify Again
+        // 5. Verify Again
         const newErrors = await this.verifier.verify(projectPath, filePath);
 
         if (newErrors.length === 0) {
@@ -69,7 +86,7 @@ export class Healer {
             return true;
         }
 
-        // 5. Still broken? Update loop variables
+        // 6. Still broken? Update loop variables
         currentErrors = newErrors;
         currentCode = fixedCode;
     }
