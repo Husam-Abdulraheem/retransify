@@ -36,6 +36,8 @@ Migrating a codebase from web to mobile is often a tedious, manual process. Retr
 - **📱 Expo Ready**: Automatically scaffolds a new Expo project with router configuration.
 - **⚡ Multiple AI Providers**: Support for Google's **Gemini** (3.0 Flash, 2.5) and **Groq** (Llama 3, Mixtral).
 - **🛤️ Smart Pathing**: Automatically restructures `src/` to Expo's `app/` and `components/` best practices.
+- **🔄 Auto-Healing & Verification**: Iteratively verifies code for missing dependencies or syntax errors and prompts the AI for auto-correction.
+- **🛡️ State Recovery**: Resume interrupted conversions seamlessly with built-in state management.
 
 ## 🔒 Privacy & Security
 Your code's privacy is paramount. Retransify is designed with security in mind:
@@ -105,18 +107,26 @@ node cli.js convert ./path-to-your-react-app
 
 ## 📂 Project Structure
 
-```
+```text
 retransify-local/
 ├── cli.js              # CLI Entry Point
-├── src/
-│   ├── cli/            # Command handling
-│   ├── core/
-│   │   ├── phases/     # Analyzer, Planner, Executor
-│   │   ├── ai/         # AI Client Wrappers
-│   │   ├── prompt/     # Prompt Engineering
-│   │   └── helpers/    # Utilities (AST, Graph, etc.)
-│   └── utils/          # General utils
-└── package.json
+├── package.json        # Project metadata & dependencies
+└── src/
+    ├── cli/            # Command handling and interactive prompts
+    ├── types.js        # Type definitions
+    └── core/
+        ├── ai/         # AI Client Wrappers (Gemini, Groq)
+        ├── commands/   # CLI commands execution logic
+        ├── config/     # Configuration management & environment setup
+        ├── context/    # Context generation and dependency graphing
+        ├── detectors/  # Technology and library detection logic
+        ├── helpers/    # Helper utilities (Retry, Logging, etc.)
+        ├── parser/     # AST parsing and code analysis
+        ├── phases/     # High-level Agentic Workflow (Analyzer, Planner, Executor)
+        ├── prompt/     # Prompt definitions and engineering
+        ├── scanners/   # File system scanning and filtering
+        ├── services/   # Core internal services (DependencyManager, StateManager, ProjectInitializer, etc.)
+        └── utils/      # General utilities
 ```
 
 ## 🤝 Contributing
