@@ -52,7 +52,7 @@ export async function ensureNativeProject(sdkVersion, dependencyManager) {
 }
 
 /**
- * دالة لتنظيف المشروع الجديد من ملفات الديمو الخاصة بـ Expo
+ * دالة لتنظيف المشروع الجديد من ملفات الديمو الخاصة بـ Expo وحقن الأساسيات
  */
 async function cleanExpoBoilerplate(projectPath) {
   console.log('🧹 Cleaning Expo boilerplate files...');
@@ -70,6 +70,18 @@ async function cleanExpoBoilerplate(projectPath) {
   if (await fs.pathExists(appDir)) {
     await fs.emptyDir(appDir);
     console.log(`   - Emptied: app/`);
+
+    // 🎯 [الحل الجذري] حقن ملف _layout.tsx الافتراضي لحماية هيكلة التطبيق
+    const defaultLayoutCode = `import { Stack } from 'expo-router';
+
+export default function RootLayout() {
+  return (
+    <Stack screenOptions={{ headerShown: false }} />
+  );
+}
+`;
+    await fs.writeFile(path.join(appDir, '_layout.tsx'), defaultLayoutCode);
+    console.log(`   - Injected: app/_layout.tsx (Core Router Wrapper)`);
   }
 }
 

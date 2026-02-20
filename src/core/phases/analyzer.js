@@ -47,6 +47,12 @@ export class Analyzer {
     context.addFact('sourceRoot', this._inferSourceRoot(entryFiles));
     context.addFact('writePhaseIgnores', this._getWritePhaseIgnores(techStack));
 
+    // [New] The Hijack Phase 1: Detection
+    if (entryFiles && entryFiles.length > 0) {
+      context.addFact('mainEntryPoint', entryFiles[0]);
+      console.log(`🎯 Identified Main Entry Point: ${entryFiles[0]}`);
+    }
+
     console.log('✅ Analysis facts stored in Global Context:', techStack);
   }
 

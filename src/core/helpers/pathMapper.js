@@ -10,7 +10,7 @@ export class PathMapper {
     const pathMap = {};
 
     for (const file of files) {
-      const oldPath = file.relativeToProject; // [Updated] relativeToSrc -> relativeToProject
+      const oldPath = file.relativeToProject; 
       const refinedPath = this.determineNewPath(file);
       pathMap[oldPath] = refinedPath;
     }
@@ -20,22 +20,25 @@ export class PathMapper {
 
   /**
    * Determines the new path for a single file.
-   * @param {Object} fileString or fileObject
+   * @param {Object} file - fileObject from scanner
    * @returns {string} importable new path
    */
   static determineNewPath(file) {
-    // Basic heuristics based on directory or filename
-    const parts = file.relativeToProject.split('/'); // [Updated]
+    // 🎯 1. القص الجراحي (Aggressive Stripping): إزالة مجلد src من البداية
+    let normalizedPath = file.relativeToProject.replace(/\\/g, '/');
+    if (normalizedPath.startsWith('src/')) {
+        normalizedPath = normalizedPath.substring(4);
+    }
+
+    const parts = normalizedPath.split('/');
     const filename = parts[parts.length - 1];
-    const basename = path.basename(filename, path.extname(filename)); // No extension
+    const basename = path.basename(filename, path.extname(filename));
     const ext = path.extname(filename);
     
-    // 1. Check folder names (strongest signal)
+    // 2. فحص أسماء المجلدات
     if (this.isInFolder(parts, 'pages') || this.isInFolder(parts, 'screens') || this.isInFolder(parts, 'views')) {
-      // It's a screen/page -> app/
-      // Handle "index" or main files
         return `app/${this.cleanPath(parts, ['pages', 'screens', 'views'])}`
-            .replace(/\.jsx?$/, '.tsx'); // Recommend TSX for Expo
+            .replace(/\.jsx?$/, '.tsx'); 
     }
 
     if (this.isInFolder(parts, 'components')) {
@@ -45,7 +48,7 @@ export class PathMapper {
 
     if (this.isInFolder(parts, 'hooks')) {
       return `hooks/${this.cleanPath(parts, ['hooks'])}`
-            .replace(/\.jsx?$/, '.ts'); // Hooks are usually logic
+            .replace(/\.jsx?$/, '.ts');
     }
     
     if (this.isInFolder(parts, 'services') || this.isInFolder(parts, 'api')) {
@@ -60,34 +63,35 @@ export class PathMapper {
     
     if (this.isInFolder(parts, 'context') || this.isInFolder(parts, 'contexts') || this.isInFolder(parts, 'providers')) {
        return `context/${this.cleanPath(parts, ['context', 'contexts', 'providers'])}`
-             .replace(/\.jsx?$/, '.tsx'); // Contexts often have JSX
+             .replace(/\.jsx?$/, '.tsx'); 
     }
 
     if (this.isInFolder(parts, 'assets') || this.isInFolder(parts, 'images') || this.isInFolder(parts, 'icons')) {
         return `assets/${this.cleanPath(parts, ['assets', 'images', 'icons'])}`;
     }
 
-    // 2. Filename heuristics (if folder didn't match cleanly)
+    // 3. فحص أسماء الملفات (Filenames heuristics)
     if (basename.startsWith('use')) {
-      return `hooks/${filename.replace(/\.js$/, '.ts')}`;
+      return `hooks/${filename.replace(/\.js$/, '.ts').replace(/\.jsx$/, '.tsx')}`;
     }
     
     if (basename.endsWith('Screen') || basename.endsWith('Page')) {
         return `app/${filename.replace(/\.jsx?$/, '.tsx')}`;
     }
 
-    // 3. Fallback: Mirror structure but inside "src" or root if appropriate
-    // If it's effectively a root file like App.js or index.js
-    if (file.relativeToProject === 'App.js' || file.relativeToProject === 'App.jsx') {
-        return `app/index.tsx`; // Main App component usually becomes the index page
+    // 4. Fallback: ملفات الجذر (Root Files)
+    // التوجيه الإجباري لملفات الدخول (يدعم tsx و jsx)
+    if (/^App\.(js|jsx|ts|tsx)$/.test(normalizedPath)) {
+        return `app/index.tsx`; 
     }
     
-    if (file.relativeToProject === 'main.js' || file.relativeToProject === 'main.jsx' || file.relativeToProject === 'index.js') {
-        return `app/_layout.tsx`; // The entry point that wraps everything usually becomes the layout
+    if (/^(main|index)\.(js|jsx|ts|tsx)$/.test(normalizedPath)) {
+        return `app/_layout.tsx`; 
     }
 
-    // Default: keep in a 'src' folder to avoid cluttering root, or just mirror
-    return `src/${file.relativeToProject.replace(/\.js$/, '.ts').replace(/\.jsx$/, '.tsx')}`;
+    // 🎯 5. Fallback النهائي: إرجاع المسار النظيف بدون إضافة "src/" الوهمية
+    // سيضع الملفات المتبقية في الجذر بشكل مرتب كما هو معتمد في Expo Router
+    return normalizedPath.replace(/\.js$/, '.ts').replace(/\.jsx$/, '.tsx');
   }
 
   static isInFolder(parts, folderName) {
@@ -95,11 +99,7 @@ export class PathMapper {
   }
 
   static cleanPath(parts, folderNamesToRemove) {
-      // Remove the folder name from the path to avoid "components/components/Button.tsx"
-      // But keep the structure *after* that folder.
-      // Example: src/components/ui/Button.jsx -> parts: [ui, Button.jsx] (if we stripped src/components)
-      
-      // Let's filtered out the keyword folders
+      // إزالة اسم المجلد من المسار لتجنب التكرار
       const newParts = parts.filter(p => !folderNamesToRemove.includes(p));
       return newParts.join('/');
   }

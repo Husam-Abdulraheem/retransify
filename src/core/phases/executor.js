@@ -82,7 +82,17 @@ export class Executor {
                 continue;
             }
 
-            console.log(`\n🔄 Converting ${filePath}...`);
+            console.log(`\n🔄 Processing ${filePath}...`);
+
+            const baseName = path.basename(filePath);
+
+            // 🛑 1. الحذف الإجباري (The Kill Switch): التخلص من ملف Mount الخاص بالويب
+            // إكسبو راوتر لا يحتاج main.tsx أو index.js الذي يحتوي على render
+            if (/^(main|index)\.(tsx|jsx|js|ts)$/i.test(baseName) && filePath.includes('src')) {
+                console.log(`🚫 [DROP] Ignoring Web Mount File: ${filePath}`);
+                this.context.addResult(filePath, 'skipped');
+                continue;
+            }
 
             try {
                 const fileContext = buildFileContext(filePath, this.projectContext);
@@ -94,6 +104,19 @@ export class Executor {
 
                 // Inject Installed Packages
                 fileContext.installedPackages = installedPackages;
+
+                // 🎯 2. الاختطاف الذكي (Smart Hijack): صيد App.tsx أينما كان
+                let isAppEntry = false;
+                if (/^App\.(tsx|jsx|js|ts)$/i.test(baseName)) {
+                    isAppEntry = true;
+                } else if (this.context.facts.mainEntryPoint && (filePath === this.context.facts.mainEntryPoint || path.resolve(filePath) === path.resolve(this.context.facts.mainEntryPoint))) {
+                    isAppEntry = true;
+                }
+
+                if (isAppEntry) {
+                    fileContext.isMainEntry = true;
+                    console.log(`🎯 [HIJACK] Core App file detected: ${filePath}`);
+                }
 
                 let { code, dependencies } = await convertFileWithAI(fileContext, this.options);
 
@@ -116,22 +139,13 @@ export class Executor {
                     continue;
                 }
 
-                // 2. Path Stripping (Flatten user source)
-                // If map exists, use it. Else, strip sourceRoot.
-                let destPath = pathMap[filePath];
+                // تحديد المسار الطبيعي بعد قص src
+                let destPath = this._resolveDestPath(filePath, pathMap, sourceRoot);
 
-                if (!destPath) {
-                    // Safe stripping using relative path
-                    // e.g. sourceRoot='src', filePath='src/components/Button.tsx' -> 'components/Button.tsx'
-                    const normalized = path.relative(sourceRoot, filePath);
-
-                    // If relative path starts with '..', it means file is outside sourceRoot. 
-                    // We keep it as is or fallback to strict structure.
-                    if (normalized.startsWith('..') || path.isAbsolute(normalized)) {
-                        destPath = filePath; // Fallback
-                    } else {
-                        destPath = normalized;
-                    }
+                // 🎯 3. التوجيه النهائي: تغيير مسار الحفظ الإجباري إلى جذر إكسبو
+                if (fileContext.isMainEntry) {
+                    console.log(`🚀 [ROUTING] Forcing ${filePath} to be saved as -> app/index.tsx`);
+                    destPath = 'app/index.tsx';
                 }
 
                 await saveConvertedFile(destPath, code, this.options.sdkVersion, this.dependencyManager);
@@ -186,7 +200,8 @@ export class Executor {
                 // Only check completed files
                 if (!this.stateManager.isConverted(filePath)) continue;
 
-                const destPath = pathMap[filePath] || `src/${filePath}`;
+                const sourceRoot = this.context.facts.sourceRoot || '.';
+                const destPath = this._resolveDestPath(filePath, pathMap, sourceRoot);
 
                 // Strict Verification writing to Context
                 const strictErrors = await this.verifier.verify(this.context, rnProjectPath, destPath, true);
@@ -306,5 +321,29 @@ export class Executor {
             }
         }
         return filtered;
+    }
+
+    /**
+     * Resolves the destination path aggressively to ensure NO nested src/ directories.
+     */
+    _resolveDestPath(filePath, pathMap, sourceRoot) {
+        // نأخذ المسار من pathMap إذا وجد، وإلا نأخذ المسار الأصلي
+        let targetPath = (pathMap && pathMap[filePath]) ? pathMap[filePath] : filePath;
+
+        // توحيد شكل المسارات لتجنب أخطاء أنظمة ويندوز/ماك
+        let stripped = targetPath.replace(/\\/g, '/');
+        const root = (sourceRoot || '.').replace(/\\/g, '/');
+
+        // القص الإجباري لمجلد src/ إذا كان في بداية المسار أو بعد الجذر
+        if (stripped.startsWith('src/')) {
+            stripped = stripped.substring(4);
+        } else if (root !== '.' && stripped.startsWith(root + '/')) {
+            stripped = stripped.substring(root.length + 1);
+        }
+
+        // تنظيف إضافي: إذا كان المسار يحتوي على /src/ في المنتصف (مثل components/src/Input)
+        stripped = stripped.replace(/\/src\//g, '/');
+
+        return stripped;
     }
 }

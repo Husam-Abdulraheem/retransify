@@ -51,7 +51,8 @@ export const PROJECT_PROFILES = {
     writePhaseIgnores: [
       /^index\.html$/,
       /^vite\.config\.(js|ts|mjs|cjs)$/,
-      /^\.env\.local$/
+      /^\.env\.local$/,
+      /.*package\.json$/  // 👈 هذا يمنع أي package.json يتم اكتشافه داخل مجلدات مثل src/
     ]
   },
 
@@ -82,7 +83,8 @@ export const PROJECT_PROFILES = {
     writePhaseIgnores: [
       /^public\/index\.html$/,
       /^craco\.config\.(js|ts)$/,
-      /^react-app-env\.d\.ts$/
+      /^react-app-env\.d\.ts$/,
+      /.*package\.json$/  // 👈 هذا يمنع أي package.json يتم اكتشافه داخل مجلدات مثل src/
     ]
   }
 };
