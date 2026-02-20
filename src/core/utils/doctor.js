@@ -27,60 +27,67 @@ export class Doctor {
    * Level 2: Deep Clean (Delete node_modules & lockfile -> Enforce Overrides -> Reinstall)
    * @param {string} projectPath 
    */
-  static async fixDependencies(projectPath) {
-    console.log('🚑 Doctor: Attempting to fix dependencies...');
+  /**
+   * Attempt to fix dependency issues using a graded strategy with STRICT verification.
+   * Logic:
+   * 1. Diagnose (Log only).
+   * 2. Deep Clean: rm node_modules, package-lock, cache clean.
+   * 3. Reinstall: npx expo install (NO flags).
+   * 4. Verify: npx expo doctor.
+   * 5. Fail Fast: If verification fails, THROW fatal error.
+   * 
+   * @param {string} projectPath 
+   * @param {string[]} failedPackages - Optional list of packages that failed to install
+   */
+  static async fixDependencies(projectPath, failedPackages = []) {
+    console.log('🚑 Doctor: Initiating Strict Dependency Repair...');
 
-    // Attempt 1: The "Humble" Fix
-    try {
-      console.log('🩹 Doctor: Applying standard fix (Level 1)...');
-      await runSilentCommand('npx expo install --fix', projectPath, 'Running expo install --fix...');
-      console.log('✅ Doctor: Standard fix applied successfully.');
-      return;
-    } catch (error) {
-      console.warn('⚠️ Doctor: Standard fix failed. Escalating to Deep Clean...');
+    // 1. Diagnose (Pre-cleanup) - Logging only for debug
+    if (failedPackages.length > 0) {
+        console.warn(`⚠️ Doctor Diagnosis: Failure involving: ${failedPackages.join(', ')}`);
     }
 
-    // Attempt 2: The "Deep Clean" Option
-    // Delete node_modules and package-lock.json using fs-extra for Windows compatibility
+    // 2. Deep Clean (The "nuclear" option)
     try {
-      console.log('🧼 Doctor: Initiating Deep Clean & Repair (Level 2)...');
+      console.log('🧼 Doctor: Performing Deep Clean...');
       
       const nodeModulesPath = path.join(projectPath, 'node_modules');
       const lockFilePath = path.join(projectPath, 'package-lock.json');
       const yarnLockPath = path.join(projectPath, 'yarn.lock');
+      const expoPath = path.join(projectPath, '.expo');
 
-      if (await fs.pathExists(nodeModulesPath)) {
-        console.log('🗑️ Removing node_modules...');
-        await fs.remove(nodeModulesPath);
+      await fs.remove(nodeModulesPath);
+      await fs.remove(lockFilePath);
+      await fs.remove(yarnLockPath);
+      await fs.remove(expoPath);
+
+      console.log('🧹 Doctor: Cleaning npm cache...');
+      // Allow this to fail silently if permission denied, not critical
+      try {
+          await runSilentCommand('npm cache clean --force', projectPath, 'Cleaning cache...');
+      } catch (e) { /* ignore */ }
+
+      // 3. Reinstall (Strict)
+      console.log('🔄 Doctor: Reinstalling dependencies (Fresh Start)...');
+      // Just npx expo install. This reads package.json and installs correct versions.
+      await runSilentCommand('npx expo install', projectPath, 'Installing dependencies...');
+
+      // 4. Verify (Fail Fast)
+      console.log('🩺 Doctor: Verifying installation health...');
+      try {
+           await runSilentCommand('npx expo doctor', projectPath, 'Final verification...');
+           console.log('✅ Doctor: Recovery successful. Project is healthy.');
+      } catch (doctorError) {
+           console.error('❌ Doctor: Verification FAILED after deep clean.');
+           console.error('❌ The current dependency set is incompatible with this Expo SDK version.');
+           
+           // FAIL FAST
+           throw new Error("FATAL: Dependency mismatch unresolved by Doctor.");
       }
-      
-      if (await fs.pathExists(lockFilePath)) {
-        console.log('🗑️ Removing package-lock.json...');
-        await fs.remove(lockFilePath);
-      }
-
-      if (await fs.pathExists(yarnLockPath)) {
-        console.log('🗑️ Removing yarn.lock...');
-        await fs.remove(yarnLockPath);
-      }
-
-      // [NEW] Enforce Overrides (Resolution Strategy)
-      // This forces peer dependencies to align with the installed React version.
-      await this.applyDependencyOverrides(projectPath);
-
-      // Reinstall fresh
-      console.log('🔄 Doctor: Reinstalling dependencies (clean slate)...');
-      await runSilentCommand('npx expo install', projectPath, 'Clean install...');
-      
-      // One final fix pass to be sure
-      await runSilentCommand('npx expo install --fix', projectPath, 'Final fix pass...');
-      
-      console.log('✅ Doctor: Deep Clean recovery completed successfully.');
 
     } catch (deepCleanError) {
-      console.error('❌ Doctor: Critical failure even after Deep Clean.');
-      console.error(deepCleanError.message);
-      throw deepCleanError; // Re-throw to stop execution if everything fails
+      console.error('❌ Doctor: Critical failure during repair process.');
+      throw deepCleanError;
     }
   }
 

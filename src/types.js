@@ -1,10 +1,8 @@
 /**
  * @typedef {Object} GlobalMigrationContext
  * @property {string} projectPath - Absolute path to the source project
- * @property {string} techStack - Detected tech stack description (e.g., "React, Redux, Tailwind")
- * @property {string} styleSystem - Detected styling system (e.g., "NativeWind" or "StyleSheet")
+ * @property {Object} tech - Detected tech stack (language, stateManagement, styling, routing, buildTool)
  * @property {Object} packageJson - The parsed package.json of the source project
- * @property {string[]} navigationStrategy - Suggested navigation structure
  */
 
 /**

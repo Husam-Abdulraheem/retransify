@@ -1,69 +1,102 @@
 import path from 'path';
 import fs from 'fs-extra';
 import { runSilentCommand } from './shell.js';
-import { COMMON_DEPENDENCIES } from '../constants/commonDependencies.js';
-import { setupNativeWind } from '../nativeWriter.js';
+import { CONFLICT_MAP, LEGACY_TO_EXPO_MAP, COMMON_DEPENDENCIES } from '../config/libraryRules.js';
+import { setupNativeWind } from '../services/nativeWriter.js';
 import { autoConfigureBabel } from '../utils/babelManager.js';
 import { Doctor } from '../utils/doctor.js';
 
 export class DependencyManager {
-  constructor() {
+  /**
+   * @param {Object} options
+   * @param {string} options.styleSystem - 'NativeWind' or 'StyleSheet'
+   */
+  constructor(options = {}) {
+    this.styleSystem = options.styleSystem || 'StyleSheet';
     this.pendingPackages = new Set();
-    // Default ignored packages (built-ins or explicitly managed)
+    
+    // [STRICT] Core packages that MUST be ignored to prevent version conflicts
     this.ignored = new Set([
-      'react', 'react-native', 'expo',
-      ...COMMON_DEPENDENCIES
+      'react', 
+      'react-native', 
+      'expo', // Native target, so we ignore or block this
     ]);
 
-    // Map of libraries that conflict with our stack -> The preferred alternative
-    this.conflictMap = {
-        'react-router-dom': 'expo-router',
-        'react-navigation': 'expo-router', // We use expo-router which wraps react-navigation
-        '@react-navigation/native': 'expo-router',
-        'styled-components': 'nativewind', // If we want to enforce nativewind, but user prompt didn't strictly say so, but user wants to avoid conflicts.
-        'node-fetch': 'fetch', // Built-in
-        'axios': 'fetch', // Optimization: prefer built-in, though axios is fine. Let's stick to strict conflicts for now.
-        'uuid': 'expo-crypto', 
-        '@react-native-community/async-storage': '@react-native-async-storage/async-storage',
-    };
+    // [STRICT] Conflict Map: Legacy/Incompatible -> Modern Expo Equivalent
+    // Imported from centralized rules
+    this.conflictMap = { ...LEGACY_TO_EXPO_MAP };
+
+    // Dynamic Conflict Mapping based on Style System
+    if (this.styleSystem === 'NativeWind') {
+        const nativeWindConflicts = CONFLICT_MAP['nativewind'] || [];
+        nativeWindConflicts.forEach(conf => {
+             this.conflictMap[conf] = 'nativewind';
+        });
+    } else {
+        // Strict StyleSheet: Ensure we don't accidentally allow them if not mapped
+    }
   }
 
   /**
-   * Add packages to the pending list.
-   * @param {string[]} packages - Array of package names
+   * Add packages to the pending queue with strict sanitization and conflict resolution.
+   * @param {string[]} packages - Array of raw package strings (e.g. "axios@latest", "lodash")
    */
   add(packages) {
     if (!packages || !Array.isArray(packages)) return;
     
     packages.forEach(pkg => {
-      // 1. Sanitize package name (remove @version)
-      const cleanPkg = pkg.split('@')[0];
+      // 1. Sanitize: Remove versions (@latest, @1.0.0) and sub-paths
+      // "axios@latest" -> "axios"
+      // "@react-navigation/native/src" -> "@react-navigation/native" (simplified logic: just take package name)
+      // handling scoped packages like @scope/pkt
+      let cleanPkg = pkg.split('@').filter(p => p.length > 0)[0]; 
+      if (pkg.startsWith('@')) {
+          // Re-add scope if it was stripped by sloppy split or check specifically
+          const parts = pkg.split('@');
+          // parts[0] is empty, parts[1] is scope/name, parts[2] is version
+          cleanPkg = '@' + parts[1];
+      } else {
+          cleanPkg = pkg.split('@')[0];
+      }
+      
+      // Remove sub-paths (e.g. package/sub) - usually needed for imports but not for install
+      // BUT for some libs like @expo/vector-icons, it's fine. 
+      // Generally npm install package/sub works if it's a valid package, but usually it's package.
+      // Let's assume standard package names.
 
-      // 2. Check for conflicts
-      if (this.conflictMap[cleanPkg]) {
-          const preferred = this.conflictMap[cleanPkg];
-          console.log(`⚠️  Blocking conflicting library: '${cleanPkg}'. Our stack uses '${preferred}'.`);
+      // 2. Conflict Resolution / Auto-Mapping
+      if (Object.prototype.hasOwnProperty.call(this.conflictMap, cleanPkg)) {
+          const replacement = this.conflictMap[cleanPkg];
           
-          // If the preferred one is not ignored, add it instead? 
-          // Usually preferred ones are in COMMON_DEPENDENCIES (ignored), so we just drop this.
-          if (!this.ignored.has(preferred)) {
-              this.pendingPackages.add(preferred);
+          if (replacement === null) {
+              // Explicitly blocked
+              // console.log(`🛡️ Blocked package: ${cleanPkg}`);
+              return;
+          }
+
+          if (replacement && replacement !== 'fetch') { 
+             // If the replacement is NOT in ignored list (unlikely for COMMON_DEPS), install it.
+             if (!this.ignored.has(replacement)) {
+                 this.pendingPackages.add(replacement);
+             }
           }
           return;
       }
 
-      // 3. Filter out core packages that are definitely installed
-      if (!this.ignored.has(cleanPkg)) {
-        this.pendingPackages.add(cleanPkg);
-      } else {
-        // console.log(`ℹ️  Skipping common/ignored dependency: ${cleanPkg}`);
+      // 3. Filter Ignored & Core Packages
+      if (this.ignored.has(cleanPkg)) {
+          return;
       }
+
+      // 4. Queue valid package
+      this.pendingPackages.add(cleanPkg);
     });
   }
 
   /**
-   * Install all pending packages in a single batch.
-   * @param {string} projectPath - Root of the RN project
+   * The ONLY method authorized to trigger installation.
+   * Installs all pending packages in a single "One Shot" batch.
+   * @param {string} projectPath 
    */
   async installAll(projectPath) {
     if (this.pendingPackages.size === 0) {
@@ -71,95 +104,66 @@ export class DependencyManager {
       return;
     }
 
+    // Convert Set to Array
+    const toInstall = Array.from(this.pendingPackages);
+    console.log(`📦 Preparing to install ${toInstall.length} collected packages...`);
+
     try {
+        // 1. Check if already installed (Optimistic Check)
+        // We rely on package.json to avoid redundant expo install calls
         const packageJsonPath = path.join(projectPath, 'package.json');
-        let installedDeps = {};
+        let currentDeps = {};
         if (await fs.pathExists(packageJsonPath)) {
              const pkg = await fs.readJson(packageJsonPath);
-             installedDeps = { ...pkg.dependencies, ...pkg.devDependencies };
+             currentDeps = { 
+                 ...(pkg.dependencies || {}), 
+                 ...(pkg.devDependencies || {}) 
+             };
         }
 
-        // Filter out what is already installed
-        const toInstall = [];
-        for (const pkg of this.pendingPackages) {
-            if (!installedDeps[pkg]) {
-                toInstall.push(pkg);
-            }
+        const missingPackages = toInstall.filter(p => !currentDeps[p]);
+
+        if (missingPackages.length === 0) {
+             console.log('✅ All packages are already in package.json. Skipping install.');
+             this.pendingPackages.clear();
+             return;
         }
 
-    if (toInstall.length === 0) {
-         console.log('✅ All discovered dependencies are already installed.');
-         this.pendingPackages.clear();
-         return;
-    }
-
-    const packageList = toInstall.join(' ');
-    
-    try {
-        // [New] Sanitize Environment First (Sync-then-Install)
-        // Ensure environment matches package.json before attempting new installs
-        console.log("🧹 [DependencyManager] Sanitizing environment...");
-        runSilentCommand('npm install', projectPath, "🧹 Syncing node_modules...");
+        const installCmd = `npx expo install ${missingPackages.join(' ')}`;
         
-        // Attempt 1: Batch install with Expo
-        runSilentCommand(
-          `npx expo install ${packageList}`, 
+        // 2. EXECUTE THE ONE SHOT INSTALL
+        await runSilentCommand(
+          installCmd,
           projectPath, 
-          `📦 Installing new dependencies: ${packageList}...`
+          `📦 Installing: ${missingPackages.length} packages (Batch)...`
         );
-        console.log('✅ Dependencies installed successfully.');
 
-        // [NEW] Configure NativeWind if installed (for tailwind.config.js)
-        if (toInstall.includes('nativewind')) {
+        console.log('✅ Batch installation complete.');
+        
+        // 3. Post-Install Configs (NativeWind, Babel)
+        // We can trigger these here or rely on Executor.
+        // For strict SOC, Executor calls them, but DependencyManager is "managing dependencies", 
+        // so checking if we installed nativewind and setting it up is acceptable helper logic.
+        if (missingPackages.includes('nativewind')) {
              await setupNativeWind(projectPath);
         }
 
-        // [NEW] Auto-Configure Babel for ALL dependencies (NativeWind, Reanimated, etc.)
         await autoConfigureBabel(projectPath);
 
         this.pendingPackages.clear();
+
     } catch (error) {
-        console.warn('⚠️ Batch installation failed. Retrying individually...');
+        console.error('❌ Batch install failed.');
         
-        // Attempt 2: Install individually
-        for (const pkg of toInstall) {
-            try {
-                runSilentCommand(
-                  `npx expo install ${pkg}`, 
-                  projectPath, 
-                  `📦 Installing ${pkg}...`
-                );
-            } catch (innerError) {
-                console.warn(`⚠️ 'expo install ${pkg}' failed. Invoking Doctor...`);
-                
-                // [NEW] Call the Doctor instead of blindly forcing install
-                try {
-                     await Doctor.fixDependencies(projectPath);
-                     
-                     // Retry install one last time after doctor fixes things
-                     runSilentCommand(
-                        `npx expo install ${pkg}`, 
-                        projectPath, 
-                        `📦 Re-installing ${pkg} after Doctor fix...`
-                     );
-
-                } catch (doctorError) {
-                    console.error(`❌ Doctor failed to rescue installation of ${pkg}.`);
-                }
-            }
-        }
-        // Check NativeWind post-install even after individual installs
-        if (toInstall.includes('nativewind')) {
-            await setupNativeWind(projectPath);
-        }
+        // [FAIL-FAST STRATEGY]
+        // Instead of retrying randomly, we delegate to Key Doctor Strategy.
+        // We throw so the Executor knows we failed, OR we call Doctor here.
+        // The plan says: "Implement Fail-Fast Doctor Strategy... Integration: Add logic to be invoked specifically if Phase 2 fails."
         
-        // [NEW] Auto-Configure Babel (Retry in catch block too)
-        await autoConfigureBabel(projectPath);
-
+        console.log('🚑 Initiating Emergency Doctor Protocol...');
+        await Doctor.fixDependencies(projectPath, toInstall); 
+        // If Doctor throws, it bubbles up. If it returns, we assume fixed.
         this.pendingPackages.clear();
-    }
-    } catch (outerError) {
-        console.error("❌ Unexpected error during dependency installation:", outerError.message);
     }
   }
 }

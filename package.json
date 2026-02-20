@@ -16,13 +16,14 @@
     "groq-sdk": "^0.37.0"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "vitest run"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
   "devDependencies": {
-    "@types/babel__traverse": "^7.28.0"
+    "@types/babel__traverse": "^7.28.0",
+    "vitest": "^4.0.18"
   }
 }

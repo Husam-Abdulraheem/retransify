@@ -10,7 +10,7 @@ export class PathMapper {
     const pathMap = {};
 
     for (const file of files) {
-      const oldPath = file.relativeToSrc; // e.g. "pages/Home.jsx"
+      const oldPath = file.relativeToProject; // [Updated] relativeToSrc -> relativeToProject
       const refinedPath = this.determineNewPath(file);
       pathMap[oldPath] = refinedPath;
     }
@@ -25,7 +25,7 @@ export class PathMapper {
    */
   static determineNewPath(file) {
     // Basic heuristics based on directory or filename
-    const parts = file.relativeToSrc.split('/');
+    const parts = file.relativeToProject.split('/'); // [Updated]
     const filename = parts[parts.length - 1];
     const basename = path.basename(filename, path.extname(filename)); // No extension
     const ext = path.extname(filename);
@@ -78,16 +78,16 @@ export class PathMapper {
 
     // 3. Fallback: Mirror structure but inside "src" or root if appropriate
     // If it's effectively a root file like App.js or index.js
-    if (file.relativeToSrc === 'App.js' || file.relativeToSrc === 'App.jsx') {
+    if (file.relativeToProject === 'App.js' || file.relativeToProject === 'App.jsx') {
         return `app/index.tsx`; // Main App component usually becomes the index page
     }
     
-    if (file.relativeToSrc === 'main.js' || file.relativeToSrc === 'main.jsx' || file.relativeToSrc === 'index.js') {
+    if (file.relativeToProject === 'main.js' || file.relativeToProject === 'main.jsx' || file.relativeToProject === 'index.js') {
         return `app/_layout.tsx`; // The entry point that wraps everything usually becomes the layout
     }
 
     // Default: keep in a 'src' folder to avoid cluttering root, or just mirror
-    return `src/${file.relativeToSrc.replace(/\.js$/, '.ts').replace(/\.jsx$/, '.tsx')}`;
+    return `src/${file.relativeToProject.replace(/\.js$/, '.ts').replace(/\.jsx$/, '.tsx')}`;
   }
 
   static isInFolder(parts, folderName) {

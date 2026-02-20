@@ -1,8 +1,8 @@
 import path from "path";
-import { cleanAIResponse } from "./helpers/cleanAIResponse.js";
-import { sendToAI } from "./ai/aiFactory.js";
+import { cleanAIResponse } from "../helpers/cleanAIResponse.js";
+import { sendToAI } from "./aiFactory.js";
 
-import { buildPrompt } from "./prompt/promptBuilder.js";
+import { buildPrompt } from "../prompt/promptBuilder.js";
 
 /**
  * الدالة التي تتعامل مع الذكاء الاصطناعي

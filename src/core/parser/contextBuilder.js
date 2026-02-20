@@ -18,21 +18,22 @@ export function buildProjectContext({
   parsedFiles,
   importsGraph,
   reverseGraph,
-  structure
+  structure,
+  facts = {} // [Enhanced] Receive facts from Analyzer
 }) {
   const normalize = (p) => p.replace(/\\/g, "/");
 
   // خريطة سريعة للوصول للـ parsedFile عبر المسار النسبي
   const parsedByPath = {};
   for (const pf of parsedFiles) {
-    const key = normalize(pf.relativeToSrc || pf.filePath);
+    const key = normalize(pf.relativeToProject || pf.filePath);
     parsedByPath[key] = pf;
   }
 
   // filesByPath: تخزين كل معلومات الملف تحت key = relativeToSrc
   const filesByPath = {};
   for (const f of files) {
-    const key = normalize(f.relativeToSrc);
+    const key = normalize(f.relativeToProject);
     const parsed = parsedByPath[key];
 
     filesByPath[key] = {
@@ -59,7 +60,8 @@ export function buildProjectContext({
     filesByPath,
     globalComponents,
     dependencyGraph: importsGraph,
-    reverseDependencyGraph: reverseGraph
+    reverseDependencyGraph: reverseGraph,
+    facts // [Enhanced] Store technical facts
   };
 
   return projectContext;
@@ -94,28 +96,31 @@ export function buildFileContext(targetRelativePath, projectContext) {
 
   const fileDescription = describeFile(fileMeta, ast, fileImportedBy);
 
+  // [Enhanced] Structured Output & Token Optimization
   return {
-    projectStructure: projectContext.structure,
-    globalComponentMap: projectContext.globalComponents,
-    dependencyGraph: projectContext.dependencyGraph,
-    reverseDependencyGraph: projectContext.reverseDependencyGraph,
-
-    // معلومات خاصة بالملف
-    filePath: relPath,
-    fileMeta: {
-      filename: fileMeta.filename,
-      ext: fileMeta.ext,
-      isTestFile: fileMeta.isTestFile,
-      segments: fileMeta.segments
+    filePath: fileMeta.relativeToProject || relPath, // [Fix] Include filePath
+    content: ast.raw || "", // Raw Code
+    
+    analysis: {
+      fileMeta: {
+        filename: fileMeta.filename,
+        ext: fileMeta.ext,
+        isTestFile: fileMeta.isTestFile
+      },
+      description: fileDescription, // [Enhanced] AI Summary
+      imports: ast.imports || [], // [Enhanced] Full Import AST with loc
+      exports: ast.exports || [], // [Enhanced] Full Export AST with loc & usage
+      components: ast.components || [],
+      hooks: ast.hooks || [],
+      hasJSX: ast.hasJSX || false
     },
-    fileDescription,
-    fileImports,
-    fileImportedBy,
-    fileComponents: ast.components || [],
-    fileExports: ast.exports || [],
-    fileHooks: ast.hooks || [],
-    fileHasJSX: ast.hasJSX || false,
-    fileContent: ast.raw || ""
+
+    relationships: {
+      follows: fileImports,    // Files this file imports (Neighbors)
+      followers: fileImportedBy // Files extracting from this file (Neighbors)
+    },
+
+    techContext: projectContext.facts || {} // [Enhanced] Technical Rules
   };
 }
 
@@ -130,7 +135,7 @@ export function buildFileContext(targetRelativePath, projectContext) {
 function describeFile(fileMeta, ast, importedBy = []) {
   const parts = [];
 
-  const rel = fileMeta.relativeToSrc || fileMeta.relativeToProject;
+  const rel = fileMeta.relativeToProject || fileMeta.filePath;
   const cleanRel = rel.replace(/\\/g, "/");
 
   parts.push(`File "${cleanRel}".`);
