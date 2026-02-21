@@ -1,37 +1,36 @@
 // src/core/astParser.js
-import fs from "fs/promises";
-import path from "path";
-import { parse } from "@babel/parser";
-import _traverse from "@babel/traverse";
+import fs from 'fs/promises';
+import path from 'path';
+import { parse } from '@babel/parser';
+import _traverse from '@babel/traverse';
 const traverse = _traverse.default || _traverse;
 
-
 /**
- * إعدادات الـ parser
+ * Parser configuration
  */
 const PARSER_CONFIG = {
-  sourceType: "module",
+  sourceType: 'module',
   plugins: [
-    "jsx",
-    "typescript",
-    "classProperties",
-    "objectRestSpread",
-    "optionalChaining",
-    "nullishCoalescingOperator",
-    "decorators-legacy"
-  ]
+    'jsx',
+    'typescript',
+    'classProperties',
+    'objectRestSpread',
+    'optionalChaining',
+    'nullishCoalescingOperator',
+    'decorators-legacy',
+  ],
 };
 
 /**
- * تحليل ملف واحد واستخراج:
+ * Parse a single file and extract:
  * - imports
  * - exports
  * - components
  * - hooks
- * - معلومات الـ JSX
+ * - JSX info
  */
 export async function parseFile(filePath) {
-  const code = await fs.readFile(filePath, "utf-8");
+  const code = await fs.readFile(filePath, 'utf-8');
   const ext = path.extname(filePath);
 
   // [Fix] Only parse JS/TS files
@@ -45,7 +44,7 @@ export async function parseFile(filePath) {
       hooks: [],
       raw: code,
       ast: null,
-      skipped: true
+      skipped: true,
     };
   }
 
@@ -60,58 +59,58 @@ export async function parseFile(filePath) {
       components: [],
       hooks: [],
       raw: code,
-      ast: ast // [Enhanced] Return raw AST for Deep Scan
+      ast: ast, // [Enhanced] Return raw AST for Deep Scan
     };
-  
+
     // Continue traversing...
     traverse(ast, {
       /**
-       * استخراج جميع imports
+       * Extract all imports
        */
       ImportDeclaration(path) {
         const item = {
           source: path.node.source.value,
           loc: path.node.loc, // [Enhanced] Location for Healer
-          specifiers: []
+          specifiers: [],
         };
-  
+
         path.node.specifiers.forEach((s) => {
           // [Enhanced] Scope Analysis for Usage Count
           const localName = s.local.name;
           const binding = path.scope.getBinding(localName);
           const usageCount = binding ? binding.referencePaths.length : 0;
-  
+
           const specifierData = {
             local: localName,
             loc: s.loc, // [Enhanced] Location per specifier
-            usageCount: usageCount // [Enhanced] Smart Usage Count
+            usageCount: usageCount, // [Enhanced] Smart Usage Count
           };
-  
-          if (s.type === "ImportDefaultSpecifier") {
+
+          if (s.type === 'ImportDefaultSpecifier') {
             item.specifiers.push({
-              type: "default",
-              imported: "default",
-              ...specifierData
+              type: 'default',
+              imported: 'default',
+              ...specifierData,
             });
-          } else if (s.type === "ImportSpecifier") {
+          } else if (s.type === 'ImportSpecifier') {
             item.specifiers.push({
-              type: "named",
+              type: 'named',
               imported: s.imported.name,
-              ...specifierData
+              ...specifierData,
             });
-          } else if (s.type === "ImportNamespaceSpecifier") {
+          } else if (s.type === 'ImportNamespaceSpecifier') {
             item.specifiers.push({
-              type: "namespace",
-              ...specifierData
+              type: 'namespace',
+              ...specifierData,
             });
           }
         });
-  
+
         result.imports.push(item);
       },
-  
+
       /**
-       * كشف هياكل JSX
+       * Detect JSX structures
        */
       JSXElement() {
         result.hasJSX = true;
@@ -119,28 +118,32 @@ export async function parseFile(filePath) {
       JSXFragment() {
         result.hasJSX = true;
       },
-  
+
       /**
-       * كشف الـ exports (default & named)
+       * Detect exports (default & named)
        */
       ExportDefaultDeclaration(path) {
         const name = extractExportName(path.node);
-        
+
         // Calculate usage if possible (often 0 for default exports unless used internally)
         let usageCount = 0;
-        if (name && name !== "AnonymousComponent" && name !== "UnknownDefaultExport") {
-           const binding = path.scope.getBinding(name);
-           usageCount = binding ? binding.referencePaths.length : 0;
+        if (
+          name &&
+          name !== 'AnonymousComponent' &&
+          name !== 'UnknownDefaultExport'
+        ) {
+          const binding = path.scope.getBinding(name);
+          usageCount = binding ? binding.referencePaths.length : 0;
         }
-  
+
         result.exports.push({
-          type: "default",
+          type: 'default',
           name: name,
           loc: path.node.loc,
-          usageCount: usageCount
+          usageCount: usageCount,
         });
       },
-  
+
       ExportNamedDeclaration(path) {
         if (path.node.declaration) {
           if (path.node.declaration.id) {
@@ -148,55 +151,55 @@ export async function parseFile(filePath) {
             const name = path.node.declaration.id.name;
             const binding = path.scope.getBinding(name);
             const usageCount = binding ? binding.referencePaths.length : 0;
-  
+
             result.exports.push({
-              type: "named",
+              type: 'named',
               name: name,
               loc: path.node.declaration.loc, // [Enhanced] Location
-              usageCount: usageCount // [Enhanced] Usage Count
+              usageCount: usageCount, // [Enhanced] Usage Count
             });
           } else if (path.node.declaration.declarations) {
-             // export const a = 1, b = 2;
-             path.node.declaration.declarations.forEach(decl => {
-               if (decl.id.name) {
-                  const name = decl.id.name;
-                  const binding = path.scope.getBinding(name);
-                  const usageCount = binding ? binding.referencePaths.length : 0;
-  
-                  result.exports.push({
-                    type: "named",
-                    name: name,
-                    loc: decl.loc,
-                    usageCount: usageCount
-                  });
-               }
-             });
+            // export const a = 1, b = 2;
+            path.node.declaration.declarations.forEach((decl) => {
+              if (decl.id.name) {
+                const name = decl.id.name;
+                const binding = path.scope.getBinding(name);
+                const usageCount = binding ? binding.referencePaths.length : 0;
+
+                result.exports.push({
+                  type: 'named',
+                  name: name,
+                  loc: decl.loc,
+                  usageCount: usageCount,
+                });
+              }
+            });
           }
         }
-  
+
         if (path.node.specifiers) {
           // export { foo, bar }
           path.node.specifiers.forEach((s) => {
             const localName = s.local.name;
             const binding = path.scope.getBinding(localName);
             const usageCount = binding ? binding.referencePaths.length : 0;
-  
+
             result.exports.push({
-              type: "named",
+              type: 'named',
               name: s.exported.name,
               local: localName,
               loc: s.loc,
-              usageCount: usageCount
+              usageCount: usageCount,
             });
           });
         }
       },
-  
+
       /**
-       * كشف الـ function components
-       * مثلاً:
+       * Detect function components
+       * e.g.:
        * function Button() { return <div/> }
-       * أو:
+       * or:
        * const Button = () => <div/>
        */
       FunctionDeclaration(path) {
@@ -204,36 +207,37 @@ export async function parseFile(filePath) {
           result.components.push(path.node.id.name);
         }
       },
-  
+
       VariableDeclarator(path) {
         if (
           path.node.init &&
-          (path.node.init.type === "ArrowFunctionExpression" ||
-            path.node.init.type === "FunctionExpression")
+          (path.node.init.type === 'ArrowFunctionExpression' ||
+            path.node.init.type === 'FunctionExpression')
         ) {
           if (isReactComponent(path.node.init)) {
             result.components.push(path.node.id.name);
           }
         }
       },
-  
+
       /**
-       * كشف استخدام hooks
+       * Detect hook usage
        */
       CallExpression(path) {
-        if (path.node.callee.type === "Identifier") {
+        if (path.node.callee.type === 'Identifier') {
           const name = path.node.callee.name;
-          if (name.startsWith("use")) {
+          if (name.startsWith('use')) {
             result.hooks.push(name);
           }
         }
-      }
+      },
     });
-  
+
     return result;
-  
   } catch (error) {
-    console.warn(`⚠️  Parser missed file: ${path.basename(filePath)} (${error.code || 'SyntaxError'})`);
+    console.warn(
+      `⚠️  Parser missed file: ${path.basename(filePath)} (${error.code || 'SyntaxError'})`
+    );
     // Return empty safe object
     return {
       filePath,
@@ -244,26 +248,26 @@ export async function parseFile(filePath) {
       hooks: [],
       raw: code,
       ast: null,
-      error: error.message
+      error: error.message,
     };
   }
 }
 
 /**
- * يحدد إن كان function React Component:
- * - يبدأ بحرف كبير
- * - يحتوي JSX
+ * Determines if a function is a React Component:
+ * - Starts with uppercase letter
+ * - Contains JSX
  */
 function isReactComponent(node) {
   if (!node.body) return false;
-  if (!node.id && node.type !== "FunctionExpression") return false;
+  if (!node.id && node.type !== 'FunctionExpression') return false;
 
-  // اسم الكبوننت يجب أن يبدأ بحرف كبير
+  // Component name must start with uppercase
   const name = node.id?.name;
   if (!name) return false;
   if (name[0] !== name[0].toUpperCase()) return false;
 
-  // هل يحتوي return JSX؟
+  // Does return contain JSX?
   let containsJSX = false;
   traverse(
     node,
@@ -273,7 +277,7 @@ function isReactComponent(node) {
       },
       JSXFragment() {
         containsJSX = true;
-      }
+      },
     },
     node
   );
@@ -282,7 +286,7 @@ function isReactComponent(node) {
 }
 
 /**
- * استخراج اسم الـ export default
+ * Extract default export name
  */
 function extractExportName(node) {
   if (!node.declaration) return null;
@@ -293,14 +297,14 @@ function extractExportName(node) {
   }
 
   // export default () => {}
-  if (node.declaration.type === "ArrowFunctionExpression") {
-    return "AnonymousComponent";
+  if (node.declaration.type === 'ArrowFunctionExpression') {
+    return 'AnonymousComponent';
   }
 
   // export default ComponentName
-  if (node.declaration.type === "Identifier") {
+  if (node.declaration.type === 'Identifier') {
     return node.declaration.name;
   }
 
-  return "UnknownDefaultExport";
+  return 'UnknownDefaultExport';
 }

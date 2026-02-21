@@ -1,4 +1,3 @@
-
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Analyzer } from './analyzer';
 import fs from 'fs-extra';
@@ -17,7 +16,7 @@ describe('Analyzer', () => {
     analyzer = new Analyzer(mockProjectPath);
     mockContext = {
       addFact: vi.fn(),
-      facts: {}
+      facts: {},
     };
     // Fix path.join mock to actually join strings with /
     path.join.mockImplementation((...args) => args.join('/'));
@@ -33,7 +32,9 @@ describe('Analyzer', () => {
 
     await analyzer.analyze(mockContext);
 
-    const techCall = mockContext.addFact.mock.calls.find(call => call[0] === 'tech');
+    const techCall = mockContext.addFact.mock.calls.find(
+      (call) => call[0] === 'tech'
+    );
     expect(techCall).toBeDefined();
     expect(techCall[1].language).toBe('TypeScript');
   });
@@ -48,7 +49,9 @@ describe('Analyzer', () => {
 
     await analyzer.analyze(mockContext);
 
-    const techCall = mockContext.addFact.mock.calls.find(call => call[0] === 'tech');
+    const techCall = mockContext.addFact.mock.calls.find(
+      (call) => call[0] === 'tech'
+    );
     expect(techCall).toBeDefined();
     expect(techCall[1].styling).toBe('Tailwind');
   });
@@ -59,19 +62,22 @@ describe('Analyzer', () => {
       if (filePath.endsWith('src/index.js')) return true;
       return false;
     });
-    fs.readJson.mockResolvedValue({ 
-      dependencies: { 'react-redux': '^7.2.0' }
+    fs.readJson.mockResolvedValue({
+      dependencies: { 'react-redux': '^7.2.0' },
     });
-    
+
     // Mock file content to include Provider
     fs.readFile.mockImplementation((filePath) => {
-      if (filePath.endsWith('src/index.js')) return Promise.resolve('import { Provider } from "react-redux";');
+      if (filePath.endsWith('src/index.js'))
+        return Promise.resolve('import { Provider } from "react-redux";');
       return Promise.reject('File not found');
     });
 
     await analyzer.analyze(mockContext);
 
-    const techCall = mockContext.addFact.mock.calls.find(call => call[0] === 'tech');
+    const techCall = mockContext.addFact.mock.calls.find(
+      (call) => call[0] === 'tech'
+    );
     expect(techCall).toBeDefined();
     expect(techCall[1].stateManagement).toBe('Redux');
   });
@@ -82,19 +88,22 @@ describe('Analyzer', () => {
       if (filePath.endsWith('src/index.js')) return true;
       return false;
     });
-    fs.readJson.mockResolvedValue({ 
-      dependencies: { 'react-redux': '^7.2.0' }
+    fs.readJson.mockResolvedValue({
+      dependencies: { 'react-redux': '^7.2.0' },
     });
-    
+
     // Mock file content WITHOUT Provider
     fs.readFile.mockImplementation((filePath) => {
-      if (filePath.endsWith('src/index.js')) return Promise.resolve('console.log("Hello World");');
+      if (filePath.endsWith('src/index.js'))
+        return Promise.resolve('console.log("Hello World");');
       return Promise.reject('File not found');
     });
 
     await analyzer.analyze(mockContext);
 
-    const techCall = mockContext.addFact.mock.calls.find(call => call[0] === 'tech');
+    const techCall = mockContext.addFact.mock.calls.find(
+      (call) => call[0] === 'tech'
+    );
     expect(techCall).toBeDefined();
     expect(techCall[1].stateManagement).toBe('None');
   });
@@ -105,18 +114,21 @@ describe('Analyzer', () => {
       if (filePath.endsWith('src/App.js')) return true;
       return false;
     });
-    fs.readJson.mockResolvedValue({ 
-      dependencies: { 'react-router-dom': '^6.0.0' }
+    fs.readJson.mockResolvedValue({
+      dependencies: { 'react-router-dom': '^6.0.0' },
     });
-    
+
     fs.readFile.mockImplementation((filePath) => {
-      if (filePath.endsWith('src/App.js')) return Promise.resolve('<BrowserRouter>');
+      if (filePath.endsWith('src/App.js'))
+        return Promise.resolve('<BrowserRouter>');
       return Promise.reject();
     });
 
     await analyzer.analyze(mockContext);
 
-    const techCall = mockContext.addFact.mock.calls.find(call => call[0] === 'tech');
+    const techCall = mockContext.addFact.mock.calls.find(
+      (call) => call[0] === 'tech'
+    );
     expect(techCall).toBeDefined();
     expect(techCall[1].routing).toBe('ReactRouter');
   });

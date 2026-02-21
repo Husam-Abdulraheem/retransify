@@ -1,27 +1,27 @@
 export const BABEL_REGISTRY = {
-  // اسم المكتبة في package.json : اسم البلاجن في babel.config.js
-  
-  // 1. المكتبات الشائعة التي تتطلب Plugin
-  "react-native-reanimated": {
-    plugin: "react-native-reanimated/plugin",
-    isLast: true, // هذه المكتبة تتطلب أن تكون في آخر القائمة دائماً
+  // Library name in package.json : Plugin name in babel.config.js
+
+  // 1. Common libraries that require a Plugin
+  'react-native-reanimated': {
+    plugin: 'react-native-reanimated/plugin',
+    isLast: true, // This library must always be at the end of the list
   },
-  "nativewind": {
-    plugin: "nativewind/babel",
+  nativewind: {
+    plugin: 'nativewind/babel',
   },
-  "react-native-dotenv": {
+  'react-native-dotenv': {
     plugin: [
-      "module:react-native-dotenv",
+      'module:react-native-dotenv',
       {
-        "moduleName": "@env",
-        "path": ".env",
-      }
-    ]
+        moduleName: '@env',
+        path: '.env',
+      },
+    ],
   },
-  "expo-router": {
-    // أحياناً تتطلب إعدادات خاصة، يمكن إضافتها هنا
-    plugin: "expo-router/babel"
+  'expo-router': {
+    // Sometimes require special settings, can be added here
+    plugin: 'expo-router/babel',
   },
-  
-  // يمكنك إضافة مئات المكتبات هنا مستقبلاً دون تعديل الكود الأساسي
+
+  // You can add hundreds of libraries here in the future without modifying core code
 };

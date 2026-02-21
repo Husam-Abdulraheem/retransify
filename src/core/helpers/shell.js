@@ -1,12 +1,12 @@
-import { execSync } from "child_process";
+import { execSync } from 'child_process';
 
 /**
  * Execute a shell command silently.
  * Only logs to stderr if the command fails.
- * 
+ *
  * @param {string} command - Command to run
  * @param {string} cwd - Working directory
- * @param {string} description - Description for the user (e.g., "Installing...") 
+ * @param {string} description - Description for the user (e.g., "Installing...")
  * @returns {void}
  */
 export function runSilentCommand(command, cwd, description) {
@@ -18,7 +18,7 @@ export function runSilentCommand(command, cwd, description) {
     execSync(command, {
       cwd,
       stdio: 'pipe', // Completely silent
-      encoding: 'utf-8'
+      encoding: 'utf-8',
     });
   } catch (error) {
     // Only print error details if it fails

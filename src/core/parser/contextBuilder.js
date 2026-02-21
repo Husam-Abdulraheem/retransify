@@ -1,15 +1,14 @@
 // src/core/contextBuilder.js
-import path from "path";
 
 /**
- * بناء سياق كامل للمشروع
+ * Build complete project context
  *
  * @param {object} params
- * @param {Array} params.files - من fileScanner (فيها relativeToSrc, absolutePath, ...)
- * @param {Array} params.parsedFiles - من astParser (فيها imports, exports, components, hooks, raw, relativeToSrc)
- * @param {object} params.importsGraph - من graphBuilder
- * @param {object} params.reverseGraph - من graphBuilder
- * @param {object} params.structure - شجرة المشروع من fileScanner
+ * @param {Array} params.files - From fileScanner (contains relativeToSrc, absolutePath, ...)
+ * @param {Array} params.parsedFiles - From astParser (contains imports, exports, components, hooks, raw, relativeToSrc)
+ * @param {object} params.importsGraph - From graphBuilder
+ * @param {object} params.reverseGraph - From graphBuilder
+ * @param {object} params.structure - Project tree from fileScanner
  *
  * @returns {object} projectContext
  */
@@ -19,18 +18,18 @@ export function buildProjectContext({
   importsGraph,
   reverseGraph,
   structure,
-  facts = {} // [Enhanced] Receive facts from Analyzer
+  facts = {}, // [Enhanced] Receive facts from Analyzer
 }) {
-  const normalize = (p) => p.replace(/\\/g, "/");
+  const normalize = (p) => p.replace(/\\/g, '/');
 
-  // خريطة سريعة للوصول للـ parsedFile عبر المسار النسبي
+  // Quick map to access parsedFile via relative path
   const parsedByPath = {};
   for (const pf of parsedFiles) {
     const key = normalize(pf.relativeToProject || pf.filePath);
     parsedByPath[key] = pf;
   }
 
-  // filesByPath: تخزين كل معلومات الملف تحت key = relativeToSrc
+  // filesByPath: store complete file info under key = relativeToSrc
   const filesByPath = {};
   for (const f of files) {
     const key = normalize(f.relativeToProject);
@@ -38,11 +37,11 @@ export function buildProjectContext({
 
     filesByPath[key] = {
       ...f,
-      ast: parsed || null
+      ast: parsed || null,
     };
   }
 
-  // بناء خريطة المكوّنات العالمية: componentName -> [filePath, ...]
+  // Build global components map: componentName -> [filePath, ...]
   const globalComponents = {};
   for (const [relPath, meta] of Object.entries(filesByPath)) {
     const ast = meta.ast;
@@ -54,37 +53,35 @@ export function buildProjectContext({
     });
   }
 
-  // سياق المشروع النهائي
+  // Final project context
   const projectContext = {
     structure,
     filesByPath,
     globalComponents,
     dependencyGraph: importsGraph,
     reverseDependencyGraph: reverseGraph,
-    facts // [Enhanced] Store technical facts
+    facts, // [Enhanced] Store technical facts
   };
 
   return projectContext;
 }
 
 /**
- * بناء سياق ملف معيّن لإرساله للذكاء الاصطناعي
+ * Build specific file context to send to AI
  *
- * @param {string} targetRelativePath - المسار النسبي داخل src (مثال: "components/Button.jsx")
- * @param {object} projectContext - ناتج buildProjectContext
+ * @param {string} targetRelativePath - Relative path inside src (e.g. "components/Button.jsx")
+ * @param {object} projectContext - result of buildProjectContext
  *
  * @returns {object} fileContext
  */
 export function buildFileContext(targetRelativePath, projectContext) {
-  const normalize = (p) => p.replace(/\\/g, "/");
+  const normalize = (p) => p.replace(/\\/g, '/');
   const relPath = normalize(targetRelativePath);
 
   const fileMeta = projectContext.filesByPath[relPath];
 
   if (!fileMeta) {
-    throw new Error(
-      `File ${relPath} not found in projectContext.filesByPath.`
-    );
+    throw new Error(`File ${relPath} not found in projectContext.filesByPath.`);
   }
 
   const ast = fileMeta.ast || {};
@@ -99,75 +96,75 @@ export function buildFileContext(targetRelativePath, projectContext) {
   // [Enhanced] Structured Output & Token Optimization
   return {
     filePath: fileMeta.relativeToProject || relPath, // [Fix] Include filePath
-    content: ast.raw || "", // Raw Code
-    
+    content: ast.raw || '', // Raw Code
+
     analysis: {
       fileMeta: {
         filename: fileMeta.filename,
         ext: fileMeta.ext,
-        isTestFile: fileMeta.isTestFile
+        isTestFile: fileMeta.isTestFile,
       },
       description: fileDescription, // [Enhanced] AI Summary
       imports: ast.imports || [], // [Enhanced] Full Import AST with loc
       exports: ast.exports || [], // [Enhanced] Full Export AST with loc & usage
       components: ast.components || [],
       hooks: ast.hooks || [],
-      hasJSX: ast.hasJSX || false
+      hasJSX: ast.hasJSX || false,
     },
 
     relationships: {
-      follows: fileImports,    // Files this file imports (Neighbors)
-      followers: fileImportedBy // Files extracting from this file (Neighbors)
+      follows: fileImports, // Files this file imports (Neighbors)
+      followers: fileImportedBy, // Files extracting from this file (Neighbors)
     },
 
-    techContext: projectContext.facts || {} // [Enhanced] Technical Rules
+    techContext: projectContext.facts || {}, // [Enhanced] Technical Rules
   };
 }
 
 /**
- * توليد وصف بسيط للملف يعتمد على:
- * - المسار
- * - الكومبوننتس
- * - هل فيه JSX
- * - هل يستخدم hooks
- * - هل يُستخدم من ملفات أخرى
+ * Generate simple file description based on:
+ * - Path
+ * - Components
+ * - Contains JSX?
+ * - Uses hooks?
+ * - Is imported by other files?
  */
 function describeFile(fileMeta, ast, importedBy = []) {
   const parts = [];
 
   const rel = fileMeta.relativeToProject || fileMeta.filePath;
-  const cleanRel = rel.replace(/\\/g, "/");
+  const cleanRel = rel.replace(/\\/g, '/');
 
   parts.push(`File "${cleanRel}".`);
 
   if (ast.components && ast.components.length > 0) {
-    parts.push(
-      `Defines React components: ${ast.components.join(", ")}.`
-    );
+    parts.push(`Defines React components: ${ast.components.join(', ')}.`);
   }
 
   if (ast.hasJSX) {
-    parts.push("Contains JSX UI structure.");
+    parts.push('Contains JSX UI structure.');
   }
 
   if (ast.hooks && ast.hooks.length > 0) {
     const uniqueHooks = Array.from(new Set(ast.hooks));
-    parts.push(`Uses React hooks: ${uniqueHooks.join(", ")}.`);
+    parts.push(`Uses React hooks: ${uniqueHooks.join(', ')}.`);
   }
 
   if (importedBy.length > 0) {
     parts.push(
       `This file is imported by: ${importedBy
-        .map((p) => p.replace(/\\/g, "/"))
-        .join(", ")}.`
+        .map((p) => p.replace(/\\/g, '/'))
+        .join(', ')}.`
     );
   } else {
-    parts.push("This file is not imported by any other file (possible entry or leaf).");
+    parts.push(
+      'This file is not imported by any other file (possible entry or leaf).'
+    );
   }
 
   if (fileMeta.isTestFile) {
-    parts.push("This is a test file.");
+    parts.push('This is a test file.');
   }
 
-  return parts.join(" ");
+  return parts.join(' ');
 }

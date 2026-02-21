@@ -1,18 +1,17 @@
-
-import { StateManager } from "../services/stateManager.js";
-import { GlobalMigrationContext } from "../context/GlobalMigrationContext.js";
-import { Analyzer } from "../phases/analyzer.js";
-import { scanProject } from "../scanners/FileScanner.js";
-import { parseFile } from "../parser/astParser.js";
-import { buildDependencyGraph } from "../parser/graphBuilder.js";
-import { Planner } from "../phases/planner.js";
-import { buildProjectContext } from "../parser/contextBuilder.js";
-import { Executor } from "../phases/executor.js";
-import { promptModelSelection } from "../../cli/prompts.js";
+import { StateManager } from '../services/stateManager.js';
+import { GlobalMigrationContext } from '../context/GlobalMigrationContext.js';
+import { Analyzer } from '../phases/analyzer.js';
+import { scanProject } from '../scanners/FileScanner.js';
+import { parseFile } from '../parser/astParser.js';
+import { buildDependencyGraph } from '../parser/graphBuilder.js';
+import { Planner } from '../phases/planner.js';
+import { buildProjectContext } from '../parser/contextBuilder.js';
+import { Executor } from '../phases/executor.js';
+import { promptModelSelection } from '../../cli/prompts.js';
 
 export async function handleConvert(projectPath, sdkVersion = null) {
-  console.log("🚀 Starting conversion...");
-  console.log("📂 Project path:", projectPath);
+  console.log('🚀 Starting conversion...');
+  console.log('📂 Project path:', projectPath);
   if (sdkVersion) console.log(`ℹ️  Desired SDK Version: ${sdkVersion}`);
 
   // 0) Select AI Model
@@ -26,9 +25,11 @@ export async function handleConvert(projectPath, sdkVersion = null) {
   // 2) Run Analyzer (Phase 1)
   const analyzer = new Analyzer(projectPath);
   await analyzer.analyze(context);
-  
+
   const tech = context.facts.tech || {};
-  console.log(`🧠 Recognized Stack: ${tech.language} / ${tech.stateManagement} / ${tech.routing} / ${tech.buildTool}`);
+  console.log(
+    `🧠 Recognized Stack: ${tech.language} / ${tech.stateManagement} / ${tech.routing} / ${tech.buildTool}`
+  );
   console.log(`🎨 Style System: ${tech.styling}`);
 
   // 3) Scan & Build Dependency Graph (Existing logic reused for Graph)
@@ -45,8 +46,10 @@ export async function handleConvert(projectPath, sdkVersion = null) {
   // 4) Run Planner (Phase 2)
   const planner = new Planner(importsGraph);
   await planner.plan(context, files);
-  
-  const fileCount = context.decisions.executionOrder ? context.decisions.executionOrder.length : 0;
+
+  const fileCount = context.decisions.executionOrder
+    ? context.decisions.executionOrder.length
+    : 0;
   console.log(`📋 Plan creates order for ${fileCount} files.`);
 
   // 5) Build Full Project Context (for detailed file building)
@@ -56,14 +59,14 @@ export async function handleConvert(projectPath, sdkVersion = null) {
     importsGraph,
     reverseGraph,
     structure,
-    facts: context.facts || {} // [Enhanced] Pass technical facts
+    facts: context.facts || {}, // [Enhanced] Pass technical facts
   });
 
   // 6) Run Executor (Phase 3)
-  const executor = new Executor(context, stateManager, projectContext, { 
+  const executor = new Executor(context, stateManager, projectContext, {
     sdkVersion,
     model: modelInfo.value,
-    provider: modelInfo.provider
+    provider: modelInfo.provider,
   });
   await executor.execute();
 }

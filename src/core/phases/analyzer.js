@@ -8,7 +8,7 @@ import { PROJECT_PROFILES } from '../config/profiles.js';
 
 export class Analyzer {
   /**
-   * @param {string} projectPath 
+   * @param {string} projectPath
    */
   constructor(projectPath) {
     this.projectPath = projectPath;
@@ -32,10 +32,13 @@ export class Analyzer {
     // Deep Scan & Verify
     const techStack = {
       language: this._detectLanguage(packageJson),
-      stateManagement: await this._detectStateManagement(packageJson, entryFiles),
+      stateManagement: await this._detectStateManagement(
+        packageJson,
+        entryFiles
+      ),
       styling: this._detectStyling(packageJson),
       routing: await this._detectRouting(packageJson, entryFiles),
-      buildTool: this._detectBuildTool(packageJson)
+      buildTool: this._detectBuildTool(),
     };
 
     // Store facts in Shared Cognitive Memory
@@ -58,17 +61,26 @@ export class Analyzer {
 
   _detectLanguage(packageJson) {
     if (this._checkConfigFile('tsconfig.json')) return 'TypeScript';
-    const deps = { ...packageJson.dependencies, ...packageJson.devDependencies };
+    const deps = {
+      ...packageJson.dependencies,
+      ...packageJson.devDependencies,
+    };
     if (deps['typescript']) return 'TypeScript';
     return 'JavaScript';
   }
 
   async _detectStateManagement(packageJson, entryFiles) {
-    const deps = { ...packageJson.dependencies, ...packageJson.devDependencies };
+    const deps = {
+      ...packageJson.dependencies,
+      ...packageJson.devDependencies,
+    };
 
     if (deps['@reduxjs/toolkit'] || deps['react-redux']) {
       // Zombie Check: Must be used in root files
-      const isUsed = await this._verifyLibraryUsage(['Provider', 'configureStore'], entryFiles);
+      const isUsed = await this._verifyLibraryUsage(
+        ['Provider', 'configureStore'],
+        entryFiles
+      );
       if (isUsed) return 'Redux';
     }
 
@@ -78,9 +90,15 @@ export class Analyzer {
   }
 
   _detectStyling(packageJson) {
-    const deps = { ...packageJson.dependencies, ...packageJson.devDependencies };
+    const deps = {
+      ...packageJson.dependencies,
+      ...packageJson.devDependencies,
+    };
 
-    if (this._checkConfigFile('tailwind.config.js') || this._checkConfigFile('postcss.config.js')) {
+    if (
+      this._checkConfigFile('tailwind.config.js') ||
+      this._checkConfigFile('postcss.config.js')
+    ) {
       return 'Tailwind';
     }
 
@@ -91,19 +109,25 @@ export class Analyzer {
   }
 
   async _detectRouting(packageJson, entryFiles) {
-    const deps = { ...packageJson.dependencies, ...packageJson.devDependencies };
+    const deps = {
+      ...packageJson.dependencies,
+      ...packageJson.devDependencies,
+    };
 
     if (deps['expo-router']) return 'ExpoRouter';
 
     if (deps['react-router-dom'] || deps['react-router-native']) {
-      const isUsed = await this._verifyLibraryUsage(['BrowserRouter', 'NativeRouter', 'Routes', 'RouterProvider'], entryFiles);
+      const isUsed = await this._verifyLibraryUsage(
+        ['BrowserRouter', 'NativeRouter', 'Routes', 'RouterProvider'],
+        entryFiles
+      );
       if (isUsed) return 'ReactRouter';
     }
 
     return 'None';
   }
 
-  _detectBuildTool(packageJson) {
+  _detectBuildTool() {
     if (this._checkConfigFile('vite.config.js')) return 'Vite';
     if (this._checkConfigFile('webpack.config.js')) return 'Webpack';
     return 'Unknown';
@@ -117,11 +141,16 @@ export class Analyzer {
 
   _getEntryFiles(packageJson = {}) {
     const candidates = [
-      'src/index.js', 'src/index.tsx',
-      'src/App.js', 'src/App.tsx',
-      'src/main.js', 'src/main.tsx',
-      'src/store/index.js', 'src/store/index.ts',
-      'index.js', 'App.js' // Root level fallbacks
+      'src/index.js',
+      'src/index.tsx',
+      'src/App.js',
+      'src/App.tsx',
+      'src/main.js',
+      'src/main.tsx',
+      'src/store/index.js',
+      'src/store/index.ts',
+      'index.js',
+      'App.js', // Root level fallbacks
     ];
 
     if (packageJson.main) {
@@ -129,23 +158,23 @@ export class Analyzer {
     }
 
     return candidates
-      .map(f => path.join(this.projectPath, f))
-      .filter(f => fs.existsSync(f));
+      .map((f) => path.join(this.projectPath, f))
+      .filter((f) => fs.existsSync(f));
   }
 
   /**
    * grep-like search in entry files
-   * @param {string[]} keywords 
-   * @param {string[]} files 
+   * @param {string[]} keywords
+   * @param {string[]} files
    */
   async _verifyLibraryUsage(keywords, files) {
     for (const file of files) {
       try {
         const content = await fs.readFile(file, 'utf8');
-        if (keywords.some(kw => content.includes(kw))) {
+        if (keywords.some((kw) => content.includes(kw))) {
           return true; // Found usage!
         }
-      } catch (err) {
+      } catch {
         // Ignore read errors
       }
     }

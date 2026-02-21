@@ -2,52 +2,57 @@ import fs from 'fs-extra';
 import path from 'path';
 
 /**
- * نتيجة اكتشاف الفريمورك
+ * Framework detection result
  * @typedef {Object} DetectionResult
- * @property {'vite' | 'cra'} type - نوع المشروع المكتشف
- * @property {'high' | 'low'} confidence - مدى الثقة في النتيجة
- * @property {string[]} signals - الإشارات التي تم الاعتماد عليها
+ * @property {'vite' | 'cra'} type - Detected project type
+ * @property {'high' | 'low'} confidence - Confidence level
+ * @property {string[]} signals - Signals relied upon
  */
 
 /**
- * مكتشف نوع المشروع (Framework Detector)
- * يفصل منطق الاكتشاف عن منطق المسح
+ * Framework Detector
+ * Separates detection logic from scanning logic
  */
 export class FrameworkDetector {
   /**
-   * يكتشف نوع الفريمورك المستخدم في المشروع
-   * @param {string} rootPath - مسار جذر المشروع
+   * Detects the framework used in the project
+   * @param {string} rootPath - Project root path
    * @returns {Promise<DetectionResult>}
-   * @throws {Error} إذا كان المشروع Next.js (غير مدعوم)
+   * @throws {Error} If project is Next.js (unsupported)
    */
   static async detect(rootPath) {
     const signals = [];
     const packageJsonPath = path.join(rootPath, 'package.json');
-    
+
     let packageJson = {};
     if (await fs.pathExists(packageJsonPath)) {
       packageJson = await fs.readJson(packageJsonPath);
     }
 
-    const deps = { ...packageJson.dependencies, ...packageJson.devDependencies };
+    const deps = {
+      ...packageJson.dependencies,
+      ...packageJson.devDependencies,
+    };
 
     // 1. Safety Check: Reject Next.js explicitly
     if (deps['next']) {
-      throw new Error('❌ Next.js projects are not supported by Retransify yet.');
+      throw new Error(
+        '❌ Next.js projects are not supported by Retransify yet.'
+      );
     }
 
     // 2. Detect Vite
     // Strongest Signal: Config file
-    const viteConfigExists = 
-      await fs.pathExists(path.join(rootPath, 'vite.config.js')) ||
-      await fs.pathExists(path.join(rootPath, 'vite.config.ts'));
+    const viteConfigExists =
+      (await fs.pathExists(path.join(rootPath, 'vite.config.js'))) ||
+      (await fs.pathExists(path.join(rootPath, 'vite.config.ts')));
 
     if (viteConfigExists) {
       signals.push('file:vite.config.*');
       return {
         type: 'vite',
         confidence: 'high',
-        signals
+        signals,
       };
     }
 
@@ -57,7 +62,7 @@ export class FrameworkDetector {
       return {
         type: 'vite',
         confidence: 'high',
-        signals
+        signals,
       };
     }
 
@@ -67,7 +72,7 @@ export class FrameworkDetector {
       return {
         type: 'cra',
         confidence: 'high', // Pretty definitive for CRA
-        signals
+        signals,
       };
     }
 
@@ -80,7 +85,7 @@ export class FrameworkDetector {
     return {
       type: 'vite',
       confidence: 'low',
-      signals: ['default:fallback']
+      signals: ['default:fallback'],
     };
   }
 }

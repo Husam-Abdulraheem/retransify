@@ -3,11 +3,11 @@
 import {
   COMMON_DEPENDENCIES,
   LEGACY_TO_EXPO_MAP,
-  WEB_ONLY_BLOCKLIST
-} from '../config/libraryRules.js'; // استيراد القواعد التي بنيناها
+  WEB_ONLY_BLOCKLIST,
+} from '../config/libraryRules.js'; // Import custom rules
 
 /**
- * يبني prompt ذكي ومرن يعتمد على السياق
+ * Builds a smart and flexible prompt based on context
  */
 export function buildPrompt(fileContext) {
   const {
@@ -15,16 +15,19 @@ export function buildPrompt(fileContext) {
     content: fileContent,
     analysis = {},
     techContext = {},
-    pathMap = {}
+    pathMap = {},
   } = fileContext;
 
   const { imports: fileImports = [], exports: fileExports = [] } = analysis;
   const tech = techContext.tech || {};
 
-  // 1. استنتاج بيئة العمل (Tech Stack)
-  const isTailwindDetected = /className\s*=\s*["'`]/.test(fileContent) || /['"]tailwindcss['"]/.test(fileContent);
-  const targetStyleSystem = tech.styling || (isTailwindDetected ? "NativeWind" : "StyleSheet");
-  const isNativeWind = targetStyleSystem === "NativeWind";
+  // 1. Infer Tech Stack
+  const isTailwindDetected =
+    /className\s*=\s*["'`]/.test(fileContent) ||
+    /['"]tailwindcss['"]/.test(fileContent);
+  const targetStyleSystem =
+    tech.styling || (isTailwindDetected ? 'NativeWind' : 'StyleSheet');
+  const isNativeWind = targetStyleSystem === 'NativeWind';
   const hasRouting = tech.routing !== 'None';
 
   // 2. Role Definition
@@ -38,26 +41,34 @@ Your objective is to convert the provided web file into a production-ready, idio
 -----------------------------------
 STRICT ARCHITECTURAL RULES
 -----------------------------------
-${fileContext.isMainEntry ? `[CRITICAL - MAIN ENTRY POINT]
+${
+  fileContext.isMainEntry
+    ? `[CRITICAL - MAIN ENTRY POINT]
 This is the core App component. You MUST output a standard React Native component to serve as the 'app/index.tsx' screen for Expo Router.
 ❌ STRICT PROHIBITION: DO NOT use 'registerRootComponent', 'ReactDOM.render', or 'createRoot'. Expo Router handles mounting automatically.
-` : ''}
+`
+    : ''
+}
 1. TARGET FRAMEWORK: React Native with Expo SDK (Managed Workflow).
    - DO NOT use standard DOM elements (div, span, p, h1, etc.). Use View, Text, Pressable, ScrollView, etc.
    - DO NOT use 'window', 'document', or 'localStorage'. Use React Native APIs or AsyncStorage.
 
 2. STYLING SYSTEM: **${targetStyleSystem}**
-${isNativeWind
-      ? "   - You MUST use the 'className' prop with Tailwind classes (NativeWind is pre-configured).\n   - Translate standard CSS/inline styles to Tailwind classes where possible."
-      : "   - You MUST use 'StyleSheet.create({...})'.\n   - DO NOT use 'className'. Translate any existing Tailwind classes to standard StyleSheet objects."}
+${
+  isNativeWind
+    ? "   - You MUST use the 'className' prop with Tailwind classes (NativeWind is pre-configured).\n   - Translate standard CSS/inline styles to Tailwind classes where possible."
+    : "   - You MUST use 'StyleSheet.create({...})'.\n   - DO NOT use 'className'. Translate any existing Tailwind classes to standard StyleSheet objects."
+}
 
 3. ROUTING & NAVIGATION (CRITICAL):
-${hasRouting
-      ? `   - The target project uses **Expo Router** (File-based routing).
+${
+  hasRouting
+    ? `   - The target project uses **Expo Router** (File-based routing).
    - DO NOT import from 'react-router-dom' or '@react-navigation/...'.
    - Translate web links (<Link to="..."> or useNavigate) to Expo Router equivalents (import { Link, router } from 'expo-router').
    - If this file represents a global provider (like Redux or Theme), structure it so it can be used inside an Expo Router '_layout.tsx' file (export a component that wraps <Slot />).`
-      : "   - No specific routing library detected. Use standard React state for conditional rendering if needed."}
+    : '   - No specific routing library detected. Use standard React state for conditional rendering if needed.'
+}
 
 4. DEPENDENCIES & LIBRARIES MAP:
    - Base Expo Libraries (Pre-installed, DO NOT add to dependencies output): ${COMMON_DEPENDENCIES.join(', ')}
@@ -83,13 +94,17 @@ FILE CONTEXT
 -----------------------------------
 Original File Path: ${filePath}
 Exports to maintain: ${JSON.stringify(fileExports)}
-External Web Imports: ${JSON.stringify(fileImports.filter(i => i.source?.startsWith('.') === false).map(i => i.source))}
+External Web Imports: ${JSON.stringify(fileImports.filter((i) => i.source?.startsWith('.') === false).map((i) => i.source))}
 
-${Object.keys(pathMap).length > 0 ? `
+${
+  Object.keys(pathMap).length > 0
+    ? `
 PATH REMAPPING:
 Update any relative imports matching these keys to the new values:
 ${JSON.stringify(pathMap, null, 2)}
-` : ""}
+`
+    : ''
+}
 `;
 
   const inputCodeBlock = `

@@ -1,25 +1,31 @@
 /**
- * إعدادات وبروفايلات المسح للمشاريع المختلفة
+ * Scanning configuration and profiles for different projects
  */
 
 /**
- * الامتدادات المسموح بها للملفات
- * تشمل الامتدادات الحديثة مثل .mjs و .mts
+ * Allowed file extensions
+ * Includes modern extensions like .mjs and .mts
  */
 export const ALLOWED_EXTENSIONS = [
-  '.js', '.jsx', '.ts', '.tsx',
-  '.mjs', '.cjs', '.mts', '.cts',
-  '.json'
+  '.js',
+  '.jsx',
+  '.ts',
+  '.tsx',
+  '.mjs',
+  '.cjs',
+  '.mts',
+  '.cts',
+  '.json',
 ];
 
 /**
- * بروفايلات المشاريع وقواعد المسح الخاصة بكل منها
+ * Project profiles and their specific scanning rules
  */
 export const PROJECT_PROFILES = {
   vite: {
     key: 'vite',
     // Pass 1: Root Files (Exact check, no scanning)
-    // ملفات يجب فحصها في الجذر مباشرة
+    // Files that must be scanned directly in the root
     rootFiles: [
       'index.html',
       'vite.config.js',
@@ -27,13 +33,13 @@ export const PROJECT_PROFILES = {
       'package.json',
       'tsconfig.json',
       '.env',
-      '.env.local'
+      '.env.local',
     ],
     // Pass 2: Deep Scan Directories
-    // مجلدات يتم فحصها بشكل تكراري (Recursive)
+    // Directories to be scanned recursively
     recursiveDirs: ['src'],
     // Global Ignores
-    // مجلدات يتم تجاهلها تماماً
+    // Directories to be completely ignored
     ignoreDirs: [
       'node_modules',
       'dist',
@@ -44,16 +50,16 @@ export const PROJECT_PROFILES = {
       '.vscode',
       '.idea',
       '.storybook',
-      'storybook-static'
+      'storybook-static',
     ],
     // [New] Write Phase Ignores (Regex)
-    // ملفات يتم منع كتابتها في مشروع الموبايل
+    // Files that are prevented from being written in the mobile project
     writePhaseIgnores: [
       /^index\.html$/,
       /^vite\.config\.(js|ts|mjs|cjs)$/,
       /^\.env\.local$/,
-      /.*package\.json$/  // 👈 هذا يمنع أي package.json يتم اكتشافه داخل مجلدات مثل src/
-    ]
+      /.*package\.json$/, // 👈 Prevents any package.json discovered inside folders like src/
+    ],
   },
 
   cra: {
@@ -66,7 +72,7 @@ export const PROJECT_PROFILES = {
       'tsconfig.json',
       'jsconfig.json',
       '.env',
-      '.env.local'
+      '.env.local',
     ],
     // CRA is strict about src
     recursiveDirs: ['src'],
@@ -77,14 +83,14 @@ export const PROJECT_PROFILES = {
       'coverage',
       '.git',
       '.vscode',
-      '.idea'
+      '.idea',
     ],
     // [New] Write Phase Ignores (Regex)
     writePhaseIgnores: [
       /^public\/index\.html$/,
       /^craco\.config\.(js|ts)$/,
       /^react-app-env\.d\.ts$/,
-      /.*package\.json$/  // 👈 هذا يمنع أي package.json يتم اكتشافه داخل مجلدات مثل src/
-    ]
-  }
+      /.*package\.json$/, // 👈 Prevents any package.json discovered inside folders like src/
+    ],
+  },
 };

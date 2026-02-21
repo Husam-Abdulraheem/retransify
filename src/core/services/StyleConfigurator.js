@@ -1,15 +1,15 @@
-import path from "path";
-import fs from "fs-extra";
+import path from 'path';
+import fs from 'fs-extra';
 
 /**
  * Configuration Helper (File IO Only)
  * Writes tailwind.config.js and modifies babel.config.js
  */
 export async function setupNativeWind(projectPath) {
-  console.log("🌪️  Configuring NativeWind Files...");
+  console.log('🌪️  Configuring NativeWind Files...');
 
-  // 1. إنشاء ملف Tailwind Config
-  const tailwindConfigPath = path.join(projectPath, "tailwind.config.js");
+  // 1. Create Tailwind Config
+  const tailwindConfigPath = path.join(projectPath, 'tailwind.config.js');
   if (!(await fs.pathExists(tailwindConfigPath))) {
     const configContent = `/** @type {import('tailwindcss').Config} */
 module.exports = {
@@ -18,12 +18,12 @@ module.exports = {
   plugins: [],
 };`;
     await fs.writeFile(tailwindConfigPath, configContent);
-    console.log("✅ Created tailwind.config.js");
+    console.log('✅ Created tailwind.config.js');
   }
 
-  // 2. تحديث إعدادات Babel
-  // ⚠️ هذا الإعداد متوافق مع NativeWind v2 و Expo Router
-  const babelConfigPath = path.join(projectPath, "babel.config.js");
+  // 2. Update Babel Settings
+  // ⚠️ This config is compatible with NativeWind v2 and Expo Router
+  const babelConfigPath = path.join(projectPath, 'babel.config.js');
   const babelContent = `module.exports = function(api) {
   api.cache(true);
   return {
@@ -33,5 +33,5 @@ module.exports = {
 };`;
 
   await fs.writeFile(babelConfigPath, babelContent);
-  console.log("✅ Enforced standard babel.config.js for NativeWind");
+  console.log('✅ Enforced standard babel.config.js for NativeWind');
 }

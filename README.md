@@ -5,6 +5,7 @@
 ![License](https://img.shields.io/badge/license-ISC-blue.svg) ![Node](https://img.shields.io/badge/node-v18%2B-green.svg) ![Platform](https://img.shields.io/badge/platform-React%20Native%20%7C%20Expo-blueviolet.svg)
 
 ## 📋 Table of Contents
+
 - [📖 Overview](#-overview)
 - [🚀 Why Retransify?](#-why-retransify)
 - [✨ Key Features](#-key-features)
@@ -18,15 +19,19 @@
 - [📄 License](#-license)
 
 ## 📖 Overview
+
 **Retransify Local** is a powerful CLI tool designed to autonomously convert existing React (web) projects into optimized React Native (Expo) applications. By leveraging advanced AI models (Gemini or Groq), it deeply analyzes your codebase, understands component relationships, and rewrites them for mobile, ensuring a smooth migration from web to native.
 
 ## 🚀 Why Retransify?
+
 Migrating a codebase from web to mobile is often a tedious, manual process. Retransify solves this by:
+
 - **Saving Time**: Automates the repetitive work of rewriting JSX to React Native primitives.
-- **Context-Awareness**: Unlike simple code modders, it understands the *intent* of your code through full-project analysis.
+- **Context-Awareness**: Unlike simple code modders, it understands the _intent_ of your code through full-project analysis.
 - **Modern Standards**: Generates clean, TypeScript-ready code compatible with the latest Expo SDKs.
 
 ## ✨ Key Features
+
 - **🤖 3-Phase Agentic Workflow**:
   - **Analyzer**: Deeply scans project structure & tech stack.
   - **Planner**: Formulates a dependency-aware migration strategy.
@@ -40,12 +45,15 @@ Migrating a codebase from web to mobile is often a tedious, manual process. Retr
 - **🛡️ State Recovery**: Resume interrupted conversions seamlessly with built-in state management.
 
 ## 🔒 Privacy & Security
+
 Your code's privacy is paramount. Retransify is designed with security in mind:
+
 - **Local Execution**: The CLI runs entirely on your local machine. No code is stored on our servers.
 - **Direct AI connection**: Data is sent directly from your machine to the chosen AI provider (Google or Groq) via their official APIs.
 - **API Key Safety**: Your API keys are stored locally in your `.env` file and are never shared or logged.
 
 ## 🏗️ Architecture
+
 The tool follows a robust agentic architecture to ensure reliability:
 
 1.  **Analysis Phase**: Scans files, parses AST, and builds a dependency graph.
@@ -53,6 +61,7 @@ The tool follows a robust agentic architecture to ensure reliability:
 3.  **Execution Phase**: Iterates through the plan, converting files and maintaining state in case of interruptions.
 
 ## 🛠️ Tech Stack
+
 - **Runtime**: [Node.js](https://nodejs.org/)
 - **AI Integration**: [Google Generative AI SDK](https://github.com/google/generative-ai-js), [Groq SDK](https://console.groq.com/docs/libraries/js)
 - **Parsing**: [Babel Parser](https://babeljs.io/docs/en/babel-parser) & Traverse
@@ -62,6 +71,7 @@ The tool follows a robust agentic architecture to ensure reliability:
 ## 🏁 Getting Started
 
 ### Prerequisites
+
 - [Node.js](https://nodejs.org/) (v18+ recommended)
 - [npm](https://www.npmjs.com/) or [yarn](https://yarnpkg.com/)
 - API Key for **Gemini** or **Groq**
@@ -69,6 +79,7 @@ The tool follows a robust agentic architecture to ensure reliability:
 ### Installation
 
 1.  **Clone the repository**:
+
     ```bash
     git clone <repository-url>
     cd retransify-local
@@ -103,6 +114,7 @@ node cli.js convert ./path-to-your-react-app
 ```
 
 **Options:**
+
 - `--sdk <version>`: Target a specific Expo SDK version (e.g., `--sdk 50`).
 
 ## 📂 Project Structure
@@ -130,7 +142,9 @@ retransify-local/
 ```
 
 ## 🤝 Contributing
+
 Contributions are welcome! Please follow these steps:
+
 1.  Fork the repository.
 2.  Create a feature branch (`git checkout -b feature/amazing-feature`).
 3.  Commit your changes.
@@ -138,4 +152,5 @@ Contributions are welcome! Please follow these steps:
 5.  Open a Pull Request.
 
 ## 📄 License
+
 This project is licensed under the ISC License.
