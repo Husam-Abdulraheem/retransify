@@ -4,8 +4,8 @@ import { runSilentCommand } from '../helpers/shell.js';
 
 export class Doctor {
   /**
-   * Run a health check on the project dependencies.
-   * Uses `npx expo install --check` to verify compatibility.
+   * Run a health check strictly on project dependencies.
+   * Uses `npx expo install --check` to verify compatibility without triggering unrelated warnings.
    * @param {string} projectPath
    * @returns {Promise<boolean>} true if healthy, false if issues found
    */
@@ -26,49 +26,51 @@ export class Doctor {
   }
 
   /**
-   * Attempt to fix dependency issues using a graded strategy.
-   * Level 1: `npx expo install --fix`
-   * Level 2: Deep Clean (Delete node_modules & lockfile -> Enforce Overrides -> Reinstall)
-   * @param {string} projectPath
-   */
-  /**
-   * Attempt to fix dependency issues using a graded strategy with STRICT verification.
-   * Logic:
-   * 1. Diagnose (Log only).
-   * 2. Deep Clean: rm node_modules, package-lock, cache clean.
-   * 3. Reinstall: npx expo install (NO flags).
-   * 4. Verify: npx expo doctor.
-   * 5. Fail Fast: If verification fails, THROW fatal error.
+   * Attempt to fix dependency issues using a robust, graded strategy strictly bound to Expo SDK.
+   * Level 1 (Soft): `npx expo install --fix`
+   * Level 2 (Medium): Apply Overrides + `npm cache clean` + `npx expo install --fix`
+   * Level 3 (Nuclear): Deep Clean -> Apply Overrides -> `npm install` -> `npx expo install --fix`
    *
    * @param {string} projectPath
    * @param {string[]} failedPackages - Optional list of packages that failed to install
    */
   static async fixDependencies(projectPath, failedPackages = []) {
-    console.log('🚑 Doctor: Initiating Strict Dependency Repair...');
+    console.log('🚑 Doctor: Initiating Tiered Dependency Repair...');
 
-    // 1. Diagnose (Pre-cleanup) - Logging only for debug
     if (failedPackages.length > 0) {
       console.warn(
         `⚠️ Doctor Diagnosis: Failure involving: ${failedPackages.join(', ')}`
       );
     }
 
-    // 2. Deep Clean (The "nuclear" option)
+    // ==========================================
+    // LEVEL 1: Soft Fix (Fastest)
+    // ==========================================
+    console.log('🔧 Level 1: Attempting soft fix (expo install --fix)...');
     try {
-      console.log('🧼 Doctor: Performing Deep Clean...');
+      await runSilentCommand(
+        'npx expo install --fix',
+        projectPath,
+        'Applying minor SDK alignments...'
+      );
 
-      const nodeModulesPath = path.join(projectPath, 'node_modules');
-      const lockFilePath = path.join(projectPath, 'package-lock.json');
-      const yarnLockPath = path.join(projectPath, 'yarn.lock');
-      const expoPath = path.join(projectPath, '.expo');
+      if (await this.checkHealth(projectPath)) {
+        console.log('✅ Doctor: Level 1 repair successful.');
+        return;
+      }
+    } catch (e) {
+      console.log('⚠️ Doctor: Level 1 repair failed to resolve all issues.');
+    }
 
-      await fs.remove(nodeModulesPath);
-      await fs.remove(lockFilePath);
-      await fs.remove(yarnLockPath);
-      await fs.remove(expoPath);
+    // ==========================================
+    // LEVEL 2: Overrides & Cache Clean (Medium)
+    // ==========================================
+    console.log('🛡️ Level 2: Escalating to Overrides and Cache flush...');
+    try {
+      // 1. Force structural fixes to package.json
+      await this.applyDependencyOverrides(projectPath);
 
-      console.log('🧹 Doctor: Cleaning npm cache...');
-      // Allow this to fail silently if permission denied, not critical
+      // 2. Clear corrupted npm cache
       try {
         await runSilentCommand(
           'npm cache clean --force',
@@ -76,47 +78,82 @@ export class Doctor {
           'Cleaning cache...'
         );
       } catch {
-        /* ignore */
+        /* ignore cache errors */
       }
 
-      // 3. Reinstall (Strict)
-      console.log('🔄 Doctor: Reinstalling dependencies (Fresh Start)...');
-      // Just npx expo install. This reads package.json and installs correct versions.
+      // 3. Let Expo aggressively realign versions based on overrides
       await runSilentCommand(
-        'npx expo install',
+        'npx expo install --fix',
         projectPath,
-        'Installing dependencies...'
+        'Aligning dependencies using Expo strictly...'
       );
 
-      // 4. Verify (Fail Fast)
-      console.log('🩺 Doctor: Verifying installation health...');
-      try {
-        await runSilentCommand(
-          'npx expo doctor',
-          projectPath,
-          'Final verification...'
-        );
-        console.log('✅ Doctor: Recovery successful. Project is healthy.');
-      } catch (doctorError) {
-        console.error('❌ Doctor: Verification FAILED after deep clean.');
-        console.error(
-          '❌ The current dependency set is incompatible with this Expo SDK version.'
-        );
-
-        // FAIL FAST
-        throw new Error('FATAL: Dependency mismatch unresolved by Doctor.', {
-          cause: doctorError,
-        });
+      if (await this.checkHealth(projectPath)) {
+        console.log('✅ Doctor: Level 2 repair successful.');
+        return;
       }
-    } catch (deepCleanError) {
-      console.error('❌ Doctor: Critical failure during repair process.');
-      throw deepCleanError;
+    } catch (e) {
+      console.log('⚠️ Doctor: Level 2 repair failed. Preparing for surgery.');
+    }
+
+    // ==========================================
+    // LEVEL 3: Deep Clean (The Nuclear Option)
+    // ==========================================
+    console.log('🧼 Level 3: Performing Deep Clean (Nuclear Option)...');
+    try {
+      const nodeModulesPath = path.join(projectPath, 'node_modules');
+      const lockFilePath = path.join(projectPath, 'package-lock.json');
+      const yarnLockPath = path.join(projectPath, 'yarn.lock');
+
+      // 1. تدمير البيئة الفاسدة
+      await fs.remove(nodeModulesPath);
+      await fs.remove(lockFilePath);
+      await fs.remove(yarnLockPath);
+
+      console.log('🛡️ Doctor: Applying Overrides to fresh package.json...');
+
+      // 2. تحصين الأساس قبل التثبيت (هذا ما يمنع ERESOLVE)
+      await this.applyDependencyOverrides(projectPath);
+
+      console.log('🔄 Doctor: Hydrating base dependencies cleanly...');
+
+      // 3. التثبيت النظيف (سينجح لأننا طبقنا الـ Overrides ومسحنا الكاش/الـ locks)
+      await runSilentCommand(
+        'npm install',
+        projectPath,
+        'Fresh base installation...'
+      );
+
+      // 4. تسليم القيادة لـ Expo لضبط النسخ النهائية
+      await runSilentCommand(
+        'npx expo install --fix',
+        projectPath,
+        'Finalizing Expo dependencies...'
+      );
+
+      // الفحص النهائي الصارم
+      const isHealthy = await this.checkHealth(projectPath);
+      if (!isHealthy) {
+        throw new Error('Health check failed after Deep Clean.');
+      }
+
+      console.log(
+        '✅ Doctor: Level 3 recovery successful. Project is healthy.'
+      );
+    } catch (criticalError) {
+      console.error('❌ Doctor: All repair levels FAILED.');
+      console.error(
+        '❌ The dependency tree is fundamentally incompatible with this Expo SDK.'
+      );
+      throw new Error('FATAL: Dependency mismatch unresolved by Doctor.', {
+        cause: criticalError,
+      });
     }
   }
 
   /**
    * Enforces specific versions for critical libraries like React in package.json
-   * to preventing peer dependency conflicts (ERRESOLVE).
+   * to prevent peer dependency conflicts (ERRESOLVE).
    * @param {string} projectPath
    */
   static async applyDependencyOverrides(projectPath) {
@@ -126,8 +163,7 @@ export class Doctor {
 
       const pkg = await fs.readJson(packageJsonPath);
 
-      // Find the installed React version (or default to 18.2.0 if missing, which is common for current Expo)
-      // Ideally we respect what's there or what Expo installed.
+      // Locate the installed React version
       const reactVersion =
         pkg.dependencies?.['react'] || pkg.devDependencies?.['react'];
 
@@ -136,14 +172,14 @@ export class Doctor {
           `🛡️ Doctor: Enforcing React version: ${reactVersion} via overrides...`
         );
 
-        // npm uses 'overrides'
+        // npm overrides
         pkg.overrides = {
           ...pkg.overrides,
           react: reactVersion,
           'react-refresh': '~0.14.0', // Common conflict point
         };
 
-        // yarn uses 'resolutions'
+        // yarn resolutions
         pkg.resolutions = {
           ...pkg.resolutions,
           react: reactVersion,
@@ -151,7 +187,6 @@ export class Doctor {
         };
 
         await fs.writeJson(packageJsonPath, pkg, { spaces: 2 });
-        console.log('✅ Doctor: Overrides applied to package.json.');
       } else {
         console.log(
           'ℹ️ Doctor: React version not found in package.json, skipping overrides.'
