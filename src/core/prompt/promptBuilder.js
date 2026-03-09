@@ -85,6 +85,11 @@ ${
    - RESPONSIVENESS: The design MUST look good on mobile screens. Replace fixed desktop widths (like 'w-[1200px]') with 'w-full', 'flex: 1', or percentages.
    - SAFE AREAS: Wrap root screens with <SafeAreaView> (from 'react-native') or use 'useSafeAreaInsets' (from 'react-native-safe-area-context') to prevent content from hiding under the device notch or status bar.
    - NO HOVER STATES: Mobile devices do not have a mouse. Remove all CSS ':hover' states. Use <Pressable> or <TouchableOpacity> for clickable items.
+
+6. TYPESCRIPT STRICTNESS (CRITICAL):
+   - The output MUST be valid TypeScript (.tsx).
+   - You MUST define explicit 'interface' or 'type' for ALL component props, state variables, and function parameters.
+   - NO implicit 'any'. Infer types intelligently from the original React Web code structure.
 `;
 
   // 4. Context & Input Code
@@ -117,16 +122,19 @@ ${fileContent}
   // 5. Output Format
   const responseFormat = `
 -----------------------------------
-OUTPUT FORMAT
+OUTPUT FORMAT (CRITICAL FIREWALL)
 -----------------------------------
-Respond ONLY with a raw, valid JSON object. No markdown formatting (like \`\`\`json). No conversational text.
+CRITICAL: You are communicating directly with an automated JSON parser.
+- DO NOT wrap the response in markdown code blocks (e.g., NO \`\`\`json or \`\`\`).
+- DO NOT output any conversational text, greetings, or explanations outside the JSON.
+- The output MUST start exactly with '{' and end exactly with '}'.
 
 {
   "decision_trace": [
     { "category": "Tag Mapping", "action": "Mapped div to View", "reasoning": "Standard container" }
   ],
   "code": "The complete, fully converted React Native code string. MUST be ready to run.",
-  "dependencies": ["nativewind", "axios"], // Only list NEW mobile-compatible libraries needed for this specific file. Do not list pre-installed Expo ones.
+  "dependencies": ["nativewind", "axios"],
   "notes": "Brief explanation of architectural changes."
 }
 `;
@@ -162,8 +170,7 @@ Fix the logic or type errors.
 - If a type is mismatched, adjust the interface.
 - Do NOT simply suppress errors with @ts-ignore unless strictly impossible to resolve.
 
-Return ONLY the raw valid JSON structure.
-DO NOT use markdown code blocks.
+RETURN EXACTLY A RAW JSON OBJECT. NO MARKDOWN (NO \`\`\`json). MUST START WITH '{' AND END WITH '}'. NO CONVERSATION.
 {
   "code": "Fixed code string",
   "dependencies": [] 
