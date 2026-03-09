@@ -118,6 +118,19 @@ export class Executor {
       }
 
       try {
+        const sourceRoot = this.context.facts.sourceRoot || '.';
+        const writePhaseIgnores = this.context.facts.writePhaseIgnores || [];
+
+        // 1. Blacklist Check
+        const shouldIgnore = writePhaseIgnores.some((regex) =>
+          regex.test(filePath)
+        );
+        if (shouldIgnore) {
+          console.log(`🚫 Blocked by Profile Rule: ${filePath}`);
+          this.context.addResult(filePath, 'skipped');
+          continue;
+        }
+
         const fileContext = buildFileContext(filePath, this.projectContext);
 
         fileContext.globalContext = this.context;
@@ -160,21 +173,6 @@ export class Executor {
           console.log(`   📦 Found deps: ${filteredDeps.join(', ')}`);
           this.dependencyManager.add(filteredDeps);
         }
-
-        // [New] Context-Aware Path Normalization
-        const sourceRoot = this.context.facts.sourceRoot || '.';
-        const writePhaseIgnores = this.context.facts.writePhaseIgnores || [];
-
-        // 1. Blacklist Check
-        const shouldIgnore = writePhaseIgnores.some((regex) =>
-          regex.test(filePath)
-        );
-        if (shouldIgnore) {
-          console.log(`🚫 Blocked by Profile Rule: ${filePath}`);
-          this.context.addResult(filePath, 'skipped');
-          continue;
-        }
-
         // Determine normalized path after stripping src
         let destPath = this._resolveDestPath(filePath, pathMap, sourceRoot);
 
