@@ -6,14 +6,18 @@
     "retransify": "./cli.js"
   },
   "dependencies": {
-    "@babel/parser": "^7.28.3",
-    "@babel/traverse": "^7.28.3",
     "@google/genai": "^1.38.0",
+    "@langchain/community": "^1.1.22",
+    "@langchain/core": "^1.1.31",
+    "@langchain/google-genai": "^2.1.24",
+    "@langchain/langgraph": "^1.2.1",
     "commander": "^14.0.0",
     "dotenv": "^17.2.2",
     "fs-extra": "^11.3.1",
     "glob": "^11.0.3",
-    "groq-sdk": "^0.37.0"
+    "groq-sdk": "^0.37.0",
+    "langchain": "^1.2.30",
+    "ts-morph": "^27.0.2"
   },
   "scripts": {
     "test": "vitest run",
@@ -30,13 +34,13 @@
     "@commitlint/cli": "^20.4.2",
     "@commitlint/config-conventional": "^20.4.2",
     "@eslint/js": "^10.0.1",
-    "@types/babel__traverse": "^7.28.0",
     "eslint": "^10.0.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.5",
     "globals": "^17.3.0",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",
+    "memory-vector-store": "^1.0.10",
     "prettier": "^3.8.1",
     "vitest": "^4.0.18"
   },
