@@ -13,7 +13,7 @@ import { filePickerNode } from './nodes/filePickerNode.js';
 import { createModelPair } from '../ai/aiFactory.js';
 import { DependencyManager } from '../helpers/dependencyManager.js';
 import { ensureNativeProject } from '../services/nativeWriter.js';
-import { Verifier } from '../phases/verifier.js';
+import { Verifier } from '../utils/verifier.js';
 import path from 'path';
 import fs from 'fs-extra';
 
