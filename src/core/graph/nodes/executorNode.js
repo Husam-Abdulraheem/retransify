@@ -4,18 +4,18 @@ import { buildPrompt } from '../../prompt/promptBuilder.js';
 import { cleanAIResponse } from '../../helpers/cleanAIResponse.js';
 
 /**
- * ExecutorNode - يحوِّل الملف الحالي باستخدام smartModel + RAG
+ * ExecutorNode - Converts the current file using smartModel + RAG
  *
- * المدخلات من state:
- * - state.currentFile: كائن الملف الحالي (مع resolvedDeps من DependencyResolverNode)
- * - state.vectorStore: مثيل MemoryVectorStore
- * - state.pathMap: خريطة المسارات
- * - state.facts: معلومات المشروع
+ * Inputs from state:
+ * - state.currentFile: Current file object (with resolvedDeps from DependencyResolverNode)
+ * - state.vectorStore: MemoryVectorStore instance
+ * - state.pathMap: Path map
+ * - state.facts: Project information
  * - state.installedPackages
  *
- * المخرجات إلى state:
- * - state.generatedCode: الكود المُحوَّل (لا يُكتب على القرص هنا)
- * - state.generatedDependencies: التبعيات التي اقترحها الذكاء الاصطناعي
+ * Outputs to state:
+ * - state.generatedCode: Converted code (not written to disk here)
+ * - state.generatedDependencies: Dependencies suggested by AI
  *
  * @param {import('../state.js').GraphState} state
  * @param {{ smartModel: Session }} models
@@ -31,41 +31,41 @@ export async function executorNode(state, models = {}) {
   } = state;
 
   if (!currentFile) {
-    console.warn('⚠️  [ExecutorNode] لا يوجد ملف حالي');
+    console.warn('⚠️  [ExecutorNode] No current file found');
     return { generatedCode: null, generatedDependencies: [] };
   }
 
   const filePath = currentFile.relativeToProject || currentFile.filePath;
-  console.log(`\n⚙️  [ExecutorNode] تحويل: ${filePath}`);
+  console.log(`\n⚙️  [ExecutorNode] Converting: ${filePath}`);
 
-  // ── 1. استرجاع السياق المشابه من VectorStore (RAG) ───────────
+  // ── 1. Retrieve similar context from VectorStore (RAG) ────────
   let ragContext = '';
   if (vectorStore && currentFile.content) {
     try {
-      // استرجاع أكثر 3 ملفات مشابهة لمساعدة الـ AI في فهم نمط المشروع
+      // Retrieve top 3 similar files to help AI understand project pattern
       const similarDocs = await vectorStore.similaritySearch(
-        currentFile.content.slice(0, 500), // أول 500 حرف للبحث
+        currentFile.content.slice(0, 500), // First 500 chars for search
         3
       );
 
       if (similarDocs.length > 0) {
         ragContext = similarDocs
-          .filter((doc) => doc.metadata.filePath !== filePath) // استبعاد الملف نفسه
+          .filter((doc) => doc.metadata.filePath !== filePath) // Exclude the file itself
           .map((doc) => `--- ${doc.metadata.filePath} ---\n${doc.pageContent}`)
           .join('\n\n');
 
         if (ragContext) {
           console.log(
-            `🔍 [ExecutorNode] RAG: تم استرجاع ${similarDocs.length} ملف مشابه`
+            `🔍 [ExecutorNode] RAG: Retrieved ${similarDocs.length} similar files`
           );
         }
       }
     } catch (err) {
-      console.warn(`⚠️  [ExecutorNode] فشل RAG: ${err.message}`);
+      console.warn(`⚠️  [ExecutorNode] RAG Failed: ${err.message}`);
     }
   }
 
-  // ── 2. بناء سياق الملف للـ Prompt ───────────────────────────
+  // ── 2. Build file context for Prompt ──────────────────────────
   const fileContext = buildFileContext(
     currentFile,
     pathMap,
@@ -74,54 +74,54 @@ export async function executorNode(state, models = {}) {
     ragContext
   );
 
-  // ── 3. بناء الـ Prompt ────────────────────────────────────────
+  // ── 3. Build Prompt ───────────────────────────────────────────
   const prompt = buildPrompt(fileContext);
 
   const model = models.smartModel;
   if (!model) {
-    console.error('❌ [ExecutorNode] لا يوجد smartModel');
+    console.error('❌ [ExecutorNode] No smartModel found');
     return { generatedCode: null, generatedDependencies: [] };
   }
 
   try {
-    console.log('🤖 [ExecutorNode] إرسال للذكاء الاصطناعي...');
+    console.log('🤖 [ExecutorNode] Sending to AI...');
     const response = await model.sendMessage(prompt);
 
-    // محاولة تحليل الاستجابة كـ JSON
+    // Attempt to parse response as JSON
     const parsed = parseAIResponse(response);
     const generatedCode = parsed.code;
     const generatedDependencies = parsed.dependencies || [];
 
     if (!generatedCode) {
-      console.warn('⚠️  [ExecutorNode] لم يُنتج الذكاء الاصطناعي كوداً صالحاً');
+      console.warn('⚠️  [ExecutorNode] AI did not produce valid code');
       return { generatedCode: null, generatedDependencies: [] };
     }
 
-    console.log(`✅ [ExecutorNode] تم توليد ${generatedCode.length} حرف`);
+    console.log(`✅ [ExecutorNode] Generated ${generatedCode.length} chars`);
 
     if (generatedDependencies.length > 0) {
       console.log(
-        `📦 [ExecutorNode] تبعيات مقترحة: ${generatedDependencies.join(', ')}`
+        `📦 [ExecutorNode] Suggested dependencies: ${generatedDependencies.join(', ')}`
       );
     }
 
-    // ملاحظة: لا نكتب على القرص هنا - هذا دور DiskWriterNode
+    // Note: We don't write to disk here - that's DiskWriterNode's job
     return {
       generatedCode,
       generatedDependencies,
-      errors: [], // نصفِّر الأخطاء قبل الـ Verifier
+      errors: [], // Reset errors before Verifier
     };
   } catch (err) {
-    console.error(`❌ [ExecutorNode] خطأ: ${err.message}`);
+    console.error(`❌ [ExecutorNode] Error: ${err.message}`);
     return { generatedCode: null, generatedDependencies: [] };
   }
 }
 
-// ── دوال مساعدة ──────────────────────────────────────────────────────────────
+// ── Helper Functions ─────────────────────────────────────────────────────────
 
 /**
- * يبني كائن سياق الملف الكامل لـ buildPrompt()
- * يحافظ على نفس هيكل fileContext الذي كان يبنيه contextBuilder.js
+ * Builds full file context object for buildPrompt()
+ * Maintains same fileContext structure as previously built by contextBuilder.js
  */
 function buildFileContext(
   currentFile,
@@ -133,7 +133,7 @@ function buildFileContext(
   const filePath = currentFile.relativeToProject || currentFile.filePath;
   const baseName = path.basename(filePath);
 
-  // تحديد إذا كان ملف App الرئيسي
+  // Determine if it's main App file
   let isMainEntry = false;
   if (/^App\.(tsx|jsx|js|ts)$/i.test(baseName)) {
     isMainEntry = true;
@@ -146,7 +146,7 @@ function buildFileContext(
   }
 
   return {
-    // معلومات الملف الأساسية
+    // Basic file information
     filePath,
     content: currentFile.content || '',
     imports: currentFile.imports || [],
@@ -155,7 +155,7 @@ function buildFileContext(
     hooks: currentFile.hooks || [],
     hasJSX: currentFile.hasJSX || false,
 
-    // معلومات المشروع
+    // Project information
     globalContext: {
       facts: facts,
       decisions: { pathMap },
@@ -163,35 +163,35 @@ function buildFileContext(
     pathMap,
     installedPackages,
 
-    // الـ RAG Context (الجديد)
+    // RAG Context (New)
     ragContext,
 
-    // التبعيات المحلولة (من DependencyResolverNode)
+    // Resolved dependencies (from DependencyResolverNode)
     resolvedDeps: currentFile.resolvedDeps || {},
 
-    // تمييز ملف App الرئيسي
+    // Main App file flag
     isMainEntry,
 
-    // مسار الوجهة
+    // Destination path
     targetPath: pathMap[filePath] || filePath,
   };
 }
 
 /**
- * يحاول تحليل استجابة الـ AI كـ JSON
- * نفس منطق aiClient.js الأصلي
+ * Attempts to parse AI response as JSON
+ * Same logic as original aiClient.js
  */
 function parseAIResponse(aiResponse) {
   if (!aiResponse) return { code: '', dependencies: [] };
 
-  // محاولة 1: JSON مباشر
+  // Attempt 1: Direct JSON
   try {
     return JSON.parse(aiResponse);
   } catch {
-    /* متابعة */
+    /* Continue */
   }
 
-  // محاولة 2: JSON داخل markdown
+  // Attempt 2: JSON in markdown
   const jsonMatch = aiResponse.match(/```json([\s\S]*?)```/i);
   const genericMatch = aiResponse.match(/```([\s\S]*?)```/);
   const candidate = jsonMatch?.[1] || genericMatch?.[1];
@@ -200,11 +200,11 @@ function parseAIResponse(aiResponse) {
     try {
       return JSON.parse(candidate);
     } catch {
-      /* متابعة */
+      /* Continue */
     }
   }
 
-  // محاولة 3: regex
+  // Attempt 3: regex
   const codeMatch = aiResponse.match(
     /"code"\s*:\s*"([\s\S]*?)"\s*(?:,\s*"dependencies"|\s*})/
   );
@@ -221,18 +221,18 @@ function parseAIResponse(aiResponse) {
     };
   }
 
-  // محاولة 4: Substring
+  // Attempt 4: Substring
   const start = aiResponse.indexOf('{');
   const end = aiResponse.lastIndexOf('}');
   if (start !== -1 && end !== -1) {
     try {
       return JSON.parse(aiResponse.substring(start, end + 1));
     } catch {
-      /* متابعة */
+      /* Continue */
     }
   }
 
-  // Fallback: كود خام
+  // Fallback: raw code
   return {
     code: cleanAIResponse(aiResponse),
     dependencies: [],

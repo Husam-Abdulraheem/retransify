@@ -3,34 +3,33 @@ import { buildFixPrompt } from '../../prompt/promptBuilder.js';
 import { cleanAIResponse } from '../../helpers/cleanAIResponse.js';
 
 /**
- * HealerNode - يُصلح الكود بناءً على أخطاء VerifierNode
+ * HealerNode - Fixes code based on VerifierNode errors
  *
- * المدخلات: state.generatedCode, state.errors, state.healAttempts
- * المخرجات: state.generatedCode (محدَّث), state.healAttempts (مُزاد)
+ * Inputs: state.generatedCode, state.errors, state.healAttempts
+ * Outputs: state.generatedCode (updated), state.healAttempts (incremented)
  *
  * @param {import('../state.js').GraphState} state
  * @param {{ smartModel: Session }} models
  * @returns {Partial<import('../state.js').GraphState>}
  */
 export async function healerNode(state, models = {}) {
-  const { generatedCode, errors, healAttempts, currentFile, lastErrorHash } =
-    state;
+  const { generatedCode, errors, healAttempts, currentFile } = state;
 
   const filePath =
     currentFile?.relativeToProject || currentFile?.filePath || 'unknown';
   const newAttemptCount = (healAttempts || 0) + 1;
 
   console.log(
-    `\n🚑 [HealerNode] محاولة إصلاح ${filePath} (المحاولة ${newAttemptCount})`
+    `\n🚑 [HealerNode] Attempting to fix ${filePath} (Attempt ${newAttemptCount})`
   );
-  console.log(`   الأخطاء: ${errors.slice(0, 2).join(' | ')}`);
+  console.log(`   Errors: ${errors.slice(0, 2).join(' | ')}`);
 
   if (!models.smartModel) {
-    console.error('❌ [HealerNode] لا يوجد smartModel');
+    console.error('❌ [HealerNode] No smartModel found');
     return { healAttempts: newAttemptCount };
   }
 
-  // بناء Prompt الإصلاح
+  // Build Fix Prompt
   const fixPrompt = buildFixPrompt(generatedCode, errors);
 
   try {
@@ -38,19 +37,21 @@ export async function healerNode(state, models = {}) {
     const parsed = parseHealerResponse(response);
 
     if (parsed.code && parsed.code.length > 50) {
-      console.log(`✨ [HealerNode] تم توليد إصلاح (${parsed.code.length} حرف)`);
+      console.log(
+        `✨ [HealerNode] Generated fix (${parsed.code.length} chars)`
+      );
       return {
         generatedCode: parsed.code,
         generatedDependencies: parsed.dependencies || [],
         healAttempts: newAttemptCount,
-        errors: [], // نصفِّر الأخطاء ليُعيد VerifierNode الفحص
+        errors: [], // Reset errors so VerifierNode can re-check
       };
     }
   } catch (err) {
-    console.error(`❌ [HealerNode] خطأ: ${err.message}`);
+    console.error(`❌ [HealerNode] Error: ${err.message}`);
   }
 
-  console.warn(`⚠️  [HealerNode] فشل توليد إصلاح`);
+  console.warn(`⚠️  [HealerNode] Failed to generate fix`);
   return { healAttempts: newAttemptCount };
 }
 
@@ -58,7 +59,7 @@ function parseHealerResponse(response) {
   try {
     return JSON.parse(response);
   } catch {
-    /* متابعة */
+    /* Continue */
   }
 
   const match = response.match(/```json([\s\S]*?)```/i);
@@ -66,7 +67,7 @@ function parseHealerResponse(response) {
     try {
       return JSON.parse(match[1]);
     } catch {
-      /* متابعة */
+      /* Continue */
     }
   }
 

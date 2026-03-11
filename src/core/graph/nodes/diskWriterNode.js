@@ -1,17 +1,13 @@
 // src/core/graph/nodes/diskWriterNode.js
 import path from 'path';
 import { saveConvertedFile } from '../../services/nativeWriter.js';
-import {
-  CONFLICT_MAP,
-  WEB_ONLY_BLOCKLIST,
-  COMMON_DEPENDENCIES,
-} from '../../config/libraryRules.js';
+import { CONFLICT_MAP, WEB_ONLY_BLOCKLIST } from '../../config/libraryRules.js';
 
 /**
- * DiskWriterNode - يكتب الكود الناتج على القرص
+ * DiskWriterNode - Writes generated code to disk
  *
- * المدخلات: state.generatedCode, state.currentFile, state.pathMap, state.rnProjectPath
- * المخرجات: state.completedFiles (إضافة الملف الحالي)
+ * Inputs: state.generatedCode, state.currentFile, state.pathMap, state.rnProjectPath
+ * Outputs: state.completedFiles (added current file)
  *
  * @param {import('../state.js').GraphState} state
  * @returns {Partial<import('../state.js').GraphState>}
@@ -23,13 +19,12 @@ export async function diskWriterNode(state) {
     currentFile,
     pathMap,
     facts,
-    rnProjectPath,
     dependencyManager,
     options = {},
   } = state;
 
   if (!generatedCode || !currentFile) {
-    console.warn('⚠️  [DiskWriterNode] لا يوجد كود للكتابة');
+    console.warn('⚠️  [DiskWriterNode] No code to write');
     return {};
   }
 
@@ -37,18 +32,18 @@ export async function diskWriterNode(state) {
   const baseName = path.basename(filePath);
   const sourceRoot = facts?.sourceRoot || '.';
 
-  console.log(`\n💾 [DiskWriterNode] كتابة: ${filePath}`);
+  console.log(`\n💾 [DiskWriterNode] Writing: ${filePath}`);
 
-  // ── 1. تحديد مسار الوجهة ─────────────────────────────────────
+  // ── 1. Determine destination path ───────────────────────────
   let destPath = resolveDestPath(filePath, pathMap, sourceRoot);
 
-  // تجاوز إذا كان ملف App الرئيسي
+  // Override if main App file
   if (currentFile.isMainEntry || /^App\.(tsx|jsx|js|ts)$/i.test(baseName)) {
     destPath = 'app/index.tsx';
-    console.log(`🚀 [DiskWriterNode] ملف App -> app/index.tsx`);
+    console.log(`🚀 [DiskWriterNode] App file -> app/index.tsx`);
   }
 
-  // ── 2. تصفية وإضافة التبعيات للـ DependencyManager ──────────
+  // ── 2. Filter and add dependencies to DependencyManager ─────
   if (dependencyManager && generatedDependencies.length > 0) {
     const filteredDeps = filterDependencies(
       generatedDependencies,
@@ -56,13 +51,13 @@ export async function diskWriterNode(state) {
     );
     if (filteredDeps.length > 0) {
       console.log(
-        `📦 [DiskWriterNode] إضافة تبعيات: ${filteredDeps.join(', ')}`
+        `📦 [DiskWriterNode] Adding dependencies: ${filteredDeps.join(', ')}`
       );
       dependencyManager.add(filteredDeps);
     }
   }
 
-  // ── 3. الكتابة على القرص (باستخدام nativeWriter.js كما هو) ───
+  // ── 3. Write to disk (using nativeWriter.js as is) ──────────
   try {
     await saveConvertedFile(
       destPath,
@@ -71,14 +66,14 @@ export async function diskWriterNode(state) {
       dependencyManager
     );
 
-    console.log(`✅ [DiskWriterNode] تمت الكتابة: ${destPath}`);
+    console.log(`✅ [DiskWriterNode] Written successfully: ${destPath}`);
 
     return {
-      completedFiles: filePath, // سيُضاف للمصفوفة بواسطة reducer
-      errorLog: [], // لا أخطاء جديدة
+      completedFiles: filePath, // Will be added to array by reducer
+      errorLog: [], // No new errors
     };
   } catch (err) {
-    console.error(`❌ [DiskWriterNode] فشل الكتابة: ${err.message}`);
+    console.error(`❌ [DiskWriterNode] Write failed: ${err.message}`);
     return {
       errorLog: [
         {

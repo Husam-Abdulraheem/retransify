@@ -2,91 +2,91 @@
 import { Annotation } from '@langchain/langgraph';
 
 /**
- * GraphState - الحالة المشتركة التي تنتقل بين جميع العقد (Nodes)
- * يستبدل GlobalMigrationContext و StateManager
+ * GraphState - The shared state that passes between all Nodes
+ * Replaces GlobalMigrationContext and StateManager
  *
- * كل حقل يحتوي على reducer يحدد كيفية تحديث القيمة
- * (_, x) => x  يعني: "استبدل القيمة الحالية بالقيمة الجديدة"
+ * Each field contains a reducer that determines how the value is updated
+ * (_, x) => x  means: "replace the current value with the new value"
  */
 export const GraphState = Annotation.Root({
-  // ── معلومات المشروع ──────────────────────────────────────────
+  // ── Project Information ──────────────────────────────────────
   projectPath: Annotation({
     reducer: (_, x) => x,
     default: () => '',
   }),
 
-  // مسار مشروع React Native الوجهة (يُعبأ بعد ensureNativeProject)
+  // Destination React Native project path (populated after ensureNativeProject)
   rnProjectPath: Annotation({
     reducer: (_, x) => x,
     default: () => '',
   }),
 
-  // نتائج الـ Analyzer (tech stack, entry files, إلخ)
+  // Analyzer results (tech stack, entry files, etc.)
   facts: Annotation({
     reducer: (prev, x) => ({ ...prev, ...x }),
     default: () => ({}),
   }),
 
-  // ── قائمة الملفات ────────────────────────────────────────────
-  // مصفوفة كائنات الملفات المتبقية للتحويل (من FileScanner)
+  // ── File List ────────────────────────────────────────────────
+  // Array of file objects remaining for conversion (from FileScanner)
   filesQueue: Annotation({
     reducer: (_, x) => x,
     default: () => [],
   }),
 
-  // خريطة المسارات القديمة -> الجديدة (من PathMapper)
+  // Map of old -> new paths (from PathMapper)
   pathMap: Annotation({
     reducer: (_, x) => x,
     default: () => ({}),
   }),
 
-  // ── الملف الحالي ─────────────────────────────────────────────
-  // كائن الملف الذي يتم معالجته الآن
+  // ── Current File ─────────────────────────────────────────────
+  // File object currently being processed
   currentFile: Annotation({
     reducer: (_, x) => x,
     default: () => null,
   }),
 
-  // الكود الناتج من ExecutorNode (قبل الكتابة على القرص)
+  // Code generated from ExecutorNode (before writing to disk)
   generatedCode: Annotation({
     reducer: (_, x) => x,
     default: () => null,
   }),
 
-  // التبعيات التي اقترحها الذكاء الاصطناعي للملف الحالي
+  // Dependencies suggested by AI for current file
   generatedDependencies: Annotation({
     reducer: (_, x) => x,
     default: () => [],
   }),
 
   // ── RAG / VectorStore ────────────────────────────────────────
-  // مثيل MemoryVectorStore (يُعبأ في AnalyzerNode)
+  // MemoryVectorStore instance (populated in AnalyzerNode)
   vectorStore: Annotation({
     reducer: (_, x) => x,
     default: () => null,
   }),
 
-  // خريطة: اسم الملف -> Document ID في VectorStore
-  // تُستخدم في ContextUpdaterNode لحذف المتجه القديم وإدراج الجديد
+  // Map: filename -> Document ID in VectorStore
+  // Used in ContextUpdaterNode to delete old vector and insert new one
   vectorIdMap: Annotation({
     reducer: (prev, x) => ({ ...prev, ...x }),
     default: () => ({}),
   }),
 
-  // ── إدارة الحالة ─────────────────────────────────────────────
-  // عدد محاولات الـ Healing للملف الحالي (يُصفَّر مع كل ملف جديد)
+  // ── State Management ─────────────────────────────────────────
+  // Number of Healing attempts for current file (reset with each new file)
   healAttempts: Annotation({
     reducer: (_, x) => x,
     default: () => 0,
   }),
 
-  // هاش آخر خطأ (لكشف الحلقات اللانهائية في Healer)
+  // Hash of last error (to detect infinite loops in Healer)
   lastErrorHash: Annotation({
     reducer: (_, x) => x,
     default: () => null,
   }),
 
-  // الملفات التي تمت معالجتها بنجاح (للاستئناف عند الانقطاع)
+  // Successfully processed files (for resumption on interruption)
   completedFiles: Annotation({
     reducer: (prev, x) => {
       const set = new Set(prev);
@@ -97,33 +97,33 @@ export const GraphState = Annotation.Root({
     default: () => [],
   }),
 
-  // ── الأخطاء ──────────────────────────────────────────────────
-  // أخطاء الملف الحالي (تُعبأ من VerifierNode)
+  // ── Errors ───────────────────────────────────────────────────
+  // Current file errors (populated from VerifierNode)
   errors: Annotation({
     reducer: (_, x) => x,
     default: () => [],
   }),
 
-  // سجل الأخطاء الكاملة عبر جميع الملفات
+  // Complete error log across all files
   errorLog: Annotation({
     reducer: (prev, x) => [...prev, ...x],
     default: () => [],
   }),
 
-  // ── إدارة التبعيات ───────────────────────────────────────────
-  // مثيل DependencyManager (يُعبأ في بداية الـ workflow)
+  // ── Dependency Management ────────────────────────────────────
+  // DependencyManager instance (populated at start of workflow)
   dependencyManager: Annotation({
     reducer: (_, x) => x,
     default: () => null,
   }),
 
-  // الحزم المثبتة حالياً في مشروع RN (لتجنب التكرار)
+  // Currently installed packages in RN project (to avoid repetition)
   installedPackages: Annotation({
     reducer: (_, x) => x,
     default: () => [],
   }),
 
-  // ── خيارات التشغيل ───────────────────────────────────────────
+  // ── Execution Options ────────────────────────────────────────
   options: Annotation({
     reducer: (_, x) => x,
     default: () => ({}),
@@ -131,7 +131,7 @@ export const GraphState = Annotation.Root({
 });
 
 /**
- * ثوابت مسارات العقد - تُستخدم في workflow.js للـ Edges
+ * Node path constants - used in workflow.js for Edges
  */
 export const NODE_NAMES = {
   ANALYZER: 'analyzerNode',
@@ -142,7 +142,7 @@ export const NODE_NAMES = {
   HEALER: 'healerNode',
   CONTEXT_UPDATER: 'contextUpdaterNode',
   DISK_WRITER: 'diskWriterNode',
-  FILE_PICKER: 'filePickerNode', // عقدة مساعدة: تسحب الملف التالي من filesQueue
+  FILE_PICKER: 'filePickerNode', // Helper node: pulls next file from filesQueue
 };
 
 export const MAX_HEAL_ATTEMPTS = 3;

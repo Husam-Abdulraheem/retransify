@@ -7,59 +7,61 @@ import {
 import { runSilentCommand } from '../../helpers/shell.js';
 
 /**
- * DependencyResolverNode - يفحص imports الملف الحالي ويتحقق من توافق المكتبات
+ * DependencyResolverNode - Scans imports of the current file and checks library compatibility
  *
- * المدخلات من state:
- * - state.currentFile: كائن الملف الحالي (يجب أن يحتوي على imports)
- * - state.installedPackages: الحزم المثبتة حالياً
- * - state.facts.tech: معلومات الـ tech stack
+ * Inputs from state:
+ * - state.currentFile: Current file object (must contain imports)
+ * - state.installedPackages: Currently installed packages
+ * - state.facts.tech: Tech stack information
  *
- * المخرجات إلى state:
- * - state.currentFile: محدَّث بمعلومات التبعيات المحلولة (resolvedDeps)
+ * Outputs to state:
+ * - state.currentFile: Updated with resolved dependencies info (resolvedDeps)
  *
  * @param {import('../state.js').GraphState} state
  * @param {{ fastModel: Session }} models
  * @returns {Partial<import('../state.js').GraphState>}
  */
 export async function dependencyResolverNode(state, models = {}) {
-  const { currentFile, installedPackages = [], facts = {} } = state;
+  const { currentFile, installedPackages = [] } = state;
 
   if (!currentFile) {
-    console.warn('⚠️  [DependencyResolverNode] لا يوجد ملف حالي');
+    console.warn('⚠️  [DependencyResolverNode] No current file found');
     return {};
   }
 
   const filePath = currentFile.relativeToProject || currentFile.filePath;
-  console.log(`\n🔍 [DependencyResolverNode] فحص تبعيات: ${filePath}`);
+  console.log(
+    `\n🔍 [DependencyResolverNode] Checking dependencies: ${filePath}`
+  );
 
   const imports = currentFile.imports || [];
   const installedSet = new Set(installedPackages);
 
   const resolvedDeps = {
-    safe: [], // مكتبات آمنة للاستخدام
-    replaced: [], // مكتبات تم استبدالها ببديل RN
-    blocked: [], // مكتبات محظورة (Web Only)
-    unknown: [], // مكتبات مجهولة تحتاج فحص
-    stubs: [], // مكتبات تحتاج Stub بدلاً من تثبيت
+    safe: [], // Safe libraries to use
+    replaced: [], // Libraries replaced with RN alternative
+    blocked: [], // Blocked libraries (Web Only)
+    unknown: [], // Unknown libraries needing inspection
+    stubs: [], // Libraries needing Stub instead of installation
   };
 
   for (const imp of imports) {
     const source = imp.source || imp;
 
-    // تجاهل الـ imports النسبية (ملفات محلية)
+    // Ignore relative imports (local files)
     if (source.startsWith('.') || source.startsWith('/')) continue;
 
-    // تجاهل الحزم الأساسية (react, react-native, إلخ)
+    // Ignore core packages (react, react-native, etc.)
     if (isCorePkg(source)) continue;
 
-    // ── 1. فحص قائمة المحظورات (Web Only) ─────────────────────
+    // ── 1. Check blocked list (Web Only) ──────────────────────────
     if (isWebOnly(source)) {
-      console.log(`🛡️  [DependencyResolverNode] محظور (Web Only): ${source}`);
+      console.log(`🛡️  [DependencyResolverNode] Blocked (Web Only): ${source}`);
       resolvedDeps.blocked.push(source);
       continue;
     }
 
-    // ── 2. فحص خريطة التعارضات (CONFLICT_MAP) ─────────────────
+    // ── 2. Check conflicts map (CONFLICT_MAP) ─────────────────────
     const replacement = findReplacement(source);
     if (replacement !== undefined) {
       if (replacement === null) {
@@ -67,26 +69,26 @@ export async function dependencyResolverNode(state, models = {}) {
       } else {
         resolvedDeps.replaced.push({ original: source, replacement });
         console.log(
-          `🔄 [DependencyResolverNode] استبدال: ${source} -> ${replacement}`
+          `🔄 [DependencyResolverNode] Replacing: ${source} -> ${replacement}`
         );
       }
       continue;
     }
 
-    // ── 3. فحص إذا كانت المكتبة مثبتة بالفعل ──────────────────
+    // ── 3. Check if library is already installed ──────────────────
     if (installedSet.has(source)) {
       resolvedDeps.safe.push(source);
       continue;
     }
 
-    // ── 4. فحص إذا كانت مكتبة Expo/RN معروفة ──────────────────
+    // ── 4. Check if known Expo/RN library ────────────────────────
     if (isKnownExpoOrRN(source)) {
       resolvedDeps.safe.push(source);
       continue;
     }
 
-    // ── 5. المكتبات المجهولة: استخدم fastModel لاقتراح بديل ─────
-    console.log(`❓ [DependencyResolverNode] مكتبة مجهولة: ${source}`);
+    // ── 5. Unknown libraries: use fastModel to suggest alternative ──
+    console.log(`❓ [DependencyResolverNode] Unknown library: ${source}`);
 
     if (models.fastModel) {
       const suggestion = await suggestAlternative(source, models.fastModel);
@@ -97,37 +99,39 @@ export async function dependencyResolverNode(state, models = {}) {
           replacement: suggestion.package,
         });
         console.log(
-          `💡 [DependencyResolverNode] اقتراح AI: ${source} -> ${suggestion.package}`
+          `💡 [DependencyResolverNode] AI Suggestion: ${source} -> ${suggestion.package}`
         );
       } else if (suggestion.action === 'stub') {
         resolvedDeps.stubs.push(source);
-        console.log(`🔧 [DependencyResolverNode] سيُنشأ Stub لـ: ${source}`);
+        console.log(
+          `🔧 [DependencyResolverNode] Will create Stub for: ${source}`
+        );
       } else {
-        // التحقق من وجود الحزمة في npm
+        // Check if package exists in npm
         const exists = await checkNpmPackage(source);
         if (exists) {
           resolvedDeps.safe.push(source);
         } else {
           resolvedDeps.stubs.push(source);
           console.warn(
-            `⚠️  [DependencyResolverNode] الحزمة غير موجودة في npm: ${source}`
+            `⚠️  [DependencyResolverNode] Package not found in npm: ${source}`
           );
         }
       }
     } else {
-      // بدون AI، نضعها كـ unknown للمراجعة اليدوية
+      // Without AI, class as unknown for manual review
       resolvedDeps.unknown.push(source);
     }
   }
 
-  // إضافة معلومات التبعيات المحلولة للملف الحالي
+  // Add resolved dependencies info to current file
   const updatedFile = {
     ...currentFile,
     resolvedDeps,
   };
 
   console.log(
-    `✅ [DependencyResolverNode] آمن: ${resolvedDeps.safe.length} | مستبدَل: ${resolvedDeps.replaced.length} | محظور: ${resolvedDeps.blocked.length}`
+    `✅ [DependencyResolverNode] Safe: ${resolvedDeps.safe.length} | Replaced: ${resolvedDeps.replaced.length} | Blocked: ${resolvedDeps.blocked.length}`
   );
 
   return {
@@ -135,7 +139,7 @@ export async function dependencyResolverNode(state, models = {}) {
   };
 }
 
-// ── دوال مساعدة ──────────────────────────────────────────────────────────────
+// ── Helper Functions ─────────────────────────────────────────────────────────
 
 function isCorePkg(source) {
   const corePkgs = ['react', 'react-native', 'react-dom', 'expo'];
@@ -149,11 +153,11 @@ function isWebOnly(source) {
 }
 
 function findReplacement(source) {
-  // فحص مباشر
+  // Direct check
   if (Object.prototype.hasOwnProperty.call(CONFLICT_MAP, source)) {
     return CONFLICT_MAP[source];
   }
-  // فحص النطاق (scoped packages)
+  // Scope check (scoped packages)
   const scope = source.startsWith('@')
     ? source.split('/')[0] + '/' + source.split('/')[1]
     : null;
@@ -174,7 +178,7 @@ function isKnownExpoOrRN(source) {
 }
 
 /**
- * يسأل fastModel عن بديل مناسب لمكتبة ويب
+ * Asks fastModel for a suitable alternative for a web library
  */
 async function suggestAlternative(packageName, fastModel) {
   const prompt = `You are a React Native expert. A web package "${packageName}" needs a React Native/Expo alternative.
@@ -198,7 +202,7 @@ If it works in RN already, use "keep".`;
 }
 
 /**
- * يتحقق من وجود الحزمة في npm
+ * Checks if the package exists in npm
  */
 async function checkNpmPackage(packageName) {
   try {

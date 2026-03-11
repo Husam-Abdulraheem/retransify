@@ -7,13 +7,13 @@ import { GoogleGenerativeAIEmbeddings } from '@langchain/google-genai';
 import { Document } from '@langchain/core/documents';
 import { PROJECT_PROFILES } from '../../config/profiles.js';
 
-// ── إعداد نموذج التضمين (Embeddings) ──────────────────────────────────────────
-// يُستخدم لتحويل خلاصات الملفات إلى متجهات للبحث لاحقاً في ExecutorNode
+// ── Embeddings Model Setup ────────────────────────────────────────────────────
+// Used to convert file summaries to vectors for later search in ExecutorNode
 function createEmbeddings() {
   const provider = process.env.AI_PROVIDER || 'gemini';
 
-  // حالياً نستخدم Gemini Embeddings (متاح مجاناً مع API Key)
-  // إذا أردت Groq: استخدم OpenAIEmbeddings مع Groq endpoint
+  // Currently using Gemini Embeddings (available free with API Key)
+  // If you want Groq: use OpenAIEmbeddings with Groq endpoint
   if (provider === 'gemini' || !process.env.GROQ_API_KEY) {
     return new GoogleGenerativeAIEmbeddings({
       apiKey: process.env.GEMINI_API_KEY,
@@ -21,54 +21,54 @@ function createEmbeddings() {
     });
   }
 
-  // Fallback: استخدم Gemini حتى مع Groq (Groq لا يملك embeddings مستقلة)
+  // Fallback: use Gemini even with Groq (Groq has no independent embeddings)
   return new GoogleGenerativeAIEmbeddings({
     apiKey: process.env.GEMINI_API_KEY,
     modelName: 'text-embedding-004',
   });
 }
 
-// ── الدالة الرئيسية للعقدة ────────────────────────────────────────────────────
+// ── Main Node Function ────────────────────────────────────────────────────────
 
 /**
- * AnalyzerNode - يحلل ملفات المشروع بـ ts-morph ويخزن الخلاصات في VectorStore
+ * AnalyzerNode - Analyzes project files with ts-morph and stores summaries in VectorStore
  *
- * المدخلات من state:
- * - state.projectPath: مسار مشروع React الويب
- * - state.filesQueue: مصفوفة كائنات الملفات (من FileScanner)
+ * Inputs from state:
+ * - state.projectPath: Web React project path
+ * - state.filesQueue: Array of file objects (from FileScanner)
  *
- * المخرجات إلى state:
- * - state.facts: معلومات المشروع (tech stack, sourceRoot, إلخ)
- * - state.vectorStore: مثيل MemoryVectorStore مع خلاصات الملفات
- * - state.vectorIdMap: خريطة اسم الملف -> ID في VectorStore
+ * Outputs to state:
+ * - state.facts: Project information (tech stack, sourceRoot, etc.)
+ * - state.vectorStore: MemoryVectorStore instance with file summaries
+ * - state.vectorIdMap: Map of filename -> ID in VectorStore
  *
  * @param {import('../state.js').GraphState} state
  * @returns {Partial<import('../state.js').GraphState>}
  */
 export async function analyzerNode(state) {
-  console.log('\n🕵️  [AnalyzerNode] بدء تحليل المشروع...');
+  console.log('\n🕵️  [AnalyzerNode] Starting project analysis...');
 
   const { projectPath, filesQueue } = state;
 
-  // ── 1. قراءة package.json ─────────────────────────────────────
+  // ── 1. Read package.json ──────────────────────────────────────
   let packageJson = {};
   const packageJsonPath = path.join(projectPath, 'package.json');
   if (await fs.pathExists(packageJsonPath)) {
     packageJson = await fs.readJson(packageJsonPath);
   }
 
-  // ── 2. تحليل الـ Tech Stack ───────────────────────────────────
-  const facts = await analyzeTechStack(projectPath, packageJson, filesQueue);
+  // ── 2. Analyze Tech Stack ─────────────────────────────────────
+  const facts = await analyzeTechStack(projectPath, packageJson);
   console.log('✅ [AnalyzerNode] Tech Stack:', facts.tech);
 
-  // ── 3. مسح الملفات بـ ts-morph واستخراج الخلاصات ─────────────
+  // ── 3. Scan files with ts-morph and extract summaries ─────────
   const { vectorStore, vectorIdMap } = await buildVectorStore(
     filesQueue,
     projectPath
   );
 
   console.log(
-    `✅ [AnalyzerNode] تم فهرسة ${Object.keys(vectorIdMap).length} ملف في VectorStore`
+    `✅ [AnalyzerNode] Indexed ${Object.keys(vectorIdMap).length} files in VectorStore`
   );
 
   return {
@@ -78,9 +78,9 @@ export async function analyzerNode(state) {
   };
 }
 
-// ── تحليل Tech Stack ──────────────────────────────────────────────────────────
+// ── Tech Stack Analysis ───────────────────────────────────────────────────────
 
-async function analyzeTechStack(projectPath, packageJson, filesQueue) {
+async function analyzeTechStack(projectPath, packageJson) {
   const deps = {
     ...packageJson.dependencies,
     ...packageJson.devDependencies,
@@ -99,11 +99,11 @@ async function analyzeTechStack(projectPath, packageJson, filesQueue) {
   const sourceRoot = inferSourceRoot(projectPath, entryFiles);
   const writePhaseIgnores = getWritePhaseIgnores(tech);
 
-  // تحديد نقطة الدخول الرئيسية
+  // Determine main entry point
   let mainEntryPoint = null;
   if (entryFiles && entryFiles.length > 0) {
     mainEntryPoint = entryFiles[0];
-    console.log(`🎯 [AnalyzerNode] نقطة الدخول: ${mainEntryPoint}`);
+    console.log(`🎯 [AnalyzerNode] Entry point: ${mainEntryPoint}`);
   }
 
   return {
@@ -191,7 +191,7 @@ async function verifyLibraryUsage(keywords, files) {
       const content = await fs.readFile(file, 'utf8');
       if (keywords.some((kw) => content.includes(kw))) return true;
     } catch {
-      /* تجاهل أخطاء القراءة */
+      /* Ignore read errors */
     }
   }
   return false;
@@ -212,11 +212,11 @@ function getWritePhaseIgnores(tech) {
   return profile?.writePhaseIgnores || [];
 }
 
-// ── بناء VectorStore بـ ts-morph ─────────────────────────────────────────────
+// ── Build VectorStore with ts-morph ───────────────────────────────────────────
 
 /**
- * يمسح الملفات بـ ts-morph، يستخرج خلاصاتها، ويخزنها في MemoryVectorStore
- * @param {Array} filesQueue - مصفوفة كائنات الملفات
+ * Scans files with ts-morph, extracts summaries, and stores them in MemoryVectorStore
+ * @param {Array} filesQueue - Array of file objects
  * @param {string} projectPath
  * @returns {{ vectorStore: MemoryVectorStore, vectorIdMap: Object }}
  */
@@ -225,7 +225,7 @@ async function buildVectorStore(filesQueue, projectPath) {
   const documents = [];
   const vectorIdMap = {};
 
-  // إعداد ts-morph Project
+  // Setup ts-morph Project
   const tsProject = new Project({
     skipAddingFilesFromTsConfig: true,
     compilerOptions: {
@@ -249,7 +249,7 @@ async function buildVectorStore(filesQueue, projectPath) {
       );
       if (!summary) continue;
 
-      // إنشاء Document لـ LangChain
+      // Create LangChain Document
       const doc = new Document({
         pageContent: summary,
         metadata: {
@@ -262,22 +262,22 @@ async function buildVectorStore(filesQueue, projectPath) {
       documents.push({ doc, filePath });
     } catch (err) {
       console.warn(
-        `⚠️  [AnalyzerNode] تعذّر تحليل: ${filePath} - ${err.message}`
+        `⚠️  [AnalyzerNode] Failed to analyze: ${filePath} - ${err.message}`
       );
     }
   }
 
   if (documents.length === 0) {
-    // إنشاء VectorStore فارغ لتجنب الأخطاء
+    // Create empty VectorStore to avoid errors
     const emptyStore = new MemoryVectorStore(embeddings);
     return { vectorStore: emptyStore, vectorIdMap: {} };
   }
 
-  // إنشاء VectorStore من الـ Documents
+  // Create VectorStore from Documents
   const docs = documents.map((d) => d.doc);
   const vectorStore = await MemoryVectorStore.fromDocuments(docs, embeddings);
 
-  // بناء vectorIdMap: filePath -> index (MemoryVectorStore يستخدم الـ index كـ ID)
+  // Build vectorIdMap: filePath -> index (MemoryVectorStore uses index as ID)
   documents.forEach(({ filePath }, index) => {
     vectorIdMap[filePath] = index;
   });
@@ -286,13 +286,13 @@ async function buildVectorStore(filesQueue, projectPath) {
 }
 
 /**
- * يستخرج خلاصة ملف واحد بـ ts-morph:
+ * Extracts a single file's summary using ts-morph:
  * Interfaces, Props, Hooks, Exported Functions
  *
  * @param {Project} tsProject - مثيل ts-morph Project
  * @param {string} absolutePath
  * @param {string} relativePath
- * @returns {string|null} نص الخلاصة
+ * @returns {string|null} Summary text
  */
 async function extractFileSummary(tsProject, absolutePath, relativePath) {
   const ext = path.extname(absolutePath);
@@ -306,7 +306,7 @@ async function extractFileSummary(tsProject, absolutePath, relativePath) {
     return null;
   }
 
-  // إضافة الملف إلى ts-morph (أو تحديثه إذا كان موجوداً)
+  // Add file to ts-morph (or update if exists)
   let sourceFile;
   try {
     sourceFile =
@@ -366,7 +366,7 @@ async function extractFileSummary(tsProject, absolutePath, relativePath) {
       });
     }
 
-    // 4. Hooks (دوال تبدأ بـ "use")
+    // 4. Hooks (functions starting with "use")
     const hooks = sourceFile
       .getFunctions()
       .filter((f) => f.getName()?.startsWith('use'));
@@ -375,16 +375,16 @@ async function extractFileSummary(tsProject, absolutePath, relativePath) {
       hooks.forEach((h) => summaryParts.push(`  ${h.getName()}`));
     }
 
-    // 5. Imports (لفهم التبعيات)
-    const imports = sourceFile.getImportDeclarations().slice(0, 5); // أول 5 فقط
+    // 5. Imports (to understand dependencies)
+    const imports = sourceFile.getImportDeclarations().slice(0, 5); // Only first 5
     if (imports.length > 0) {
       summaryParts.push('IMPORTS:');
       imports.forEach((imp) => {
         summaryParts.push(`  from '${imp.getModuleSpecifierValue()}'`);
       });
     }
-  } catch (err) {
-    // إذا فشل ts-morph في التحليل، نُعيد ملخص أساسي
+  } catch {
+    // If ts-morph analysis fails, return basic summary
     summaryParts.push(`CONTENT_PREVIEW: ${content.slice(0, 200)}`);
   }
 

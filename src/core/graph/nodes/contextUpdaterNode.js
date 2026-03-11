@@ -2,12 +2,11 @@
 import path from 'path';
 import { Project } from 'ts-morph';
 import { Document } from '@langchain/core/documents';
-import { GoogleGenerativeAIEmbeddings } from '@langchain/google-genai';
 
 /**
- * ContextUpdaterNode - يُحدِّث VectorStore بالكود الجديد بعد التحويل
+ * ContextUpdaterNode - Updates VectorStore with new code after conversion
  *
- * يحذف المتجه القديم للملف ويُدرج الجديد مع الواجهات المُحوَّلة
+ * Deletes old vector for file and inserts new one with converted interfaces
  *
  * @param {import('../state.js').GraphState} state
  * @returns {Partial<import('../state.js').GraphState>}
@@ -20,35 +19,37 @@ export async function contextUpdaterNode(state) {
   const filePath = currentFile?.relativeToProject || currentFile?.filePath;
   if (!filePath) return {};
 
-  console.log(`\n🔄 [ContextUpdaterNode] تحديث VectorStore لـ: ${filePath}`);
+  console.log(
+    `\n🔄 [ContextUpdaterNode] Updating VectorStore for: ${filePath}`
+  );
 
   try {
-    // استخراج خلاصة الكود الجديد بـ ts-morph
+    // Extract new code summary with ts-morph
     const newSummary = extractSummaryFromCode(generatedCode, filePath);
 
     if (!newSummary) return {};
 
-    // إنشاء Document جديد
+    // Create new Document
     const newDoc = new Document({
       pageContent: newSummary,
       metadata: { filePath, type: 'converted_file' },
     });
 
-    // إضافة المتجه الجديد للـ VectorStore
-    // MemoryVectorStore لا يدعم الحذف المباشر، لذا نُضيف فقط
-    // (الـ similarity search ستجد الأحدث أكثر صلة)
+    // Add new vector to VectorStore
+    // MemoryVectorStore doesn't support direct deletion, so we just add
+    // (similarity search will find the newest one more relevant)
     await vectorStore.addDocuments([newDoc]);
 
-    // تحديث الـ Map بالـ ID الجديد
+    // Update Map with new ID
     const newVectorIdMap = {
       ...vectorIdMap,
       [filePath]: `converted_${filePath}`,
     };
 
-    console.log(`✅ [ContextUpdaterNode] تم تحديث VectorStore`);
+    console.log(`✅ [ContextUpdaterNode] VectorStore updated`);
     return { vectorIdMap: newVectorIdMap };
   } catch (err) {
-    console.warn(`⚠️  [ContextUpdaterNode] فشل التحديث: ${err.message}`);
+    console.warn(`⚠️  [ContextUpdaterNode] Update failed: ${err.message}`);
     return {};
   }
 }

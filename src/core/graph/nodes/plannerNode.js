@@ -2,43 +2,43 @@
 import { PathMapper } from '../../helpers/pathMapper.js';
 
 /**
- * PlannerNode - يرتب الملفات ويُنشئ خريطة المسارات
+ * PlannerNode - Orders files and creates the paths map
  *
- * المدخلات من state:
- * - state.filesQueue: مصفوفة كائنات الملفات (من FileScanner)
+ * Inputs from state:
+ * - state.filesQueue: Array of file objects (from FileScanner)
  *
- * المخرجات إلى state:
- * - state.filesQueue: مصفوفة مُرتَّبة (Topological Sort - التبعيات أولاً)
- * - state.pathMap: خريطة المسارات القديمة -> الجديدة
+ * Outputs to state:
+ * - state.filesQueue: Sorted array (Topological Sort - dependencies first)
+ * - state.pathMap: Map of old -> new paths
  *
  * @param {import('../state.js').GraphState} state
  * @returns {Partial<import('../state.js').GraphState>}
  */
 export async function plannerNode(state) {
-  console.log('\n🗺️  [PlannerNode] بدء تخطيط ترتيب التحويل...');
+  console.log('\n🗺️  [PlannerNode] Starting conversion ordering planning...');
 
   const { filesQueue } = state;
 
-  // ── 1. توليد خريطة المسارات باستخدام PathMapper (لا تعديل عليه) ──
+  // ── 1. Generate path map using PathMapper (no modification) ──
   const pathMap = PathMapper.generateMap(filesQueue);
   console.log(
-    `📍 [PlannerNode] تم توليد خريطة لـ ${Object.keys(pathMap).length} ملف`
+    `📍 [PlannerNode] Generated path map for ${Object.keys(pathMap).length} files`
   );
 
-  // ── 2. بناء رسم بياني للتبعيات من imports الملفات ─────────────
+  // ── 2. Build dependency graph from file imports ─────────────
   const dependencyGraph = buildDependencyGraph(filesQueue);
 
-  // ── 3. ترتيب الملفات (Topological Sort - التبعيات تُعالَج أولاً) ──
+  // ── 3. Sort files (Topological Sort - dependencies processed first) ──
   const sortedFiles = topologicalSort(dependencyGraph, filesQueue);
-  console.log(`✅ [PlannerNode] ترتيب التحويل: ${sortedFiles.length} ملف`);
+  console.log(`✅ [PlannerNode] Conversion order: ${sortedFiles.length} files`);
 
-  // طباعة أول 5 ملفات للتحقق
+  // Print first 5 files for verification
   sortedFiles.slice(0, 5).forEach((f, i) => {
     const filePath = f.relativeToProject || f.filePath;
     console.log(`   ${i + 1}. ${filePath}`);
   });
   if (sortedFiles.length > 5) {
-    console.log(`   ... و ${sortedFiles.length - 5} ملف آخر`);
+    console.log(`   ... and ${sortedFiles.length - 5} more files`);
   }
 
   return {
@@ -47,10 +47,10 @@ export async function plannerNode(state) {
   };
 }
 
-// ── بناء رسم بياني بسيط للتبعيات ─────────────────────────────────────────────
+// ── Build simple dependency graph ─────────────────────────────────────────────
 
 /**
- * يبني رسماً بيانياً بسيطاً بناءً على الـ imports في كل ملف
+ * Builds a simple dependency graph based on imports in each file
  * @param {Array} filesQueue
  * @returns {Object} { filePath: [dependencyFilePaths] }
  */
@@ -64,14 +64,14 @@ function buildDependencyGraph(filesQueue) {
     const filePath = fileObj.relativeToProject || fileObj.filePath;
     graph[filePath] = [];
 
-    // استخدام imports المُستخرجة من FileScanner إذا كانت متاحة
+    // Use imports extracted from FileScanner if available
     const imports = fileObj.imports || [];
 
     for (const imp of imports) {
       const source = imp.source || imp;
-      // نهتم فقط بالـ imports النسبية (الملفات المحلية)
+      // Only relative imports matter (local files)
       if (source.startsWith('.')) {
-        // محاولة إيجاد الملف المُستورَد في قائمة الملفات
+        // Attempt to find imported file in files list
         const resolvedPath = resolveRelativeImport(
           filePath,
           source,
@@ -88,11 +88,11 @@ function buildDependencyGraph(filesQueue) {
 }
 
 /**
- * يحاول حل مسار import نسبي
+ * Attempts to resolve relative import path
  */
 function resolveRelativeImport(currentFile, importSource, filePathSet) {
   const parts = currentFile.split('/');
-  parts.pop(); // إزالة اسم الملف الحالي
+  parts.pop(); // Remove current file name
   const dir = parts.join('/');
 
   const extensions = ['.js', '.jsx', '.ts', '.tsx', '.mjs'];
@@ -115,11 +115,11 @@ function resolveRelativeImport(currentFile, importSource, filePathSet) {
 // ── Topological Sort ──────────────────────────────────────────────────────────
 
 /**
- * يُرتِّب الملفات بحيث تأتي التبعيات (utils, hooks) قبل المكونات التي تستخدمها
+ * Sorts files so dependencies (utils, hooks) come before components using them
  *
  * @param {Object} graph - { filePath: [dependencies] }
- * @param {Array} filesQueue - المصفوفة الأصلية لكائنات الملفات
- * @returns {Array} مصفوفة كائنات الملفات مُرتَّبة
+ * @param {Array} filesQueue - Original array of file objects
+ * @returns {Array} Sorted array of file objects
  */
 function topologicalSort(graph, filesQueue) {
   const visited = new Set();
@@ -127,7 +127,7 @@ function topologicalSort(graph, filesQueue) {
   const sortedPaths = [];
 
   const visit = (node) => {
-    if (tempVisited.has(node)) return; // كشف دورة - تجاهل
+    if (tempVisited.has(node)) return; // Cycle detected - ignore
     if (visited.has(node)) return;
 
     tempVisited.add(node);
@@ -146,19 +146,19 @@ function topologicalSort(graph, filesQueue) {
     visit(node);
   }
 
-  // تحويل المسارات المُرتَّبة إلى كائنات الملفات الأصلية
+  // Convert sorted paths back to original file objects
   const fileMap = {};
   filesQueue.forEach((f) => {
     const key = f.relativeToProject || f.filePath;
     fileMap[key] = f;
   });
 
-  // إعادة الترتيب مع الاحتفاظ بالملفات التي لم تُضف للرسم البياني
+  // Reorder while preserving files not added to graph
   const sortedFiles = sortedPaths
     .filter((p) => fileMap[p])
     .map((p) => fileMap[p]);
 
-  // إضافة أي ملفات لم تكن في الرسم البياني (لم يتم زيارتها)
+  // Add any files not in graph (unvisited)
   const sortedSet = new Set(sortedPaths);
   filesQueue.forEach((f) => {
     const key = f.relativeToProject || f.filePath;

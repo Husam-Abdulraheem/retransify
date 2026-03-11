@@ -5,20 +5,20 @@ import { sendToGroq, GroqSession } from './groqClient.js';
 
 dotenv.config();
 
-// ── نماذج افتراضية لكل مزود ─────────────────────────────────────────────────
+// ── Default Models per Provider ───────────────────────────────────────────
 
 const DEFAULT_MODELS = {
   gemini: {
-    fast: 'gemini-2.0-flash', // سريع: للتحليل والتخطيط
-    smart: 'gemini-2.5-pro', // ذكي: للتنفيذ والإصلاح
+    fast: 'gemini-2.0-flash', // Fast: for analysis and planning
+    smart: 'gemini-2.5-pro', // Smart: for execution and healing
   },
   groq: {
-    fast: 'llama-3.1-8b-instant', // سريع: خفيف وسريع
-    smart: 'llama-3.3-70b-versatile', // ذكي: دقيق ومتعمق
+    fast: 'llama-3.1-8b-instant', // Fast: lightweight and fast
+    smart: 'llama-3.3-70b-versatile', // Smart: accurate and deep
   },
 };
 
-// ── دوال المصنع الأساسية (موجودة سابقاً - لا تغيير) ─────────────────────────
+// ── Base Factory Functions (Existing - No Changes) ────────────────────────
 
 /**
  * Creates a stateful session for the configured AI provider.
@@ -57,16 +57,16 @@ export async function sendToAI(prompt, model = null, provider = null) {
   }
 }
 
-// ── الإضافات الجديدة: دعم fastModel و smartModel ─────────────────────────────
+// ── New Additions: fastModel and smartModel Support ───────────────────────
 
 /**
- * يُنشئ نموذجاً سريعاً (fastModel) للمهام الخفيفة:
- * - AnalyzerNode: تحليل الملفات
- * - PlannerNode: ترتيب الملفات
- * - DependencyResolverNode: اقتراح بدائل المكتبات
+ * Creates a fast model (fastModel) for lightweight tasks:
+ * - AnalyzerNode: File analysis
+ * - PlannerNode: File ordering
+ * - DependencyResolverNode: Library alternatives suggestion
  *
- * @param {string} [provider] - المزود (gemini | groq). الافتراضي: AI_PROVIDER
- * @param {string} [modelOverride] - تجاوز النموذج الافتراضي يدوياً
+ * @param {string} [provider] - Provider (gemini | groq). Default: AI_PROVIDER
+ * @param {string} [modelOverride] - Manually override default model
  * @returns {GeminiSession|GroqSession}
  */
 export function createFastModel(provider = null, modelOverride = null) {
@@ -86,12 +86,12 @@ export function createFastModel(provider = null, modelOverride = null) {
 }
 
 /**
- * يُنشئ نموذجاً ذكياً (smartModel) للمهام المعقدة:
- * - ExecutorNode: تحويل الكود
- * - HealerNode: إصلاح الأخطاء
+ * Creates a smart model (smartModel) for complex tasks:
+ * - ExecutorNode: Code conversion
+ * - HealerNode: Error healing
  *
- * @param {string} [provider] - المزود (gemini | groq). الافتراضي: AI_PROVIDER
- * @param {string} [modelOverride] - تجاوز النموذج الافتراضي يدوياً
+ * @param {string} [provider] - Provider (gemini | groq). Default: AI_PROVIDER
+ * @param {string} [modelOverride] - Manually override default model
  * @returns {GeminiSession|GroqSession}
  */
 export function createSmartModel(provider = null, modelOverride = null) {
@@ -111,8 +111,8 @@ export function createSmartModel(provider = null, modelOverride = null) {
 }
 
 /**
- * يُنشئ كلا النموذجين معاً في استدعاء واحد.
- * يُستخدم في workflow.js لتهيئة النماذج مرة واحدة وتمريرها للعقد.
+ * Creates both models together in a single call.
+ * Used in workflow.js to initialize models once and pass them to nodes.
  *
  * @param {Object} options
  * @param {string} [options.provider]
@@ -122,8 +122,8 @@ export function createSmartModel(provider = null, modelOverride = null) {
  *
  * @example
  * const { fastModel, smartModel } = createModelPair();
- * // استخدم fastModel في AnalyzerNode و PlannerNode
- * // استخدم smartModel في ExecutorNode و HealerNode
+ * // Use fastModel in AnalyzerNode and PlannerNode
+ * // Use smartModel in ExecutorNode and HealerNode
  */
 export function createModelPair(options = {}) {
   const {
