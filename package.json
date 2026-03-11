@@ -6,7 +6,7 @@
     "retransify": "./cli.js"
   },
   "dependencies": {
-    "@babel/parser": "^7.28.3",
+    "@babel/parser": "^7.29.0",
     "@babel/traverse": "^7.28.3",
     "@google/genai": "^1.38.0",
     "commander": "^14.0.0",
