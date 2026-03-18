@@ -3,31 +3,12 @@ import path from 'path';
 import fs from 'fs-extra';
 import { Project } from 'ts-morph';
 import { MemoryVectorStore } from '../helpers/memoryVectorStoreStub.js';
-import { GoogleGenerativeAIEmbeddings } from '@langchain/google-genai';
+import { createEmbeddings } from '../../ai/aiFactory.js';
 import { Document } from '@langchain/core/documents';
 import { PROJECT_PROFILES } from '../../config/profiles.js';
 
 // ── Embeddings Model Setup ────────────────────────────────────────────────────
 // Used to convert file summaries to vectors for later search in ExecutorNode
-function createEmbeddings() {
-  const provider = process.env.AI_PROVIDER || 'gemini';
-
-  // Currently using Gemini Embeddings (available free with API Key)
-  // If you want Groq: use OpenAIEmbeddings with Groq endpoint
-  if (provider === 'gemini' || !process.env.GROQ_API_KEY) {
-    return new GoogleGenerativeAIEmbeddings({
-      apiKey: process.env.GEMINI_API_KEY,
-      modelName: 'text-embedding-004',
-    });
-  }
-
-  // Fallback: use Gemini even with Groq (Groq has no independent embeddings)
-  return new GoogleGenerativeAIEmbeddings({
-    apiKey: process.env.GEMINI_API_KEY,
-    modelName: 'text-embedding-004',
-  });
-}
-
 // ── Main Node Function ────────────────────────────────────────────────────────
 
 /**
@@ -228,10 +209,13 @@ async function buildVectorStore(filesQueue, projectPath) {
   // Setup ts-morph Project
   const tsProject = new Project({
     skipAddingFilesFromTsConfig: true,
+    skipFileDependencyResolution: true,
     compilerOptions: {
       allowJs: true,
       jsx: 2, // React JSX
       strict: false,
+      noResolve: true,
+      isolatedModules: true,
     },
   });
 

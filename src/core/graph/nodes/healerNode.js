@@ -1,6 +1,13 @@
 // src/core/graph/nodes/healerNode.js
 import { buildFixPrompt } from '../../prompt/promptBuilder.js';
-import { cleanAIResponse } from '../../helpers/cleanAIResponse.js';
+import { z } from 'zod';
+
+const outputSchema = z.object({
+  code: z.string().describe('The complete converted React Native code'),
+  dependencies: z
+    .array(z.string())
+    .describe('List of new npm packages required'),
+});
 
 /**
  * HealerNode - Fixes code based on VerifierNode errors
@@ -33,8 +40,9 @@ export async function healerNode(state, models = {}) {
   const fixPrompt = buildFixPrompt(generatedCode, errors);
 
   try {
-    const response = await models.smartModel.sendMessage(fixPrompt);
-    const parsed = parseHealerResponse(response);
+    const structuredModel =
+      models.smartModel.withStructuredOutput(outputSchema);
+    const parsed = await structuredModel.invoke(fixPrompt);
 
     if (parsed.code && parsed.code.length > 50) {
       console.log(
@@ -53,23 +61,4 @@ export async function healerNode(state, models = {}) {
 
   console.warn(`⚠️  [HealerNode] Failed to generate fix`);
   return { healAttempts: newAttemptCount };
-}
-
-function parseHealerResponse(response) {
-  try {
-    return JSON.parse(response);
-  } catch {
-    /* Continue */
-  }
-
-  const match = response.match(/```json([\s\S]*?)```/i);
-  if (match?.[1]) {
-    try {
-      return JSON.parse(match[1]);
-    } catch {
-      /* Continue */
-    }
-  }
-
-  return { code: cleanAIResponse(response), dependencies: [] };
 }

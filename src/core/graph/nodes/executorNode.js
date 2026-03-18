@@ -1,7 +1,19 @@
 // src/core/graph/nodes/executorNode.js
+import fs from 'fs-extra';
 import path from 'path';
 import { buildPrompt } from '../../prompt/promptBuilder.js';
-import { cleanAIResponse } from '../../helpers/cleanAIResponse.js';
+import { z } from 'zod';
+
+// Define the expected output structure
+const outputSchema = z.object({
+  code: z.string().describe('The complete converted React Native code'),
+  dependencies: z
+    .array(z.string())
+    .describe('List of new npm packages required'),
+});
+
+// Helper function for sleep
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * ExecutorNode - Converts the current file using smartModel + RAG
@@ -37,6 +49,28 @@ export async function executorNode(state, models = {}) {
 
   const filePath = currentFile.relativeToProject || currentFile.filePath;
   console.log(`\n⚙️  [ExecutorNode] Converting: ${filePath}`);
+
+  // 1. 🔥 اقرأ الملف من القرص
+  const absolutePath = path.isAbsolute(filePath)
+    ? filePath
+    : path.join(state.facts?.projectPath || process.cwd(), filePath);
+
+  try {
+    currentFile.content = await fs.readFile(absolutePath, 'utf-8');
+  } catch (err) {
+    console.error(
+      `❌ [ExecutorNode] Failed to read file content for ${absolutePath}:`,
+      err
+    );
+  }
+
+  // 2. 🔥 الفحص الأمني بعد القراءة
+  if (!currentFile.content || currentFile.content.trim() === '') {
+    console.warn(
+      `⚠️  [ExecutorNode] File content is strictly empty for ${filePath}, skipping AI.`
+    );
+    return { generatedCode: '// Empty file', generatedDependencies: [] };
+  }
 
   // ── 1. Retrieve similar context from VectorStore (RAG) ────────
   let ragContext = '';
@@ -83,37 +117,72 @@ export async function executorNode(state, models = {}) {
     return { generatedCode: null, generatedDependencies: [] };
   }
 
-  try {
-    console.log('🤖 [ExecutorNode] Sending to AI...');
-    const response = await model.sendMessage(prompt);
+  // ── Smart Retry System ───────────────────────────────────────────
+  const MAX_RETRIES = 3;
+  let attempt = 0;
+  let delayMs = 2000; // Start with 2 seconds delay
 
-    // Attempt to parse response as JSON
-    const parsed = parseAIResponse(response);
-    const generatedCode = parsed.code;
-    const generatedDependencies = parsed.dependencies || [];
+  while (attempt < MAX_RETRIES) {
+    try {
+      if (attempt > 0) {
+        console.log(
+          `🔄 [ExecutorNode] Retry attempt ${attempt}/${MAX_RETRIES} for ${filePath}...`
+        );
+      } else {
+        console.log('🤖 [ExecutorNode] Sending to AI...');
+      }
 
-    if (!generatedCode) {
-      console.warn('⚠️  [ExecutorNode] AI did not produce valid code');
-      return { generatedCode: null, generatedDependencies: [] };
-    }
+      const structuredModel = model.withStructuredOutput(outputSchema);
+      const response = await structuredModel.invoke(prompt);
 
-    console.log(`✅ [ExecutorNode] Generated ${generatedCode.length} chars`);
+      const generatedCode = response.code;
+      const generatedDependencies = response.dependencies || [];
 
-    if (generatedDependencies.length > 0) {
-      console.log(
-        `📦 [ExecutorNode] Suggested dependencies: ${generatedDependencies.join(', ')}`
+      if (!generatedCode) {
+        throw new Error('AI returned empty code block');
+      }
+
+      console.log(`✅ [ExecutorNode] Generated ${generatedCode.length} chars`);
+
+      if (generatedDependencies.length > 0) {
+        console.log(
+          `📦 [ExecutorNode] Suggested dependencies: ${generatedDependencies.join(', ')}`
+        );
+      }
+
+      // Note: We don't write to disk here - that's DiskWriterNode's job
+      return {
+        generatedCode,
+        generatedDependencies,
+        errors: [], // Reset errors before Verifier
+      };
+    } catch (err) {
+      attempt++;
+      console.warn(
+        `⚠️  [ExecutorNode] AI Request Failed (Attempt ${attempt}): ${err.message}`
       );
-    }
 
-    // Note: We don't write to disk here - that's DiskWriterNode's job
-    return {
-      generatedCode,
-      generatedDependencies,
-      errors: [], // Reset errors before Verifier
-    };
-  } catch (err) {
-    console.error(`❌ [ExecutorNode] Error: ${err.message}`);
-    return { generatedCode: null, generatedDependencies: [] };
+      // If this was the last attempt, give up and exit
+      if (attempt >= MAX_RETRIES) {
+        console.error(
+          `❌ [ExecutorNode] Failed to convert ${filePath} after ${MAX_RETRIES} attempts.`
+        );
+        return {
+          generatedCode: null,
+          generatedDependencies: [],
+          errors: [
+            `Failed to generate code from AI after ${MAX_RETRIES} attempts due to API errors.`,
+          ],
+        };
+      }
+
+      // Exponential Backoff: Double the wait time with each failed attempt (2s -> 4s -> 8s)
+      console.log(
+        `⏳ [ExecutorNode] Waiting ${delayMs / 1000} seconds before retrying...`
+      );
+      await sleep(delayMs);
+      delayMs *= 2;
+    }
   }
 }
 
@@ -174,67 +243,5 @@ function buildFileContext(
 
     // Destination path
     targetPath: pathMap[filePath] || filePath,
-  };
-}
-
-/**
- * Attempts to parse AI response as JSON
- * Same logic as original aiClient.js
- */
-function parseAIResponse(aiResponse) {
-  if (!aiResponse) return { code: '', dependencies: [] };
-
-  // Attempt 1: Direct JSON
-  try {
-    return JSON.parse(aiResponse);
-  } catch {
-    /* Continue */
-  }
-
-  // Attempt 2: JSON in markdown
-  const jsonMatch = aiResponse.match(/```json([\s\S]*?)```/i);
-  const genericMatch = aiResponse.match(/```([\s\S]*?)```/);
-  const candidate = jsonMatch?.[1] || genericMatch?.[1];
-
-  if (candidate) {
-    try {
-      return JSON.parse(candidate);
-    } catch {
-      /* Continue */
-    }
-  }
-
-  // Attempt 3: regex
-  const codeMatch = aiResponse.match(
-    /"code"\s*:\s*"([\s\S]*?)"\s*(?:,\s*"dependencies"|\s*})/
-  );
-  if (codeMatch?.[1]) {
-    const depMatch = aiResponse.match(/"dependencies"\s*:\s*\[([\s\S]*?)\]/);
-    return {
-      code: codeMatch[1],
-      dependencies: depMatch?.[1]
-        ? depMatch[1]
-            .split(',')
-            .map((d) => d.trim().replace(/^['"]|['"]$/g, ''))
-            .filter(Boolean)
-        : [],
-    };
-  }
-
-  // Attempt 4: Substring
-  const start = aiResponse.indexOf('{');
-  const end = aiResponse.lastIndexOf('}');
-  if (start !== -1 && end !== -1) {
-    try {
-      return JSON.parse(aiResponse.substring(start, end + 1));
-    } catch {
-      /* Continue */
-    }
-  }
-
-  // Fallback: raw code
-  return {
-    code: cleanAIResponse(aiResponse),
-    dependencies: [],
   };
 }

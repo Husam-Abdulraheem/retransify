@@ -1,4 +1,5 @@
 // src/core/graph/nodes/dependencyResolverNode.js
+import { Project, SyntaxKind } from 'ts-morph';
 import {
   CONFLICT_MAP,
   WEB_ONLY_BLOCKLIST,
@@ -7,15 +8,15 @@ import {
 import { runSilentCommand } from '../../helpers/shell.js';
 
 /**
- * DependencyResolverNode - Scans imports of the current file and checks library compatibility
+ * DependencyResolverNode - Scans imports of the current file using AST and checks library compatibility
  *
  * Inputs from state:
- * - state.currentFile: Current file object (must contain imports)
+ * - state.currentFile: Current file object
  * - state.installedPackages: Currently installed packages
  * - state.facts.tech: Tech stack information
  *
  * Outputs to state:
- * - state.currentFile: Updated with resolved dependencies info (resolvedDeps)
+ * - state.currentFile: Updated with resolved dependencies info (resolvedDeps) and imports list
  *
  * @param {import('../state.js').GraphState} state
  * @param {{ fastModel: Session }} models
@@ -30,13 +31,28 @@ export async function dependencyResolverNode(state, models = {}) {
   }
 
   const filePath = currentFile.relativeToProject || currentFile.filePath;
+  const content = currentFile.content || '';
+
+  if (!content) {
+    console.warn('⚠️  [DependencyResolverNode] File content is empty');
+    return {};
+  }
+
   console.log(
-    `\n🔍 [DependencyResolverNode] Checking dependencies: ${filePath}`
+    `\n🔍 [DependencyResolverNode] Checking dependencies for: ${filePath}`
   );
 
-  const imports = currentFile.imports || [];
-  const installedSet = new Set(installedPackages);
+  // ── 0. Extract imports using ts-morph AST for guaranteed accuracy ──
+  const project = new Project({ useInMemoryFileSystem: true });
+  const ext = filePath.match(/\.(tsx|ts|jsx|js)$/i)?.[0] || '.tsx';
+  const sourceFile = project.createSourceFile(`temp_resolve${ext}`, content);
 
+  const importDeclarations = sourceFile.getImportDeclarations();
+  const importsList = importDeclarations.map((imp) =>
+    imp.getModuleSpecifierValue()
+  );
+
+  const installedSet = new Set(installedPackages);
   const resolvedDeps = {
     safe: [], // Safe libraries to use
     replaced: [], // Libraries replaced with RN alternative
@@ -45,9 +61,7 @@ export async function dependencyResolverNode(state, models = {}) {
     stubs: [], // Libraries needing Stub instead of installation
   };
 
-  for (const imp of imports) {
-    const source = imp.source || imp;
-
+  for (const source of importsList) {
     // Ignore relative imports (local files)
     if (source.startsWith('.') || source.startsWith('/')) continue;
 
@@ -124,9 +138,10 @@ export async function dependencyResolverNode(state, models = {}) {
     }
   }
 
-  // Add resolved dependencies info to current file
+  // Add resolved dependencies and fresh imports list to current file
   const updatedFile = {
     ...currentFile,
+    imports: importsList, // Overwrite with exact AST-based imports
     resolvedDeps,
   };
 
@@ -153,11 +168,9 @@ function isWebOnly(source) {
 }
 
 function findReplacement(source) {
-  // Direct check
   if (Object.prototype.hasOwnProperty.call(CONFLICT_MAP, source)) {
     return CONFLICT_MAP[source];
   }
-  // Scope check (scoped packages)
   const scope = source.startsWith('@')
     ? source.split('/')[0] + '/' + source.split('/')[1]
     : null;
@@ -177,9 +190,6 @@ function isKnownExpoOrRN(source) {
   );
 }
 
-/**
- * Asks fastModel for a suitable alternative for a web library
- */
 async function suggestAlternative(packageName, fastModel) {
   const prompt = `You are a React Native expert. A web package "${packageName}" needs a React Native/Expo alternative.
 Respond with JSON only:
@@ -201,9 +211,6 @@ If it works in RN already, use "keep".`;
   }
 }
 
-/**
- * Checks if the package exists in npm
- */
 async function checkNpmPackage(packageName) {
   try {
     runSilentCommand(`npm view ${packageName} name`, process.cwd(), null);
