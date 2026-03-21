@@ -15,7 +15,9 @@ export function buildPrompt(fileContext) {
     imports: fileImports = [],
     exports: fileExports = [],
     pathMap = {},
+    exactImportsMap = {},
     globalContext = {},
+    installedPackages = [],
   } = fileContext;
 
   const facts = globalContext.facts || {};
@@ -71,14 +73,15 @@ ${
 }
 
 4. DEPENDENCIES & LIBRARIES MAP:
-   - Base Expo Libraries (Pre-installed, DO NOT add to dependencies output): ${COMMON_DEPENDENCIES.join(', ')}
+   - Base Expo Libraries (Pre-installed): ${COMMON_DEPENDENCIES.join(', ')}
+   - Installed Packages in Environment: ${installedPackages.join(', ')}
+   - STRICT ENGINEERING RULE: You are forbidden to use or import ANY library outside the compiled 'Installed Packages in Environment' list. You are strictly forbidden to invent or introduce new libraries.
    - DYNAMIC LIBRARY RESOLUTION: You MUST strictly follow this translation map for known libraries:
      ${JSON.stringify(LEGACY_TO_EXPO_MAP, null, 2)}
    - FORBIDDEN LIBRARIES HANDLING: 
      Blocklist: ${WEB_ONLY_BLOCKLIST.join(', ')}
      If the original code imports ANY library from this blocklist, or ANY library built exclusively for the Web/DOM, you MUST delete the import. Reverse-engineer its logic and implement the equivalent using pure React Native/Expo features.
    - ICONS ABSTRACTION: Standardize ALL third-party icon libraries to use '@expo/vector-icons' exclusively.
-   - NATIVE COMPATIBILITY RULE: Any new library you introduce MUST be 100% compatible with Expo Managed Workflow. Do not suggest libraries requiring custom native linking.
 
 5. MOBILE UI/UX & LAYOUT ADAPTATION (CRITICAL):
    - NO CSS GRID: React Native uses Flexbox exclusively. Convert all grid layouts to semantic Flexbox structures.
@@ -95,7 +98,7 @@ ${
 `;
 
   // 4. Context & Input Code
-  // ... (احتفظ بباقي الكود contextBlock و inputCodeBlock كما هو)
+  // ... (Keep the rest of the code contextBlock and inputCodeBlock as is)
   const contextBlock = `
 -----------------------------------
 FILE CONTEXT
@@ -103,6 +106,16 @@ FILE CONTEXT
 Original File Path: ${filePath}
 Exports to maintain: ${JSON.stringify(fileExports)}
 External Web Imports: ${JSON.stringify(fileImports.filter((i) => i.source?.startsWith('.') === false).map((i) => i.source))}
+
+${
+  Object.keys(exactImportsMap).length > 0
+    ? `
+EXACT IMPORTS REMAPPING (CRITICAL):
+You MUST replace the following old relative imports with EXACTLY these new strings. DO NOT calculate distances yourself:
+${JSON.stringify(exactImportsMap, null, 2)}
+`
+    : ''
+}
 
 ${
   Object.keys(pathMap).length > 0
@@ -129,10 +142,17 @@ ${contextBlock}
 ${inputCodeBlock}
 `.trim();
 }
-export function buildFixPrompt(code, errors) {
+export function buildFixPrompt(code, errors, installedPackages = []) {
   return `
 You are a Senior React Native Developer.
-The TypeScript compiler has detected issues in the following code.
+The TypeScript compiler has detected logic or type issues in the following code.
+
+-----------------------------------
+STRICT ARCHITECTURAL CONSTRAINTS
+-----------------------------------
+- You are FORBIDDEN to use any external library outside this compiled list: [${installedPackages.join(', ')}].
+- Do NOT invent or import new npm packages. If a feature or fix requires a missing package, implement it using standard React Native APIs or a manual polyfill.
+- Output MUST be the corrected code only.
 
 -----------------------------------
 CODE CONTEXT
@@ -147,9 +167,9 @@ ${errors.join('\n')}
 -----------------------------------
 TASK
 -----------------------------------
-Fix the logic or type errors. 
-- If an import is missing, add it.
-- If a type is mismatched, adjust the interface.
+Fix the logic or type errors above. 
+- If an import is missing, ensure it exists in the constraints list before adding it. Otherwise, remove the dependency and rewrite the logic natively.
+- If a type is mismatched, adjust the interface locally.
 - Do NOT simply suppress errors with @ts-ignore unless strictly impossible to resolve.
 `;
 }

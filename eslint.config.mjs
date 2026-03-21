@@ -3,7 +3,7 @@ import eslintPluginPrettierRecommended from 'eslint-plugin-prettier/recommended'
 import globals from 'globals';
 
 export default [
-  // هذه هي الإضافة الصارمة التي ستمنع ESLint من حشر أنفه في المخرجات
+  // This is the strict plugin that will prevent ESLint from interfering with the outputs
   {
     ignores: [
       'node_modules/',
