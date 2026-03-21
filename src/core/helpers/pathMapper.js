@@ -2,6 +2,71 @@ import path from 'path';
 
 export class PathMapper {
   /**
+   * Calculates the exact new relative import paths for a file based on pathMap.
+   * @param {string} currentFilePath - Original path (relative to project)
+   * @param {string} currentFileContent - Original file content
+   * @param {Object} pathMap - Map of old paths to new paths
+   * @returns {Object} { [oldImportString]: newExactImportString }
+   */
+  static calculateExactImports(currentFilePath, currentFileContent, pathMap) {
+    const exactImports = {};
+    if (!currentFileContent || !currentFilePath || !pathMap)
+      return exactImports;
+
+    // Matches exactly: import ... from './something' or '../something'
+    // Regex explanation:
+    // (?:from|import)\s+['"](\.[^'"]+)['"] - matches `from './path'` or `import './path'`
+    const importRegex = /(?:from|import)\s+['"](\.[^'"]+)['"]/g;
+    let match;
+
+    const currentDir = path.dirname(currentFilePath).replace(/\\/g, '/'); // e.g., "src/components"
+    const newCurrentPath = pathMap[currentFilePath] || currentFilePath; // e.g., "components/Button.tsx"
+    const newCurrentDir = path.dirname(newCurrentPath).replace(/\\/g, '/'); // e.g., "components"
+
+    while ((match = importRegex.exec(currentFileContent)) !== null) {
+      const importString = match[1]; // e.g., "../utils/helpers"
+
+      // 1. Resolve absolute path of the imported file in the original structure
+      let importedProjectRelative = path.posix
+        .join(currentDir, importString)
+        .replace(/\\/g, '/');
+
+      // 2. Find the mapped new path
+      let newImportedPath = null;
+
+      if (pathMap[importedProjectRelative]) {
+        newImportedPath = pathMap[importedProjectRelative];
+      } else {
+        // Prefix match for missing extensions
+        for (const [oldPath, newPath] of Object.entries(pathMap)) {
+          const oldPathBase = oldPath.replace(/\.[^/.]+$/, '');
+          if (oldPathBase === importedProjectRelative) {
+            newImportedPath = newPath;
+            break;
+          }
+        }
+      }
+
+      // 3. Calculate the exact new relative import
+      if (newImportedPath) {
+        let exactRelative = path.posix.relative(newCurrentDir, newImportedPath);
+
+        // Remove extension from the new import string for clean TS/JS imports
+        exactRelative = exactRelative.replace(/\.[^/.]+$/, '');
+
+        // path.relative might return "components/Board", but it must be a relative import starting with "."
+        if (!exactRelative.startsWith('.')) {
+          exactRelative = './' + exactRelative;
+        }
+
+        exactImports[importString] = exactRelative;
+      }
+    }
+
+    return exactImports;
+  }
+
+  /**
    * Generates a map of old paths to new paths based on file role and conventions.
    * @param {Array<Object>} files - List of file objects from fileScanner
    * @returns {Object} { pathMap: { [oldPath]: newPath }, tree: Object }
