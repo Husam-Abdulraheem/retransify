@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import path from 'path';
 import { Project, SyntaxKind } from 'ts-morph';
 
 /**
@@ -20,40 +21,77 @@ export async function verifierNode(state) {
   console.log(`\n🔍 [VerifierNode] Verifying: ${filePath}`);
 
   const errors = [];
+  const missingPkgs = [];
 
   const project = new Project({
-    useInMemoryFileSystem: true,
-    skipFileDependencyResolution: true,
     compilerOptions: {
       allowJs: true,
-      jsx: 2,
-      noResolve: true,
-      isolatedModules: true,
+      jsx: 2, // React
+      moduleResolution: 2, // Node
+      baseUrl: state.rnProjectPath || process.cwd(),
+      skipLibCheck: true,
     },
   });
 
-  const sourceFile = project.createSourceFile(
-    `temp_verify.tsx`,
-    generatedCode,
-    { overwrite: true }
-  );
-  try {
-    // 1. فحص الـ Syntax الأساسي
-    const diagnostics = project
-      .getProgram()
-      .getSyntacticDiagnostics(sourceFile);
-    for (const diag of diagnostics) {
-      const message =
-        typeof diag.getMessageText() === 'string'
-          ? diag.getMessageText()
-          : diag.getMessageText().getMessageText();
-      errors.push(
-        `[TS${diag.getCode()}] Line ${diag.getLineNumber()}: ${message}`
-      );
-    }
+  const originalPath =
+    currentFile?.relativeToProject || `temp_${Date.now()}.tsx`;
+  // Use the new path if it exists in pathMap, otherwise use the original path
+  const targetPath = state.pathMap?.[originalPath] || originalPath;
 
-    // 🔥 التعديل الجوهري: لا تقم بفحص الـ AST بحثاً عن (div) وغيرها
-    // إلا إذا كان الكود سليماً تماماً من ناحية الـ Syntax
+  const tempFilePath = path.join(
+    state.rnProjectPath || process.cwd(),
+    targetPath
+  );
+  const sourceFile = project.createSourceFile(tempFilePath, generatedCode, {
+    overwrite: true,
+  });
+  try {
+    // 1. Get Pre Emit Diagnostics to capture both Syntax and Semantic errors (like missing modules)
+    const diagnostics = sourceFile.getPreEmitDiagnostics();
+    const logicErrors = [];
+    const currentAttempts = state.installAttempts || 0;
+
+    diagnostics.forEach((diag) => {
+      const code = diag.getCode();
+      const messageObj = diag.getMessageText();
+      const message =
+        typeof messageObj === 'string'
+          ? messageObj
+          : messageObj && typeof messageObj.getMessageText === 'function'
+            ? messageObj.getMessageText()
+            : String(messageObj);
+
+      // Architectural condition: if the error is a missing library, and we haven't exceeded two attempts
+      if (code === 2307 && currentAttempts < 2) {
+        const match =
+          typeof message === 'string'
+            ? message.match(/Cannot find module '([^']+)'/) ||
+              message.match(/module '([^']+)'/)
+            : null;
+        if (match && match[1]) {
+          const rawName = match[1];
+
+          // Completely ignore relative paths (Local Imports)
+          if (rawName.startsWith('.') || rawName.startsWith('/')) return;
+
+          // Clean library name (support Scoped Packages)
+          const pkgName = rawName.startsWith('@')
+            ? rawName.split('/').slice(0, 2).join('/')
+            : rawName.split('/')[0];
+
+          missingPkgs.push(pkgName);
+        }
+      } else {
+        // Any other error, or if we exceeded attempts, send it as a logic error to Healer for AI to solve
+        let errorMsg = `[TS${code}] Line ${diag.getLineNumber()}: ${typeof message === 'object' ? JSON.stringify(message) : message}`;
+        logicErrors.push(errorMsg);
+      }
+    });
+
+    errors.push(...logicErrors);
+
+    // 🔥 Fundamental change: Do not scan AST for (div) etc.
+    // Unless the code is completely sound syntactically
     if (errors.length === 0) {
       const astErrors = analyzeASTForErrors(sourceFile, filePath);
       errors.push(...astErrors);
@@ -81,6 +119,7 @@ export async function verifierNode(state) {
 
   return {
     errors,
+    missingDependencies: [...new Set(missingPkgs)],
     lastErrorHash: errorHash,
   };
 }
@@ -149,7 +188,7 @@ function analyzeASTForErrors(sourceFile, filePath) {
     if (webAPIs.includes(text)) {
       const parent = id.getParent();
 
-      // 🔥 تم إصلاح المقارنة هنا: نقارن الـ Text بدلاً من الكائنات نفسها
+      // 🔥 The comparison was fixed here: compare Text instead of the objects themselves
       if (
         parent &&
         parent.getKind() === SyntaxKind.PropertyAccessExpression &&

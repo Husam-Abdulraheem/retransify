@@ -2,14 +2,12 @@
 import fs from 'fs-extra';
 import path from 'path';
 import { buildPrompt } from '../../prompt/promptBuilder.js';
+import { PathMapper } from '../../helpers/pathMapper.js';
 import { z } from 'zod';
 
 // Define the expected output structure
 const outputSchema = z.object({
   code: z.string().describe('The complete converted React Native code'),
-  dependencies: z
-    .array(z.string())
-    .describe('List of new npm packages required'),
 });
 
 // Helper function for sleep
@@ -27,7 +25,6 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  *
  * Outputs to state:
  * - state.generatedCode: Converted code (not written to disk here)
- * - state.generatedDependencies: Dependencies suggested by AI
  *
  * @param {import('../state.js').GraphState} state
  * @param {{ smartModel: Session }} models
@@ -44,13 +41,13 @@ export async function executorNode(state, models = {}) {
 
   if (!currentFile) {
     console.warn('⚠️  [ExecutorNode] No current file found');
-    return { generatedCode: null, generatedDependencies: [] };
+    return { generatedCode: null };
   }
 
   const filePath = currentFile.relativeToProject || currentFile.filePath;
   console.log(`\n⚙️  [ExecutorNode] Converting: ${filePath}`);
 
-  // 1. 🔥 اقرأ الملف من القرص
+  // 1. 🔥 Read the file from disk
   const absolutePath = path.isAbsolute(filePath)
     ? filePath
     : path.join(state.facts?.projectPath || process.cwd(), filePath);
@@ -64,12 +61,12 @@ export async function executorNode(state, models = {}) {
     );
   }
 
-  // 2. 🔥 الفحص الأمني بعد القراءة
+  // 2. 🔥 Security check after reading
   if (!currentFile.content || currentFile.content.trim() === '') {
     console.warn(
       `⚠️  [ExecutorNode] File content is strictly empty for ${filePath}, skipping AI.`
     );
-    return { generatedCode: '// Empty file', generatedDependencies: [] };
+    return { generatedCode: '// Empty file' };
   }
 
   // ── 1. Retrieve similar context from VectorStore (RAG) ────────
@@ -100,12 +97,18 @@ export async function executorNode(state, models = {}) {
   }
 
   // ── 2. Build file context for Prompt ──────────────────────────
+  const exactImportsMap = PathMapper.calculateExactImports(
+    filePath,
+    currentFile.content,
+    pathMap
+  );
   const fileContext = buildFileContext(
     currentFile,
     pathMap,
     facts,
     installedPackages,
-    ragContext
+    ragContext,
+    exactImportsMap
   );
 
   // ── 3. Build Prompt ───────────────────────────────────────────
@@ -114,7 +117,7 @@ export async function executorNode(state, models = {}) {
   const model = models.smartModel;
   if (!model) {
     console.error('❌ [ExecutorNode] No smartModel found');
-    return { generatedCode: null, generatedDependencies: [] };
+    return { generatedCode: null };
   }
 
   // ── Smart Retry System ───────────────────────────────────────────
@@ -136,7 +139,6 @@ export async function executorNode(state, models = {}) {
       const response = await structuredModel.invoke(prompt);
 
       const generatedCode = response.code;
-      const generatedDependencies = response.dependencies || [];
 
       if (!generatedCode) {
         throw new Error('AI returned empty code block');
@@ -144,16 +146,9 @@ export async function executorNode(state, models = {}) {
 
       console.log(`✅ [ExecutorNode] Generated ${generatedCode.length} chars`);
 
-      if (generatedDependencies.length > 0) {
-        console.log(
-          `📦 [ExecutorNode] Suggested dependencies: ${generatedDependencies.join(', ')}`
-        );
-      }
-
       // Note: We don't write to disk here - that's DiskWriterNode's job
       return {
         generatedCode,
-        generatedDependencies,
         errors: [], // Reset errors before Verifier
       };
     } catch (err) {
@@ -169,7 +164,6 @@ export async function executorNode(state, models = {}) {
         );
         return {
           generatedCode: null,
-          generatedDependencies: [],
           errors: [
             `Failed to generate code from AI after ${MAX_RETRIES} attempts due to API errors.`,
           ],
@@ -197,7 +191,8 @@ function buildFileContext(
   pathMap,
   facts,
   installedPackages,
-  ragContext
+  ragContext,
+  exactImportsMap
 ) {
   const filePath = currentFile.relativeToProject || currentFile.filePath;
   const baseName = path.basename(filePath);
@@ -230,6 +225,7 @@ function buildFileContext(
       decisions: { pathMap },
     },
     pathMap,
+    exactImportsMap,
     installedPackages,
 
     // RAG Context (New)

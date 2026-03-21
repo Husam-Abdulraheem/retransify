@@ -273,7 +273,7 @@ async function buildVectorStore(filesQueue, projectPath) {
  * Extracts a single file's summary using ts-morph:
  * Interfaces, Props, Hooks, Exported Functions
  *
- * @param {Project} tsProject - مثيل ts-morph Project
+ * @param {Project} tsProject - ts-morph Project instance
  * @param {string} absolutePath
  * @param {string} relativePath
  * @returns {string|null} Summary text

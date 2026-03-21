@@ -3,10 +3,7 @@ import { buildFixPrompt } from '../../prompt/promptBuilder.js';
 import { z } from 'zod';
 
 const outputSchema = z.object({
-  code: z.string().describe('The complete converted React Native code'),
-  dependencies: z
-    .array(z.string())
-    .describe('List of new npm packages required'),
+  code: z.string().describe('The complete corrected React Native code'),
 });
 
 /**
@@ -20,7 +17,14 @@ const outputSchema = z.object({
  * @returns {Partial<import('../state.js').GraphState>}
  */
 export async function healerNode(state, models = {}) {
-  const { generatedCode, errors, healAttempts, currentFile } = state;
+  // Fetch installedPackages from the state
+  const {
+    generatedCode,
+    errors,
+    healAttempts,
+    currentFile,
+    installedPackages = [],
+  } = state;
 
   const filePath =
     currentFile?.relativeToProject || currentFile?.filePath || 'unknown';
@@ -36,8 +40,8 @@ export async function healerNode(state, models = {}) {
     return { healAttempts: newAttemptCount };
   }
 
-  // Build Fix Prompt
-  const fixPrompt = buildFixPrompt(generatedCode, errors);
+  // Pass installed libraries to restrict the model
+  const fixPrompt = buildFixPrompt(generatedCode, errors, installedPackages);
 
   try {
     const structuredModel =
@@ -50,9 +54,9 @@ export async function healerNode(state, models = {}) {
       );
       return {
         generatedCode: parsed.code,
-        generatedDependencies: parsed.dependencies || [],
+        // generatedDependencies has been completely removed
         healAttempts: newAttemptCount,
-        errors: [], // Reset errors so VerifierNode can re-check
+        errors: [], // Reset errors so Verifier can re-check them
       };
     }
   } catch (err) {

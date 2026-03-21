@@ -85,5 +85,7 @@ export async function filePickerNode(state) {
     generatedCode: null, // Reset previous code
     generatedDependencies: [], // Reset previous dependencies
     lastErrorHash: null, // Reset error hash
+    installAttempts: 0, // Reset auto-installer circuit breaker
+    missingDependencies: [], // Reset missing dependencies array
   };
 }
