@@ -53,12 +53,6 @@ export const GraphState = Annotation.Root({
     default: () => null,
   }),
 
-  // Dependencies suggested by AI for current file
-  generatedDependencies: Annotation({
-    reducer: (_, x) => x,
-    default: () => [],
-  }),
-
   // ── RAG / VectorStore ────────────────────────────────────────
   // MemoryVectorStore instance (populated in AnalyzerNode)
   vectorStore: Annotation({
@@ -110,6 +104,18 @@ export const GraphState = Annotation.Root({
     default: () => [],
   }),
 
+  // Missing dependencies to be auto-installed
+  missingDependencies: Annotation({
+    reducer: (_, x) => x,
+    default: () => [],
+  }),
+
+  // Number of installation attempts per file
+  installAttempts: Annotation({
+    reducer: (_, x) => x,
+    default: () => 0,
+  }),
+
   // ── Dependency Management ────────────────────────────────────
   // DependencyManager instance (populated at start of workflow)
   dependencyManager: Annotation({
@@ -136,10 +142,10 @@ export const GraphState = Annotation.Root({
 export const NODE_NAMES = {
   ANALYZER: 'analyzerNode',
   PLANNER: 'plannerNode',
-  DEPENDENCY_RESOLVER: 'dependencyResolverNode',
   EXECUTOR: 'executorNode',
   VERIFIER: 'verifierNode',
   HEALER: 'healerNode',
+  AUTO_INSTALLER: 'autoInstallerNode',
   CONTEXT_UPDATER: 'contextUpdaterNode',
   DISK_WRITER: 'diskWriterNode',
   FILE_PICKER: 'filePickerNode', // Helper node: pulls next file from filesQueue

@@ -3,10 +3,10 @@ import { StateGraph, END } from '@langchain/langgraph';
 import { GraphState, NODE_NAMES, MAX_HEAL_ATTEMPTS } from './state.js';
 import { analyzerNode } from './nodes/analyzerNode.js';
 import { plannerNode } from './nodes/plannerNode.js';
-import { dependencyResolverNode } from './nodes/dependencyResolverNode.js';
 import { executorNode } from './nodes/executorNode.js';
 import { verifierNode } from './nodes/verifierNode.js';
 import { healerNode } from './nodes/healerNode.js';
+import { autoInstallerNode } from './nodes/autoInstallerNode.js';
 import { contextUpdaterNode } from './nodes/contextUpdaterNode.js';
 import { diskWriterNode } from './nodes/diskWriterNode.js';
 import { filePickerNode } from './nodes/filePickerNode.js';
@@ -37,15 +37,15 @@ function buildWorkflow(models) {
 
   workflow.addNode(NODE_NAMES.FILE_PICKER, (state) => filePickerNode(state));
 
-  workflow.addNode(NODE_NAMES.DEPENDENCY_RESOLVER, (state) =>
-    dependencyResolverNode(state, models)
-  );
-
   workflow.addNode(NODE_NAMES.EXECUTOR, (state) => executorNode(state, models));
 
   workflow.addNode(NODE_NAMES.VERIFIER, (state) => verifierNode(state));
 
   workflow.addNode(NODE_NAMES.HEALER, (state) => healerNode(state, models));
+
+  workflow.addNode(NODE_NAMES.AUTO_INSTALLER, (state) =>
+    autoInstallerNode(state)
+  );
 
   workflow.addNode(NODE_NAMES.CONTEXT_UPDATER, (state) =>
     contextUpdaterNode(state)
@@ -61,12 +61,10 @@ function buildWorkflow(models) {
 
   // After FilePicker -> check if there is a file to process
   workflow.addConditionalEdges(NODE_NAMES.FILE_PICKER, shouldProcessFile, {
-    process: NODE_NAMES.DEPENDENCY_RESOLVER,
+    process: NODE_NAMES.EXECUTOR,
     skip: NODE_NAMES.FILE_PICKER, // Skipped file -> fetch next file
     done: END, // Empty list -> done
   });
-
-  workflow.addEdge(NODE_NAMES.DEPENDENCY_RESOLVER, NODE_NAMES.EXECUTOR);
 
   // After Executor -> check if generation succeeded
   workflow.addConditionalEdges(NODE_NAMES.EXECUTOR, didExecutorSucceed, {
@@ -76,6 +74,7 @@ function buildWorkflow(models) {
 
   // After Verifier -> either Healer (if failed) or ContextUpdater (if succeeded)
   workflow.addConditionalEdges(NODE_NAMES.VERIFIER, shouldHealOrContinue, {
+    install: NODE_NAMES.AUTO_INSTALLER,
     heal: NODE_NAMES.HEALER,
     continue: NODE_NAMES.CONTEXT_UPDATER,
     giveUp: NODE_NAMES.DISK_WRITER, // Exceeded MAX_HEAL_ATTEMPTS -> write what you have
@@ -83,6 +82,9 @@ function buildWorkflow(models) {
 
   // After Healer -> always returns to Verifier to check the fix
   workflow.addEdge(NODE_NAMES.HEALER, NODE_NAMES.VERIFIER);
+
+  // After Auto Installer -> always returns to Verifier
+  workflow.addEdge(NODE_NAMES.AUTO_INSTALLER, NODE_NAMES.VERIFIER);
 
   workflow.addEdge(NODE_NAMES.CONTEXT_UPDATER, NODE_NAMES.DISK_WRITER);
 
@@ -127,10 +129,14 @@ function didExecutorSucceed(state) {
 }
 
 /**
- * Should heal the code or continue?
+ * Should heal the code or continue, or install packages?
  */
 function shouldHealOrContinue(state) {
-  const { errors = [], healAttempts = 0 } = state;
+  const { errors = [], missingDependencies = [], healAttempts = 0 } = state;
+
+  if (missingDependencies.length > 0) {
+    return 'install';
+  }
 
   if (errors.length === 0) {
     return 'continue'; // No errors -> continue
@@ -183,6 +189,13 @@ export async function runMigrationWorkflow(
     dependencyManager
   );
 
+  // ── 3.5. Phase 1: Pre-flight Dependency Resolution ────────────────
+  console.log(
+    '\n📦 [Workflow] Executing Project-Wide Dependency Resolution (Phase 1)...'
+  );
+  await dependencyManager.scanAndResolve(filesQueue, models.fastModel);
+  await dependencyManager.installAll(rnProjectPath);
+
   // ── 4. Read Installed Packages ───────────────────────────────────
   let installedPackages = [];
   try {
@@ -230,10 +243,6 @@ export async function runMigrationWorkflow(
       // Avoid timeout on large projects
       recursionLimit: Math.max(filesQueue.length * 10, 100),
     });
-
-    // ── 7. Install All Dependencies at Once ───────────────────────
-    console.log('\n📦 [Workflow] Installing all dependencies...');
-    await dependencyManager.installAll(rnProjectPath);
 
     // ── 8. Final Project Verification with TypeScript ──────────────────
     console.log('\n🔍 [Workflow] Final project verification...');

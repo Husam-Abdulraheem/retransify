@@ -1,7 +1,13 @@
 import path from 'path';
 import fs from 'fs-extra';
+import { Project } from 'ts-morph';
 import { runSilentCommand } from './shell.js';
-import { CONFLICT_MAP, LEGACY_TO_EXPO_MAP } from '../config/libraryRules.js';
+import {
+  CONFLICT_MAP,
+  LEGACY_TO_EXPO_MAP,
+  WEB_ONLY_BLOCKLIST,
+  COMMON_DEPENDENCIES,
+} from '../config/libraryRules.js';
 import { setupNativeWind } from '../services/nativeWriter.js';
 import { autoConfigureBabel } from '../utils/babelManager.js';
 import { Doctor } from '../utils/doctor.js';
@@ -94,6 +100,116 @@ export class DependencyManager {
   }
 
   /**
+   * Scans all files in the project for imports, resolves them, and queues the necessary packages.
+   * @param {Array} filesQueue
+   * @param {Object} fastModel
+   */
+  async scanAndResolve(filesQueue, fastModel) {
+    if (!filesQueue || filesQueue.length === 0) return;
+
+    console.log(
+      `\n🔍 [DependencyManager] Scanning ${filesQueue.length} files for dependencies...`
+    );
+
+    const project = new Project({ useInMemoryFileSystem: true });
+
+    for (const file of filesQueue) {
+      if (!file.content) {
+        try {
+          const absolutePath = path.isAbsolute(file.filePath)
+            ? file.filePath
+            : path.join(process.cwd(), file.filePath);
+          file.content = await fs.readFile(absolutePath, 'utf-8');
+        } catch {
+          file.content = '';
+        }
+      }
+
+      if (!file.content) continue;
+
+      const ext = file.filePath.match(/\.(tsx|ts|jsx|js)$/i)?.[0] || '.tsx';
+      const sourceFile = project.createSourceFile(
+        `temp_resolve_${Date.now()}${ext}`,
+        file.content
+      );
+
+      const importDeclarations = sourceFile.getImportDeclarations();
+      const importsList = importDeclarations.map((imp) =>
+        imp.getModuleSpecifierValue()
+      );
+
+      file.imports = importsList;
+      file.resolvedDeps = {
+        safe: [],
+        replaced: [],
+        blocked: [],
+        unknown: [],
+        stubs: [],
+      };
+
+      for (const source of importsList) {
+        if (source.startsWith('.') || source.startsWith('/')) continue;
+        if (isCorePkg(source)) continue;
+
+        if (isWebOnly(source)) {
+          console.log(`🛡️  [DependencyManager] Blocked (Web Only): ${source}`);
+          file.resolvedDeps.blocked.push(source);
+          continue;
+        }
+
+        let cleanPkg = source.startsWith('@')
+          ? '@' + source.split('@')[1]
+          : source.split('@')[0];
+
+        if (
+          this.conflictMap[cleanPkg] !== undefined ||
+          this.ignored.has(cleanPkg) ||
+          isKnownExpoOrRN(cleanPkg)
+        ) {
+          this.add([cleanPkg]);
+          file.resolvedDeps.safe.push(cleanPkg);
+          continue;
+        }
+
+        console.log(`❓ [DependencyManager] Unknown library: ${cleanPkg}`);
+
+        if (fastModel) {
+          const suggestion = await suggestAlternative(cleanPkg, fastModel);
+          if (suggestion.action === 'use_expo' && suggestion.package) {
+            this.conflictMap[cleanPkg] = suggestion.package;
+            this.add([suggestion.package]);
+            file.resolvedDeps.replaced.push({
+              original: cleanPkg,
+              replacement: suggestion.package,
+            });
+            console.log(
+              `💡 [DependencyManager] AI Suggestion: ${cleanPkg} -> ${suggestion.package}`
+            );
+          } else if (suggestion.action === 'stub') {
+            file.resolvedDeps.stubs.push(cleanPkg);
+            this.conflictMap[cleanPkg] = null;
+            console.log(
+              `🔧 [DependencyManager] Will create Stub for: ${cleanPkg}`
+            );
+          } else {
+            const exists = await checkNpmPackage(cleanPkg);
+            if (exists) {
+              this.add([cleanPkg]);
+              file.resolvedDeps.safe.push(cleanPkg);
+              this.conflictMap[cleanPkg] = cleanPkg;
+            } else {
+              file.resolvedDeps.stubs.push(cleanPkg);
+              this.conflictMap[cleanPkg] = null;
+            }
+          }
+        } else {
+          this.add([cleanPkg]);
+        }
+      }
+    }
+  }
+
+  /**
    * The ONLY method authorized to trigger installation.
    * Installs all pending packages in a single "One Shot" batch.
    * @param {string} projectPath
@@ -165,8 +281,65 @@ export class DependencyManager {
 
       console.log('🚑 Initiating Emergency Doctor Protocol...');
       await Doctor.fixDependencies(projectPath, toInstall);
-      // If Doctor throws, it bubbles up. If it returns, we assume fixed.
       this.pendingPackages.clear();
     }
+  }
+}
+
+// ── Helper Functions ─────────────────────────────────────────────────────────
+
+function isCorePkg(source) {
+  const corePkgs = ['react', 'react-native', 'react-dom', 'expo'];
+  return corePkgs.some((p) => source === p || source.startsWith(`${p}/`));
+}
+
+function isWebOnly(source) {
+  return WEB_ONLY_BLOCKLIST.some(
+    (blocked) => source === blocked || source.startsWith(`${blocked}/`)
+  );
+}
+
+function isKnownExpoOrRN(source) {
+  return (
+    source.startsWith('expo-') ||
+    source.startsWith('@expo/') ||
+    source.startsWith('react-native-') ||
+    source.startsWith('@react-navigation/') ||
+    COMMON_DEPENDENCIES.includes(source)
+  );
+}
+
+async function suggestAlternative(packageName, fastModel) {
+  const prompt = `You are a React Native expert. A web package "${packageName}" needs a React Native/Expo alternative.
+Respond with JSON only:
+{
+  "action": "use_expo" | "stub" | "keep",
+  "package": "expo-package-name or null",
+  "reason": "brief reason"
+}
+If there's a good Expo/RN alternative, use "use_expo".
+If no alternative exists and it's UI-only, use "stub".
+If it works in RN already, use "keep".`;
+
+  try {
+    const response = await fastModel.invoke(prompt);
+    let text = response.content || response;
+    if (typeof text === 'string') {
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) text = jsonMatch[0];
+      return JSON.parse(text);
+    }
+    return { action: 'keep', package: null };
+  } catch (e) {
+    return { action: 'keep', package: null };
+  }
+}
+
+async function checkNpmPackage(packageName) {
+  try {
+    runSilentCommand(`npm view ${packageName} name`, process.cwd(), null);
+    return true;
+  } catch {
+    return false;
   }
 }
