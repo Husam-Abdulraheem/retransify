@@ -1,4 +1,6 @@
 // src/core/graph/nodes/plannerNode.js
+import { Project } from 'ts-morph';
+import path from 'path';
 import { PathMapper } from '../../helpers/pathMapper.js';
 
 /**
@@ -47,37 +49,59 @@ export async function plannerNode(state) {
   };
 }
 
-// ── Build simple dependency graph ─────────────────────────────────────────────
+// ── Build AST-based dependency graph using ts-morph ───────────────────────────
 
-/**
- * Builds a simple dependency graph based on imports in each file
- * @param {Array} filesQueue
- * @returns {Object} { filePath: [dependencyFilePaths] }
- */
 function buildDependencyGraph(filesQueue) {
   const graph = {};
-  const filePathSet = new Set(
-    filesQueue.map((f) => f.relativeToProject || f.filePath)
-  );
+  const filePathSet = new Set(filesQueue.map((f) => f.relativeToProject));
 
+  // 1. Initialize a very lightweight ts-morph project in memory
+  const project = new Project({
+    skipAddingFilesFromTsConfig: true,
+    // No need for deep dependency resolution here, just a quick structural (AST) scan
+    skipFileDependencyResolution: true,
+  });
+
+  // 2. Add files to the project and initialize the graph tree
   for (const fileObj of filesQueue) {
-    const filePath = fileObj.relativeToProject || fileObj.filePath;
-    graph[filePath] = [];
+    graph[fileObj.relativeToProject] = [];
+    try {
+      project.addSourceFileAtPath(fileObj.absolutePath);
+    } catch {
+      console.warn(
+        `⚠️ [PlannerNode] Failed to load file into ts-morph: ${fileObj.absolutePath}`
+      );
+    }
+  }
 
-    // Use imports extracted from FileScanner if available
-    const imports = fileObj.imports || [];
+  // 3. Extract imports with high precision via the AST
+  for (const fileObj of filesQueue) {
+    const filePath = fileObj.relativeToProject;
+    const sourceFile = project.getSourceFile(fileObj.absolutePath);
 
-    for (const imp of imports) {
-      const source = imp.source || imp;
-      // Only relative imports matter (local files)
-      if (source.startsWith('.')) {
-        // Attempt to find imported file in files list
+    if (!sourceFile) continue;
+
+    // Get all imports and exports
+    const importDeclarations = sourceFile.getImportDeclarations();
+    const exportDeclarations = sourceFile.getExportDeclarations();
+
+    // Extract Module Specifiers like './components/Button'
+    const moduleSpecifiers = [
+      ...importDeclarations.map((decl) => decl.getModuleSpecifierValue()),
+      ...exportDeclarations
+        .map((decl) => decl.getModuleSpecifierValue())
+        .filter(Boolean),
+    ];
+
+    for (const source of moduleSpecifiers) {
+      if (source && source.startsWith('.')) {
         const resolvedPath = resolveRelativeImport(
           filePath,
           source,
           filePathSet
         );
         if (resolvedPath) {
+          // Add dependency: this file depends on resolvedPath
           graph[filePath].push(resolvedPath);
         }
       }
@@ -88,30 +112,26 @@ function buildDependencyGraph(filesQueue) {
 }
 
 /**
- * Attempts to resolve relative import path
+ * Attempts to resolve relative import path accurately using path.posix
  */
 function resolveRelativeImport(currentFile, importSource, filePathSet) {
-  const parts = currentFile.split('/');
-  parts.pop(); // Remove current file name
-  const dir = parts.join('/');
+  const dir = path.posix.dirname(currentFile);
+  const resolvedRaw = path.posix.join(dir, importSource);
 
   const extensions = ['.js', '.jsx', '.ts', '.tsx', '.mjs'];
+
   const candidates = [
-    `${dir}/${importSource}`,
-    ...extensions.map((ext) => `${dir}/${importSource}${ext}`),
-    ...extensions.map((ext) => `${dir}/${importSource}/index${ext}`),
+    resolvedRaw,
+    ...extensions.map((ext) => `${resolvedRaw}${ext}`),
+    ...extensions.map((ext) => `${resolvedRaw}/index${ext}`),
   ];
 
   for (const candidate of candidates) {
-    const normalized = candidate
-      .replace(/\/\.\//g, '/')
-      .replace(/\/[^/]+\/\.\.\//g, '/');
-    if (filePathSet.has(normalized)) return normalized;
+    if (filePathSet.has(candidate)) return candidate;
   }
 
   return null;
 }
-
 // ── Topological Sort ──────────────────────────────────────────────────────────
 
 /**
