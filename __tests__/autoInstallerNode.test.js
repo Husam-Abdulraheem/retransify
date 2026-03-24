@@ -29,6 +29,7 @@ describe('autoInstallerNode', () => {
     expect(result).toEqual({
       missingDependencies: [],
       installAttempts: 1,
+      installedPackages: ['lucide-react-native', '@react-navigation/native'],
     });
   });
 
@@ -49,7 +50,7 @@ describe('autoInstallerNode', () => {
     expect(result.errors).toContain('Previous error');
     expect(
       result.errors.some((err) =>
-        err.includes('Failed to auto-install package: fake-pkg')
+        err.includes("Failed to auto-install package: 'fake-pkg'")
       )
     ).toBeTruthy();
   });
@@ -63,6 +64,9 @@ describe('autoInstallerNode', () => {
     const result = await autoInstallerNode(state);
 
     expect(childProcess.execSync).not.toHaveBeenCalled();
-    expect(result).toEqual({ installAttempts: 2 });
+    expect(result).toEqual({
+      installAttempts: 2,
+      missingDependencies: [],
+    });
   });
 });
