@@ -11,6 +11,13 @@ import {
 import { setupNativeWind } from '../services/nativeWriter.js';
 import { autoConfigureBabel } from '../utils/babelManager.js';
 import { Doctor } from '../utils/doctor.js';
+import {
+  printSubStep,
+  printSubStepLast,
+  printError,
+  startSubSpinner,
+  stopSpinner,
+} from '../utils/ui.js';
 
 export class DependencyManager {
   /**
@@ -106,10 +113,7 @@ export class DependencyManager {
    */
   async scanAndResolve(filesQueue, fastModel) {
     if (!filesQueue || filesQueue.length === 0) return;
-
-    console.log(
-      `\n🔍 [DependencyManager] Scanning ${filesQueue.length} files for dependencies...`
-    );
+    printSubStep(`Scanning ${filesQueue.length} files for dependencies...`);
 
     const project = new Project({ useInMemoryFileSystem: true });
 
@@ -152,7 +156,6 @@ export class DependencyManager {
         if (isCorePkg(source)) continue;
 
         if (isWebOnly(source)) {
-          console.log(`🛡️  [DependencyManager] Blocked (Web Only): ${source}`);
           file.resolvedDeps.blocked.push(source);
           continue;
         }
@@ -171,8 +174,7 @@ export class DependencyManager {
           continue;
         }
 
-        console.log(`❓ [DependencyManager] Unknown library: ${cleanPkg}`);
-
+        // unknown — check with AI or npm
         if (fastModel) {
           const suggestion = await suggestAlternative(cleanPkg, fastModel);
           if (suggestion.action === 'use_expo' && suggestion.package) {
@@ -182,15 +184,9 @@ export class DependencyManager {
               original: cleanPkg,
               replacement: suggestion.package,
             });
-            console.log(
-              `💡 [DependencyManager] AI Suggestion: ${cleanPkg} -> ${suggestion.package}`
-            );
+            // AI suggested an expo alternative
           } else if (suggestion.action === 'stub') {
-            file.resolvedDeps.stubs.push(cleanPkg);
             this.conflictMap[cleanPkg] = null;
-            console.log(
-              `🔧 [DependencyManager] Will create Stub for: ${cleanPkg}`
-            );
           } else {
             const exists = await checkNpmPackage(cleanPkg);
             if (exists) {
@@ -216,15 +212,13 @@ export class DependencyManager {
    */
   async installAll(projectPath) {
     if (this.pendingPackages.size === 0) {
-      console.log('📦 No new dependencies to install.');
+      printSubStepLast('All dependencies already in package.json');
       return;
     }
 
     // Convert Set to Array
     const toInstall = Array.from(this.pendingPackages);
-    console.log(
-      `📦 Preparing to install ${toInstall.length} collected packages...`
-    );
+    printSubStep(`Batch installing ${toInstall.length} packages...`);
 
     try {
       // 1. Check if already installed (Optimistic Check)
@@ -242,9 +236,7 @@ export class DependencyManager {
       const missingPackages = toInstall.filter((p) => !currentDeps[p]);
 
       if (missingPackages.length === 0) {
-        console.log(
-          '✅ All packages are already in package.json. Skipping install.'
-        );
+        printSubStepLast('All packages already installed. Skipping.');
         this.pendingPackages.clear();
         return;
       }
@@ -252,13 +244,15 @@ export class DependencyManager {
       const installCmd = `npx expo install ${missingPackages.join(' ')}`;
 
       // 2. EXECUTE THE ONE SHOT INSTALL
+      startSubSpinner(`Installing: ${missingPackages.length} packages...`);
       await runSilentCommand(
         installCmd,
         projectPath,
-        `📦 Installing: ${missingPackages.length} packages (Batch)...`
+        null // Message handled by spinner
       );
+      stopSpinner();
 
-      console.log('✅ Batch installation complete.');
+      printSubStepLast('Batch installation complete ✔');
 
       // 3. Post-Install Configs (NativeWind, Babel)
       // We can trigger these here or rely on Executor.
@@ -272,14 +266,7 @@ export class DependencyManager {
 
       this.pendingPackages.clear();
     } catch {
-      console.error('❌ Batch install failed.');
-
-      // [FAIL-FAST STRATEGY]
-      // Instead of retrying randomly, we delegate to Key Doctor Strategy.
-      // We throw so the Executor knows we failed, OR we call Doctor here.
-      // The plan says: "Implement Fail-Fast Doctor Strategy... Integration: Add logic to be invoked specifically if Phase 2 fails."
-
-      console.log('🚑 Initiating Emergency Doctor Protocol...');
+      printError('Batch install failed. Initiating Doctor Protocol...');
       await Doctor.fixDependencies(projectPath, toInstall);
       this.pendingPackages.clear();
     }

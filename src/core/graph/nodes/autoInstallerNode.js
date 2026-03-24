@@ -1,4 +1,5 @@
 import { execSync } from 'child_process';
+import { printSubStep, printWarning, printError } from '../../utils/ui.js';
 
 export async function autoInstallerNode(state) {
   const {
@@ -14,9 +15,7 @@ export async function autoInstallerNode(state) {
     currentFile?.relativeToProject || currentFile?.filePath || 'unknown';
 
   if (installAttempts >= 2) {
-    console.warn(
-      `🛑 [AutoInstaller] Circuit breaker activated for ${filePath}. Exceeded max attempts.`
-    );
+    printWarning(`Auto-installer circuit breaker activated for ${filePath}`);
     const newErrors = missingDependencies.map(
       (pkg) =>
         `Failed to auto-install package: '${pkg}'. It either does not exist, lacks TypeScript definitions, or is a hallucination. YOU MUST REMOVE OR REPLACE THIS IMPORT.`
@@ -33,9 +32,7 @@ export async function autoInstallerNode(state) {
   }
 
   const packagesToInstall = missingDependencies.join(' ');
-  console.log(
-    `\n📦 [AutoInstaller] Dynamically installing via Expo: ${packagesToInstall}`
-  );
+  printSubStep(`Installing: ${packagesToInstall}...`, 1);
 
   // 🔥 Magic solution: clean environment variables from parent npm traces
   const cleanEnv = { ...process.env };
@@ -50,15 +47,13 @@ export async function autoInstallerNode(state) {
     // 🔙 Strict fallback to expo tool to ensure version compatibility
     execSync(`npx expo install ${packagesToInstall}`, {
       cwd: rnProjectPath || process.cwd(),
-      stdio: 'inherit',
-      env: cleanEnv, // Inject clean environment here
+      stdio: 'ignore', // silence expo/npm output
+      env: cleanEnv,
     });
-    console.log(`✅ [AutoInstaller] Successfully installed dependencies.`);
+    printSubStep(`Installed successfully ✔`, 1, true);
     success = true;
   } catch {
-    console.error(
-      `❌ [AutoInstaller] Failed to install dependencies via Expo.`
-    );
+    printError('Auto-installer: expo install failed');
   }
 
   return {

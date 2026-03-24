@@ -3,6 +3,15 @@ import fs from 'fs-extra';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
 import { COMMON_DEPENDENCIES } from '../config/libraryRules.js';
+import {
+  printSubStep,
+  printSubStepLast,
+  printDetail,
+  printWarning,
+  printError,
+  startSubSpinner,
+  stopSpinner,
+} from '../utils/ui.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,23 +31,18 @@ export async function ensureNativeProject(sdkVersion, dependencyManager) {
   // If project exists and is valid
   if (await fs.pathExists(projectPath)) {
     if (await isValidExpoProject(projectPath)) {
-      console.log('🟡 Using existing Expo project:', projectPath);
-      // Ensure libraries are initialized even if project exists
+      printSubStep('Using existing Expo project');
       await queueCommonDependencies(projectPath, dependencyManager);
       return projectPath;
     }
-    // If folder exists but is empty or invalid, remove it
-    console.warn(
-      '⚠️ Existing folder found but not a valid Expo project. Recreating...'
-    );
+    printWarning('Existing folder not a valid Expo project. Recreating...');
     await fs.remove(projectPath);
   }
 
-  console.log('🟢 Creating new Expo project from local template...');
+  printSubStep('Scaffolding from local SDK template');
 
   try {
     const templateName = `sdk-${sdkVersion || 54}`;
-    // Navigate from src/core/services to templates/
     const templatePath = path.join(
       __dirname,
       '../../../templates',
@@ -50,9 +54,8 @@ export async function ensureNativeProject(sdkVersion, dependencyManager) {
     }
 
     await fs.copy(templatePath, projectPath);
-    console.log('   - Template copied successfully.');
+    printSubStep('Template copied');
 
-    // Inject project name programmatically
     const projectName = path.basename(process.cwd()) + '-app';
 
     const pkgJsonPath = path.join(projectPath, 'package.json');
@@ -60,7 +63,6 @@ export async function ensureNativeProject(sdkVersion, dependencyManager) {
       const pkgJson = await fs.readJson(pkgJsonPath);
       pkgJson.name = projectName;
       await fs.writeJson(pkgJsonPath, pkgJson, { spaces: 2 });
-      console.log('   - Injected projectName into package.json');
     }
 
     const appJsonPath = path.join(projectPath, 'app.json');
@@ -71,27 +73,26 @@ export async function ensureNativeProject(sdkVersion, dependencyManager) {
         appJson.expo.slug = projectName;
       }
       await fs.writeJson(appJsonPath, appJson, { spaces: 2 });
-      console.log('   - Injected projectName into app.json');
     }
 
-    console.log('📦 [Phase 0] Hydrating base template (npm install)...');
+    startSubSpinner('Hydrating base template (npm install)...');
     try {
-      execSync('npm install', { cwd: projectPath, stdio: 'inherit' });
-    } catch (e) {
-      console.warn(
-        '⚠️ [Phase 0] Failed to hydrate base template, but continuing...'
-      );
+      // stdio: 'ignore' — npm output is noise, errors are caught below
+      execSync('npm install', { cwd: projectPath, stdio: 'ignore' });
+      stopSpinner();
+    } catch {
+      stopSpinner();
+      printWarning('Phase 0: npm install had warnings, continuing...');
     }
   } catch (e) {
-    console.error('❌ Failed to create Expo project.');
+    printError('Failed to create Expo project.');
     throw e;
   }
 
-  // 3. Initialize app settings and dependencies
   await setupExpoConfig(projectPath);
   await queueCommonDependencies(projectPath, dependencyManager);
 
-  console.log('✅ Expo project scaffolding completed successfully.');
+  printSubStepLast('Expo project ready');
   return projectPath;
 }
 
@@ -99,17 +100,14 @@ export async function ensureNativeProject(sdkVersion, dependencyManager) {
  * Core file configurations (Pure File Ops)
  */
 async function setupExpoConfig(projectPath) {
-  // 1. Configure app.json scheme for deep linking
   const appJsonPath = path.join(projectPath, 'app.json');
   if (await fs.pathExists(appJsonPath)) {
     const appJson = await fs.readJson(appJsonPath);
     if (appJson.expo && !appJson.expo.scheme) {
       appJson.expo.scheme = 'retransify-app';
-      // Force Expo to use Metro for web to ensure high compatibility
       appJson.expo.web = appJson.expo.web || {};
       appJson.expo.web.bundler = 'metro';
       await fs.writeJson(appJsonPath, appJson, { spaces: 2 });
-      console.log('🔧 Configured app.json scheme.');
     }
   }
 }
@@ -118,9 +116,8 @@ async function setupExpoConfig(projectPath) {
  * Queue Common Dependencies
  */
 async function queueCommonDependencies(projectPath, dependencyManager) {
-  console.log('🚀 Queuing Expo Router & Standard Libs...');
   dependencyManager.add(COMMON_DEPENDENCIES);
-  console.log(`📦 Queued ${COMMON_DEPENDENCIES.length} backbone dependencies.`);
+  printDetail(`Queued ${COMMON_DEPENDENCIES.length} backbone dependencies`);
 }
 
 /**
