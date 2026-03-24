@@ -103,7 +103,11 @@ export async function verifierNode(state) {
 
     // Only run AST HTML check if the file passes TypeScript semantic checks
     if (errors.length === 0) {
-      const astErrors = analyzeASTForErrors(sourceFile, filePath);
+      const astErrors = analyzeASTForErrors(
+        sourceFile,
+        filePath,
+        state.pathMap
+      );
       errors.push(...astErrors);
     }
   } catch (error) {
@@ -139,11 +143,12 @@ export async function verifierNode(state) {
 }
 
 /**
- * Analyzes the AST using dynamic architectural rules rather than hardcoded lists.
+ * Analyzes the AST using dynamic architectural rules and validates Routes.
  * @param {import('ts-morph').SourceFile} sourceFile
  * @param {string} filePath
+ * @param {Object} pathMap
  */
-function analyzeASTForErrors(sourceFile, filePath) {
+function analyzeASTForErrors(sourceFile, filePath, pathMap = {}) {
   const errors = [];
   const isComponent =
     /\.(tsx|jsx)$/i.test(filePath) || sourceFile.getText().includes('react');
@@ -154,13 +159,48 @@ function analyzeASTForErrors(sourceFile, filePath) {
       SyntaxKind.JsxSelfClosingElement
     );
 
+    // 1. Check for forbidden web elements
     const checkDynamicTagName = (tagName, line) => {
-      // Dynamic Rule: Any tag starting with a lowercase letter is a web DOM element.
-      // React Native strictly requires PascalCase native primitives.
       if (/^[a-z]/.test(tagName)) {
         errors.push(
-          `Line ${line}: Unsupported Web DOM element <${tagName}> detected. You MUST use React Native components (e.g., View, Text, TextInput, etc.).`
+          `Line ${line}: Unsupported Web DOM element <${tagName}> detected. You MUST use React Native components (e.g., View, Text, Pressable, etc.).`
         );
+      }
+    };
+
+    // 2. 🚨 Build a list of Valid Routes from pathMap
+    const validRoutes = new Set(
+      Object.values(pathMap).map((p) => {
+        let route = '/' + p.replace(/^app\//i, '').replace(/\.tsx$/i, '');
+        if (route.endsWith('/index')) route = route.replace('/index', '');
+        if (route.endsWith('/_layout')) route = route.replace('/_layout', '');
+        return route === '' ? '/' : route.toLowerCase();
+      })
+    );
+
+    // 3. 🚨 Dead Links Validator
+    const checkHrefForDeadLinks = (element, line) => {
+      const tagName = element.getTagNameNode().getText();
+      if (tagName === 'Link' || tagName === 'Redirect') {
+        const hrefAttr = element.getAttribute('href');
+        if (hrefAttr && hrefAttr.getKind() === SyntaxKind.JsxAttribute) {
+          const val = hrefAttr
+            .getInitializer()
+            ?.getText()
+            ?.replace(/['"]/g, '');
+          // If the link is static text, not an external link, and doesn't contain dynamic variables
+          if (
+            val &&
+            !val.startsWith('http') &&
+            !val.includes('{') &&
+            !validRoutes.has(val.toLowerCase())
+          ) {
+            const available = Array.from(validRoutes).join(', ');
+            errors.push(
+              `Line ${line}: CRITICAL ROUTING ERROR. Dead link detected. The route "${val}" DOES NOT EXIST. Valid Expo routes are: [${available}]. You MUST update the 'href' to one of the valid routes or fallback to "/".`
+            );
+          }
+        }
       }
     };
 
@@ -168,11 +208,16 @@ function analyzeASTForErrors(sourceFile, filePath) {
       const openingElement = element.getOpeningElement();
       const tagName = openingElement.getTagNameNode().getText().split('.')[0];
       checkDynamicTagName(tagName, openingElement.getStartLineNumber());
+      checkHrefForDeadLinks(
+        openingElement,
+        openingElement.getStartLineNumber()
+      );
     });
 
     jsxSelfClosing.forEach((element) => {
       const tagName = element.getTagNameNode().getText().split('.')[0];
       checkDynamicTagName(tagName, element.getStartLineNumber());
+      checkHrefForDeadLinks(element, element.getStartLineNumber());
     });
   }
 
