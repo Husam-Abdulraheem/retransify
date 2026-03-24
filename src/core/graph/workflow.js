@@ -12,6 +12,7 @@ import { diskWriterNode } from './nodes/diskWriterNode.js';
 import { filePickerNode } from './nodes/filePickerNode.js';
 import { createModelPair } from '../ai/aiFactory.js';
 import { DependencyManager } from '../helpers/dependencyManager.js';
+import { RouteAnalyzer } from '../scanners/RouteAnalyzer.js';
 import { ensureNativeProject } from '../services/nativeWriter.js';
 import { Verifier } from '../utils/verifier.js';
 import path from 'path';
@@ -189,12 +190,18 @@ export async function runMigrationWorkflow(
     dependencyManager
   );
 
-  // ── 3.5. Phase 1: Pre-flight Dependency Resolution ────────────────
+  // ── 3.5. Phase 1: Pre-flight Dependency Resolution & Route Extraction ────────────────
   console.log(
     '\n📦 [Workflow] Executing Project-Wide Dependency Resolution (Phase 1)...'
   );
   await dependencyManager.scanAndResolve(filesQueue, models.fastModel);
   await dependencyManager.installAll(rnProjectPath);
+
+  // ── 3.6. Route Extraction & Projection ──────────────────────────
+  const routeMap = await RouteAnalyzer.analyze(projectPath, filesQueue);
+  if (Object.keys(routeMap).length > 0) {
+    await RouteAnalyzer.projectRoutes(rnProjectPath, routeMap);
+  }
 
   // ── 4. Read Installed Packages ───────────────────────────────────
   let installedPackages = [];
@@ -217,6 +224,7 @@ export async function runMigrationWorkflow(
     rnProjectPath,
     filesQueue,
     pathMap: {},
+    routeMap,
     facts: {},
     vectorStore: null,
     vectorIdMap: {},

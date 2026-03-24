@@ -40,6 +40,12 @@ export const GraphState = Annotation.Root({
     default: () => ({}),
   }),
 
+  // Extracted routing map (original -> new Expo path)
+  routeMap: Annotation({
+    reducer: (_, x) => x,
+    default: () => ({}),
+  }),
+
   // ── Current File ─────────────────────────────────────────────
   // File object currently being processed
   currentFile: Annotation({
