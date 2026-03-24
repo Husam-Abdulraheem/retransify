@@ -1,7 +1,11 @@
 import path from 'path';
 import fs from 'fs-extra';
+import { fileURLToPath } from 'url';
+import { execSync } from 'child_process';
 import { COMMON_DEPENDENCIES } from '../config/libraryRules.js';
-import { runSilentCommand } from '../helpers/shell.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 /**
  * 1) Ensure Native Expo Project Exists (Pure I/O)
@@ -30,22 +34,58 @@ export async function ensureNativeProject(sdkVersion, dependencyManager) {
     await fs.remove(projectPath);
   }
 
-  console.log('🟢 Creating new Expo project (Default/Router Template)...');
+  console.log('🟢 Creating new Expo project from local template...');
 
   try {
-    // ⚠️ Await added here to ensure generation completes before cleaning
-    await runSilentCommand(
-      `npx create-expo-app@latest "${projectPath}" --yes`,
-      process.cwd(),
-      'Scaffolding Expo Project'
+    const templateName = `sdk-${sdkVersion || 54}`;
+    // Navigate from src/core/services to templates/
+    const templatePath = path.join(
+      __dirname,
+      '../../../templates',
+      templateName
     );
+
+    if (!(await fs.pathExists(templatePath))) {
+      throw new Error(`Template not found at: ${templatePath}`);
+    }
+
+    await fs.copy(templatePath, projectPath);
+    console.log('   - Template copied successfully.');
+
+    // Inject project name programmatically
+    const projectName = path.basename(process.cwd()) + '-app';
+
+    const pkgJsonPath = path.join(projectPath, 'package.json');
+    if (await fs.pathExists(pkgJsonPath)) {
+      const pkgJson = await fs.readJson(pkgJsonPath);
+      pkgJson.name = projectName;
+      await fs.writeJson(pkgJsonPath, pkgJson, { spaces: 2 });
+      console.log('   - Injected projectName into package.json');
+    }
+
+    const appJsonPath = path.join(projectPath, 'app.json');
+    if (await fs.pathExists(appJsonPath)) {
+      const appJson = await fs.readJson(appJsonPath);
+      if (appJson.expo) {
+        appJson.expo.name = projectName;
+        appJson.expo.slug = projectName;
+      }
+      await fs.writeJson(appJsonPath, appJson, { spaces: 2 });
+      console.log('   - Injected projectName into app.json');
+    }
+
+    console.log('📦 [Phase 0] Hydrating base template (npm install)...');
+    try {
+      execSync('npm install', { cwd: projectPath, stdio: 'inherit' });
+    } catch (e) {
+      console.warn(
+        '⚠️ [Phase 0] Failed to hydrate base template, but continuing...'
+      );
+    }
   } catch (e) {
     console.error('❌ Failed to create Expo project.');
     throw e;
   }
-
-  // 2. Clean Expo demo boilerplate files
-  await cleanExpoBoilerplate(projectPath);
 
   // 3. Initialize app settings and dependencies
   await setupExpoConfig(projectPath);
@@ -53,40 +93,6 @@ export async function ensureNativeProject(sdkVersion, dependencyManager) {
 
   console.log('✅ Expo project scaffolding completed successfully.');
   return projectPath;
-}
-
-/**
- * Cleans new project from Expo demo files and injects core files
- */
-async function cleanExpoBoilerplate(projectPath) {
-  console.log('🧹 Cleaning Expo boilerplate files...');
-
-  const dirsToNuke = ['components', 'constants', 'hooks', 'scripts'];
-  for (const dir of dirsToNuke) {
-    const fullPath = path.join(projectPath, dir);
-    if (await fs.pathExists(fullPath)) {
-      await fs.remove(fullPath);
-      console.log(`   - Deleted: ${dir}`);
-    }
-  }
-
-  const appDir = path.join(projectPath, 'app');
-  if (await fs.pathExists(appDir)) {
-    await fs.emptyDir(appDir);
-    console.log(`   - Emptied: app/`);
-
-    // 🎯 Inject default _layout.tsx to protect app structure
-    const defaultLayoutCode = `import { Stack } from 'expo-router';
-
-export default function RootLayout() {
-  return (
-    <Stack screenOptions={{ headerShown: false }} />
-  );
-}
-`;
-    await fs.writeFile(path.join(appDir, '_layout.tsx'), defaultLayoutCode);
-    console.log(`   - Injected: app/_layout.tsx (Core Router Wrapper)`);
-  }
 }
 
 /**

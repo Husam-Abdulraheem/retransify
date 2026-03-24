@@ -1,10 +1,9 @@
-// src/core/prompts/promptBuilder.js
-
+// src/core/prompt/promptBuilder.js
 import {
   COMMON_DEPENDENCIES,
   LEGACY_TO_EXPO_MAP,
   WEB_ONLY_BLOCKLIST,
-} from '../config/libraryRules.js'; // Import custom rules
+} from '../config/libraryRules.js';
 
 /**
  * Builds a smart and flexible prompt based on context
@@ -13,13 +12,17 @@ export function buildPrompt(fileContext) {
   const {
     filePath,
     content: fileContent,
-    analysis = {},
-    techContext = {},
+    imports: fileImports = [],
+    exports: fileExports = [],
     pathMap = {},
+    exactImportsMap = {},
+    globalContext = {},
+    installedPackages = [],
+    isLayoutFile = false,
   } = fileContext;
 
-  const { imports: fileImports = [], exports: fileExports = [] } = analysis;
-  const tech = techContext.tech || {};
+  const facts = globalContext.facts || {};
+  const tech = facts.tech || {};
 
   // 1. Infer Tech Stack
   const isTailwindDetected =
@@ -45,13 +48,12 @@ ${
   fileContext.isMainEntry
     ? `[CRITICAL - MAIN ENTRY POINT]
 This is the core App component. You MUST output a standard React Native component to serve as the 'app/index.tsx' screen for Expo Router.
-❌ STRICT PROHIBITION: DO NOT use 'registerRootComponent', 'ReactDOM.render', or 'createRoot'. Expo Router handles mounting automatically.
+STRICT PROHIBITION: DO NOT use manual DOM renderers or root mounting logic. Expo Router handles mounting automatically.
 `
     : ''
 }
-1. TARGET FRAMEWORK: React Native with Expo SDK (Managed Workflow).
-   - DO NOT use standard DOM elements (div, span, p, h1, etc.). Use View, Text, Pressable, ScrollView, etc.
-   - DO NOT use 'window', 'document', or 'localStorage'. Use React Native APIs or AsyncStorage.
+1. TARGET FRAMEWORK (WEB TO NATIVE MAPPING):
+   - DOM ABSTRACTION: Completely eliminate ALL HTML/DOM elements. Map them to their semantic React Native primitives.
 
 2. STYLING SYSTEM: **${targetStyleSystem}**
 ${
@@ -64,27 +66,43 @@ ${
 ${
   hasRouting
     ? `   - The target project uses **Expo Router** (File-based routing).
-   - DO NOT import from 'react-router-dom' or '@react-navigation/...'.
-   - Translate web links (<Link to="..."> or useNavigate) to Expo Router equivalents (import { Link, router } from 'expo-router').
-   - If this file represents a global provider (like Redux or Theme), structure it so it can be used inside an Expo Router '_layout.tsx' file (export a component that wraps <Slot />).`
+   - ROUTING ABSTRACTION: Identify ANY web-based or legacy routing library used in the original code. You MUST remove its imports.
+${
+  isLayoutFile
+    ? `   - CRITICAL LAYOUT RULE: This file is an Expo Router Layout file. 
+     - If the original web code contains a navigation menu (Navbar, Sidebar, Burger Menu), DO NOT discard it. You MUST convert it into an Expo <Tabs> structure.
+     - Map each web navigation link to a <Tabs.Screen> and configure its 'options={{ title: "...", tabBarIcon: ... }}'.
+     - DO NOT use Web <Outlet /> or render raw {children}. Use <Tabs /> (if there is navigation) or <Stack />.`
+    : `   - Translate all declarative web links and imperative navigation hooks to Expo Router equivalents (import { Link, router } from 'expo-router').
+   - CRITICAL LINKING RULE: Expo Router is strictly FILE-BASED. When defining a path for <Link href="..."> or <Redirect href="..."> or router.push("..."), you MUST ensure the path EXACTLY MATCHES the final destination file names listed in the "PATH REMAPPING" block below, minus the file extension. 
+   - DO NOT copy the old web URLs blindly. If the web code redirects to "/dashboard" but the mapped physical file is "app/overview.tsx", you MUST output href="/overview".`
+}`
     : '   - No specific routing library detected. Use standard React state for conditional rendering if needed.'
 }
 
 4. DEPENDENCIES & LIBRARIES MAP:
-   - Base Expo Libraries (Pre-installed, DO NOT add to dependencies output): ${COMMON_DEPENDENCIES.join(', ')}
-   - You MUST strictly follow this library translation map (Web -> Mobile):
+   - Base Expo Libraries (Pre-installed): ${COMMON_DEPENDENCIES.join(', ')}
+   - Installed Packages in Environment: ${installedPackages.join(', ')}
+   - STRICT ENGINEERING RULE: You are forbidden to use or import ANY library outside the compiled 'Installed Packages in Environment' list. You are strictly forbidden to invent or introduce new libraries.
+   - DYNAMIC LIBRARY RESOLUTION: You MUST strictly follow this translation map for known libraries:
      ${JSON.stringify(LEGACY_TO_EXPO_MAP, null, 2)}
-   - FORBIDDEN LIBRARIES (Do NOT use or import these):
-     ${WEB_ONLY_BLOCKLIST.join(', ')}
-   - ICONS: Use '@expo/vector-icons' exclusively.
-   - 🚨 STRICT NEW DEPENDENCY RULE: Any new library you introduce MUST be 100% compatible with Expo Managed Workflow. DO NOT suggest libraries that require custom native linking, modifying android/ios directories, or running 'pod install'.
+   - FORBIDDEN LIBRARIES HANDLING: 
+     Blocklist: ${WEB_ONLY_BLOCKLIST.join(', ')}
+     If the original code imports ANY library from this blocklist, or ANY library built exclusively for the Web/DOM, you MUST delete the import. Reverse-engineer its logic and implement the equivalent using pure React Native/Expo features.
+   - ICONS ABSTRACTION: Standardize ALL third-party icon libraries to use '@expo/vector-icons' exclusively.
 
-5. MOBILE UI/UX & LAYOUT ADAPTATION (CRITICAL):
-   - NO CSS GRID: React Native uses Flexbox exclusively. Convert all CSS Grids to Flexbox layouts.
-   - FLEX DIRECTION: Remember that React Native 'flexDirection' defaults to 'column' (vertical), unlike the web's 'row'. Add 'flex-row' explicitly where horizontal alignment is needed.
-   - RESPONSIVENESS: The design MUST look good on mobile screens. Replace fixed desktop widths (like 'w-[1200px]') with 'w-full', 'flex: 1', or percentages.
-   - SAFE AREAS: Wrap root screens with <SafeAreaView> (from 'react-native') or use 'useSafeAreaInsets' (from 'react-native-safe-area-context') to prevent content from hiding under the device notch or status bar.
-   - NO HOVER STATES: Mobile devices do not have a mouse. Remove all CSS ':hover' states. Use <Pressable> or <TouchableOpacity> for clickable items.
+5. MOBILE UI/UX & LAYOUT ADAPTATION (CRITICAL - FIXES OVERLAPPING & OVERFLOW):
+   - SCROLLING IS NOT AUTOMATIC: Unlike Web, React Native Views do NOT scroll. You MUST wrap the main body of standard screens in a <ScrollView> or use <FlatList> for lists to prevent overlapping and clipped content.
+   - RESPONSIVENESS & WIDTHS: NEVER use fixed large desktop widths (e.g., width: 1000px or w-[1000px]). You MUST convert them to 'w-full', 'flex: 1', or use percentages ('100%') to fit mobile screens.
+   - NO CSS GRID: React Native uses Flexbox exclusively. Convert all grid layouts to semantic Flexbox structures (e.g., using 'flexWrap: wrap' and width percentages).
+   - FLEX DIRECTION: React Native 'flexDirection' defaults to 'column'. Explicitly handle horizontal alignments.
+   - SAFE AREAS: Prevent content overlap with device notches using <SafeAreaView> or 'useSafeAreaInsets'.
+
+6. TYPESCRIPT STRICTNESS (CRITICAL):
+   - The output MUST be valid TypeScript (.tsx).
+   - STRICT ARCHITECTURAL MIGRATION: Identify ALL libraries or patterns used for 'runtime type checking', 'legacy DOM manipulation', or 'web-specific behavior'. You MUST completely remove their imports and usages. Replace them strictly with TypeScript static typing (interfaces/types).
+   - NO implicit 'any'. Infer types intelligently from the original code structure.
+   - EXTENSION BAN: Ensure all relative local imports point to the correct file without extensions or with .tsx/.ts.
 `;
 
   // 4. Context & Input Code
@@ -95,6 +113,16 @@ FILE CONTEXT
 Original File Path: ${filePath}
 Exports to maintain: ${JSON.stringify(fileExports)}
 External Web Imports: ${JSON.stringify(fileImports.filter((i) => i.source?.startsWith('.') === false).map((i) => i.source))}
+
+${
+  Object.keys(exactImportsMap).length > 0
+    ? `
+EXACT IMPORTS REMAPPING (CRITICAL):
+You MUST replace the following old relative imports with EXACTLY these new strings. DO NOT calculate distances yourself:
+${JSON.stringify(exactImportsMap, null, 2)}
+`
+    : ''
+}
 
 ${
   Object.keys(pathMap).length > 0
@@ -114,35 +142,25 @@ INPUT WEB CODE
 ${fileContent}
 `;
 
-  // 5. Output Format
-  const responseFormat = `
------------------------------------
-OUTPUT FORMAT
------------------------------------
-Respond ONLY with a raw, valid JSON object. No markdown formatting (like \`\`\`json). No conversational text.
-
-{
-  "decision_trace": [
-    { "category": "Tag Mapping", "action": "Mapped div to View", "reasoning": "Standard container" }
-  ],
-  "code": "The complete, fully converted React Native code string. MUST be ready to run.",
-  "dependencies": ["nativewind", "axios"], // Only list NEW mobile-compatible libraries needed for this specific file. Do not list pre-installed Expo ones.
-  "notes": "Brief explanation of architectural changes."
-}
-`;
-
   return `
 ${roleDefinition}
 ${strictRulesBlock}
 ${contextBlock}
 ${inputCodeBlock}
-${responseFormat}
 `.trim();
 }
-export function buildFixPrompt(code, errors) {
+
+export function buildFixPrompt(code, errors, installedPackages = []) {
   return `
 You are a Senior React Native Developer.
-The TypeScript compiler has detected issues in the following code.
+The TypeScript compiler has detected logic or type issues in the following code.
+
+-----------------------------------
+STRICT ARCHITECTURAL CONSTRAINTS
+-----------------------------------
+- You are FORBIDDEN to use any external library outside this compiled list: [${installedPackages.join(', ')}].
+- Do NOT invent or import new npm packages. If a feature or fix requires a missing package, implement it using standard React Native APIs or a manual polyfill.
+- Output MUST be the corrected code only.
 
 -----------------------------------
 CODE CONTEXT
@@ -157,16 +175,9 @@ ${errors.join('\n')}
 -----------------------------------
 TASK
 -----------------------------------
-Fix the logic or type errors. 
-- If an import is missing, add it.
-- If a type is mismatched, adjust the interface.
+Fix the logic or type errors above. 
+- If an import is missing, ensure it exists in the constraints list before adding it. Otherwise, remove the dependency and rewrite the logic natively.
+- If a type is mismatched, adjust the interface locally.
 - Do NOT simply suppress errors with @ts-ignore unless strictly impossible to resolve.
-
-Return ONLY the raw valid JSON structure.
-DO NOT use markdown code blocks.
-{
-  "code": "Fixed code string",
-  "dependencies": [] 
-}
 `;
 }

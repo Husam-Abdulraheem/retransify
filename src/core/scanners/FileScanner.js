@@ -1,14 +1,27 @@
 import fs from 'fs-extra';
 import path from 'path';
 import { FrameworkDetector } from '../detectors/FrameworkDetector.js';
-import { PROJECT_PROFILES, ALLOWED_EXTENSIONS } from '../config/profiles.js';
+import { PROJECT_PROFILES } from '../config/profiles.js';
+
+// 🛡️ 1. Firewall: Strict Lists
+const STRICT_CODE_EXTENSIONS = ['.js', '.jsx', '.ts', '.tsx'];
+const FIREWALL_IGNORED_DIRS = [
+  'node_modules',
+  'dist',
+  'build',
+  'public',
+  '.git',
+  'assets',
+  '.expo',
+  'coverage',
+];
 
 /**
- * Smart File Scanner
+ * Smart File Scanner with Strict Firewall
  * Uses a 2-Pass Strategy to scan only important files.
  */
 export async function scanProject(projectRoot, options = {}) {
-  // 1. Determine framework type (either passed manually or detected automatically)
+  // 1. Determine framework type
   let frameworkType = options.frameworkType;
 
   if (!frameworkType) {
@@ -20,12 +33,12 @@ export async function scanProject(projectRoot, options = {}) {
       );
     } catch (error) {
       console.error('❌ Framework Detection Failed:', error.message);
-      throw error; // Stop immediately if unsupported (e.g. Next.js)
+      throw error;
     }
   }
 
   // 2. Load the appropriate profile
-  const profile = PROJECT_PROFILES[frameworkType] || PROJECT_PROFILES.vite; // Default safe fallback
+  const profile = PROJECT_PROFILES[frameworkType] || PROJECT_PROFILES.vite;
   const config = {
     ...profile,
     ...options,
@@ -33,33 +46,56 @@ export async function scanProject(projectRoot, options = {}) {
 
   const files = [];
 
-  // 3. Execution - Pass 1: Root Files (Exact Check)
-  // Scan only important root files to minimize noise
-  for (const file of config.rootFiles) {
-    const fullPath = path.join(projectRoot, file);
-    if (await fs.pathExists(fullPath)) {
-      files.push(createFileObject(fullPath, projectRoot));
+  // 3. Execution - Pass 1: Root Files (STRICTLY FILTERED)
+  // Prevent config and HTML files from entering the scan engine
+  if (config.rootFiles && config.rootFiles.length > 0) {
+    for (const file of config.rootFiles) {
+      const fullPath = path.join(projectRoot, file);
+      const ext = path.extname(fullPath).toLowerCase();
+
+      if (
+        STRICT_CODE_EXTENSIONS.includes(ext) &&
+        (await fs.pathExists(fullPath))
+      ) {
+        files.push(createFileObject(fullPath, projectRoot));
+      } else {
+        // Log for debugging
+        // console.log(`🛡️ [Firewall] Blocked root non-code file: ${file}`);
+      }
     }
   }
 
   // 4. Execution - Pass 2: Recursive Scan
-  // Recursively scan specific directories (e.g., src)
+  // Merge ignore folders from the profile with the firewall list
+  const mergedIgnoreDirs = [
+    ...new Set([...(config.ignoreDirs || []), ...FIREWALL_IGNORED_DIRS]),
+  ];
+
   for (const dir of config.recursiveDirs) {
     const dirPath = path.join(projectRoot, dir);
     if (await fs.pathExists(dirPath)) {
       const recursiveFiles = await walkDir(
         dirPath,
         projectRoot,
-        config.ignoreDirs
+        mergedIgnoreDirs
       );
       files.push(...recursiveFiles);
     }
   }
 
-  const structure = buildStructureTree(files, projectRoot);
+  // 5. Final filtering: Remove test files to save token consumption
+  const finalQueue = files.filter((f) => !f.isTestFile);
+
+  if (files.length > finalQueue.length) {
+    console.log(
+      `🛡️ [Firewall] Dropped ${files.length - finalQueue.length} test files to save AI tokens.`
+    );
+  }
+
+  const structure = buildStructureTree(finalQueue, projectRoot);
 
   return {
-    files,
+    files: finalQueue,
     structure,
     framework: frameworkType,
   };
@@ -83,12 +119,9 @@ async function walkDir(dir, projectRoot, ignoreDirs) {
         );
       }
     } else {
-      const ext = path.extname(file);
-      if (ALLOWED_EXTENSIONS.includes(ext)) {
-        // Filter out test files if needed?
-        // Logic kept from old scanner: flag them but keep them?
-        // Or remove them if they are noise? user didn't specify to remove tests, so we identify them.
-
+      const ext = path.extname(file).toLowerCase();
+      // 🔥 Apply firewall to extensions
+      if (STRICT_CODE_EXTENSIONS.includes(ext)) {
         results.push(createFileObject(fullPath, projectRoot));
       }
     }
@@ -119,10 +152,6 @@ function createFileObject(fullPath, projectRoot) {
     filename: path.basename(fullPath),
     ext,
     isTestFile: isTest,
-    // Note: 'relativeToSrc' concept is fuzzy now because we scan root too.
-    // We rely on 'relativeToProject' primarily.
-    // [Backward Compatibility] Many helpers (pathMapper, graphBuilder) historically relied on this.
-    // We polyfill it to be relativeToProject for now to prevent crashes.
     relativeToSrc: normalizePath(relativeToProject),
   };
 }

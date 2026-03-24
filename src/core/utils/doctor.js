@@ -58,7 +58,7 @@ export class Doctor {
         console.log('✅ Doctor: Level 1 repair successful.');
         return;
       }
-    } catch (e) {
+    } catch {
       console.log('⚠️ Doctor: Level 1 repair failed to resolve all issues.');
     }
 
@@ -92,7 +92,7 @@ export class Doctor {
         console.log('✅ Doctor: Level 2 repair successful.');
         return;
       }
-    } catch (e) {
+    } catch {
       console.log('⚠️ Doctor: Level 2 repair failed. Preparing for surgery.');
     }
 
@@ -105,33 +105,33 @@ export class Doctor {
       const lockFilePath = path.join(projectPath, 'package-lock.json');
       const yarnLockPath = path.join(projectPath, 'yarn.lock');
 
-      // 1. تدمير البيئة الفاسدة
+      // 1. Destroying the corrupted environment
       await fs.remove(nodeModulesPath);
       await fs.remove(lockFilePath);
       await fs.remove(yarnLockPath);
 
       console.log('🛡️ Doctor: Applying Overrides to fresh package.json...');
 
-      // 2. تحصين الأساس قبل التثبيت (هذا ما يمنع ERESOLVE)
+      // 2. Fortifying the foundation before installation (this prevents ERESOLVE)
       await this.applyDependencyOverrides(projectPath);
 
       console.log('🔄 Doctor: Hydrating base dependencies cleanly...');
 
-      // 3. التثبيت النظيف (سينجح لأننا طبقنا الـ Overrides ومسحنا الكاش/الـ locks)
+      // 3. Clean installation (will succeed because we applied Overrides and cleared cache/locks)
       await runSilentCommand(
         'npm install',
         projectPath,
         'Fresh base installation...'
       );
 
-      // 4. تسليم القيادة لـ Expo لضبط النسخ النهائية
+      // 4. Handing over command to Expo to set final versions
       await runSilentCommand(
         'npx expo install --fix',
         projectPath,
         'Finalizing Expo dependencies...'
       );
 
-      // الفحص النهائي الصارم
+      // Strict final check
       const isHealthy = await this.checkHealth(projectPath);
       if (!isHealthy) {
         throw new Error('Health check failed after Deep Clean.');

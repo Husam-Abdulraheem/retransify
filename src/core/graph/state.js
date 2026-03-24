@@ -1,0 +1,160 @@
+// src/core/graph/state.js
+import { Annotation } from '@langchain/langgraph';
+
+/**
+ * GraphState - The shared state that passes between all Nodes
+ * Replaces GlobalMigrationContext and StateManager
+ *
+ * Each field contains a reducer that determines how the value is updated
+ * (_, x) => x  means: "replace the current value with the new value"
+ */
+export const GraphState = Annotation.Root({
+  // ── Project Information ──────────────────────────────────────
+  projectPath: Annotation({
+    reducer: (_, x) => x,
+    default: () => '',
+  }),
+
+  // Destination React Native project path (populated after ensureNativeProject)
+  rnProjectPath: Annotation({
+    reducer: (_, x) => x,
+    default: () => '',
+  }),
+
+  // Analyzer results (tech stack, entry files, etc.)
+  facts: Annotation({
+    reducer: (prev, x) => ({ ...prev, ...x }),
+    default: () => ({}),
+  }),
+
+  // ── File List ────────────────────────────────────────────────
+  // Array of file objects remaining for conversion (from FileScanner)
+  filesQueue: Annotation({
+    reducer: (_, x) => x,
+    default: () => [],
+  }),
+
+  // Map of old -> new paths (from PathMapper)
+  pathMap: Annotation({
+    reducer: (_, x) => x,
+    default: () => ({}),
+  }),
+
+  // Extracted routing map (original -> new Expo path)
+  routeMap: Annotation({
+    reducer: (_, x) => x,
+    default: () => ({}),
+  }),
+
+  // ── Current File ─────────────────────────────────────────────
+  // File object currently being processed
+  currentFile: Annotation({
+    reducer: (_, x) => x,
+    default: () => null,
+  }),
+
+  // Code generated from ExecutorNode (before writing to disk)
+  generatedCode: Annotation({
+    reducer: (_, x) => x,
+    default: () => null,
+  }),
+
+  // ── RAG / VectorStore ────────────────────────────────────────
+  // MemoryVectorStore instance (populated in AnalyzerNode)
+  vectorStore: Annotation({
+    reducer: (_, x) => x,
+    default: () => null,
+  }),
+
+  // Map: filename -> Document ID in VectorStore
+  // Used in ContextUpdaterNode to delete old vector and insert new one
+  vectorIdMap: Annotation({
+    reducer: (prev, x) => ({ ...prev, ...x }),
+    default: () => ({}),
+  }),
+
+  // ── State Management ─────────────────────────────────────────
+  // Number of Healing attempts for current file (reset with each new file)
+  healAttempts: Annotation({
+    reducer: (_, x) => x,
+    default: () => 0,
+  }),
+
+  // Hash of last error (to detect infinite loops in Healer)
+  lastErrorHash: Annotation({
+    reducer: (_, x) => x,
+    default: () => null,
+  }),
+
+  // Successfully processed files (for resumption on interruption)
+  completedFiles: Annotation({
+    reducer: (prev, x) => {
+      const set = new Set(prev);
+      if (Array.isArray(x)) x.forEach((f) => set.add(f));
+      else set.add(x);
+      return Array.from(set);
+    },
+    default: () => [],
+  }),
+
+  // ── Errors ───────────────────────────────────────────────────
+  // Current file errors (populated from VerifierNode)
+  errors: Annotation({
+    reducer: (_, x) => x,
+    default: () => [],
+  }),
+
+  // Complete error log across all files
+  errorLog: Annotation({
+    reducer: (prev, x) => [...prev, ...x],
+    default: () => [],
+  }),
+
+  // Missing dependencies to be auto-installed
+  missingDependencies: Annotation({
+    reducer: (_, x) => x,
+    default: () => [],
+  }),
+
+  // Number of installation attempts per file
+  installAttempts: Annotation({
+    reducer: (_, x) => x,
+    default: () => 0,
+  }),
+
+  // ── Dependency Management ────────────────────────────────────
+  // DependencyManager instance (populated at start of workflow)
+  dependencyManager: Annotation({
+    reducer: (_, x) => x,
+    default: () => null,
+  }),
+
+  // Currently installed packages in RN project (to avoid repetition)
+  installedPackages: Annotation({
+    reducer: (_, x) => x,
+    default: () => [],
+  }),
+
+  // ── Execution Options ────────────────────────────────────────
+  options: Annotation({
+    reducer: (_, x) => x,
+    default: () => ({}),
+  }),
+});
+
+/**
+ * Node path constants - used in workflow.js for Edges
+ */
+export const NODE_NAMES = {
+  ANALYZER: 'analyzerNode',
+  PLANNER: 'plannerNode',
+  EXECUTOR: 'executorNode',
+  VERIFIER: 'verifierNode',
+  HEALER: 'healerNode',
+  AUTO_INSTALLER: 'autoInstallerNode',
+  CONTEXT_UPDATER: 'contextUpdaterNode',
+  DISK_WRITER: 'diskWriterNode',
+  FILE_PICKER: 'filePickerNode', // Helper node: pulls next file from filesQueue
+};
+
+export const MAX_HEAL_ATTEMPTS = 3;

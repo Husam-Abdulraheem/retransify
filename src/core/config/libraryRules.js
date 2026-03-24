@@ -22,15 +22,21 @@ export const CONFLICT_MAP = {
   'react-native-reanimated': [],
 };
 
+// Libraries that rely entirely on the browser DOM and must be completely blocked
 export const WEB_ONLY_BLOCKLIST = [
-  // Libraries that rely entirely on the browser DOM and must be completely blocked
   '@radix-ui/react-accordion',
   '@radix-ui/react-dialog',
   '@radix-ui/react-popover',
   '@radix-ui/react-tooltip',
   'framer-motion',
-  // Note: clsx, tailwind-merge, and cva were kept because they work successfully on mobile
+  'bootstrap',
+  'react-bootstrap',
+  'reactstrap',
+  '@mui/material',
+  'jquery',
+  'react-helmet',
 ];
+// Note: clsx, tailwind-merge, and cva were kept because they work successfully on mobile
 
 // Pre-installed libraries in the default Expo template (do not install again)
 export const COMMON_DEPENDENCIES = [
