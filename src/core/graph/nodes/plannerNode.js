@@ -2,6 +2,7 @@
 import { Project } from 'ts-morph';
 import path from 'path';
 import { PathMapper } from '../../helpers/pathMapper.js';
+import { printStep, printSubStep, printWarning } from '../../utils/ui.js';
 
 /**
  * PlannerNode - Orders files and creates the paths map
@@ -17,30 +18,32 @@ import { PathMapper } from '../../helpers/pathMapper.js';
  * @returns {Partial<import('../state.js').GraphState>}
  */
 export async function plannerNode(state) {
-  console.log('\n🗺️  [PlannerNode] Starting conversion ordering planning...');
+  printStep('Planner — ordering files for conversion');
 
   const { filesQueue, routeMap = {} } = state;
 
   // ── 1. Generate path map using PathMapper (using new routeMap) ──
   const pathMap = PathMapper.generateMap(filesQueue, routeMap);
-  console.log(
-    `📍 [PlannerNode] Generated path map for ${Object.keys(pathMap).length} files`
-  );
+  printSubStep(`Path map generated for ${Object.keys(pathMap).length} files`);
 
   // ── 2. Build dependency graph from file imports ─────────────
   const dependencyGraph = buildDependencyGraph(filesQueue);
 
   // ── 3. Sort files (Topological Sort - dependencies processed first) ──
   const sortedFiles = topologicalSort(dependencyGraph, filesQueue);
-  console.log(`✅ [PlannerNode] Conversion order: ${sortedFiles.length} files`);
+  printSubStep(`Conversion order (${sortedFiles.length} files):`);
 
-  // Print first 5 files for verification
   sortedFiles.slice(0, 5).forEach((f, i) => {
     const filePath = f.relativeToProject || f.filePath;
-    console.log(`   ${i + 1}. ${filePath}`);
+    printSubStep(`${i + 1}. ${filePath}`, 1);
   });
+
   if (sortedFiles.length > 5) {
-    console.log(`   ... and ${sortedFiles.length - 5} more files`);
+    printSubStep(`... and ${sortedFiles.length - 5} more`, 1, true);
+  } else if (sortedFiles.length > 0) {
+    // If we have files but <= 5, the last one should have the end branch
+    // But for a list, it's cleaner to just mark the last item explicitly if it's the end of the step.
+    // However, the conversion order is an intermediate step.
   }
 
   return {
@@ -68,9 +71,7 @@ function buildDependencyGraph(filesQueue) {
     try {
       project.addSourceFileAtPath(fileObj.absolutePath);
     } catch {
-      console.warn(
-        `⚠️ [PlannerNode] Failed to load file into ts-morph: ${fileObj.absolutePath}`
-      );
+      printWarning(`Planner skipped: ${fileObj.absolutePath}`);
     }
   }
 

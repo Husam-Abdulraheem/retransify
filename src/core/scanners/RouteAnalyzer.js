@@ -1,6 +1,7 @@
 import { Project, SyntaxKind } from 'ts-morph';
 import path from 'path';
 import fs from 'fs-extra';
+import { ui } from '../utils/ui.js';
 
 export class RouteAnalyzer {
   /**
@@ -12,7 +13,7 @@ export class RouteAnalyzer {
    * @returns {Object} routeMap - { "originalFilePath": "expo/path/file.tsx" }
    */
   static async analyze(projectRoot, filesQueue) {
-    console.log('\n🗺️  [RouteAnalyzer] Extracting AST routing tree...');
+    ui.step('RouteAnalyzer', 'Extracting AST routing tree...');
     const routeMap = {};
     const routingSourceFiles = [];
 
@@ -35,12 +36,7 @@ export class RouteAnalyzer {
         fileObj.absolutePath ||
         path.join(projectRoot, fileObj.filePath || fileObj.relativeToProject);
 
-      if (!fs.existsSync(absolutePath)) {
-        console.warn(
-          `  ⚠️  [RouteAnalyzer] Skipped missing file: ${absolutePath}`
-        );
-        continue;
-      }
+      if (!fs.existsSync(absolutePath)) continue;
 
       try {
         const content =
@@ -59,21 +55,19 @@ export class RouteAnalyzer {
         if (hasRouting) {
           routingSourceFiles.push(sourceFile);
         }
-      } catch (err) {
-        console.error(
-          `  ❌ [RouteAnalyzer] Failed to parse AST for ${absolutePath}:`,
-          err.message
-        );
+      } catch {
+        ui.warn(`Failed to parse AST for ${fileObj.filePath}`);
       }
     }
 
     if (routingSourceFiles.length === 0) {
-      console.log('   ℹ️  No react-router usage detected.');
+      ui.printSubStep('No react-router usage detected.', 1, true);
       return routeMap;
     }
 
-    console.log(
-      `   🔍 Found ${routingSourceFiles.length} file(s) with routing declarations.`
+    ui.printSubStep(
+      `Found ${routingSourceFiles.length} file(s) with routing.`,
+      1
     );
 
     // 3. Process Routing Trees
@@ -211,7 +205,7 @@ export class RouteAnalyzer {
       if (resolvedFilePath) {
         const expoPath = this._calculateExpoPath(currentPath, hasChildren);
         routeMap[resolvedFilePath] = expoPath;
-        console.log(`      * [JSX] ${resolvedFilePath} -> ${expoPath}`);
+        ui.printSubStep(`Mapped: ${resolvedFilePath} → ${expoPath}`, 2);
       }
     }
 
@@ -291,7 +285,7 @@ export class RouteAnalyzer {
       if (resolvedFilePath) {
         const expoPath = this._calculateExpoPath(currentPath, hasChildren);
         routeMap[resolvedFilePath] = expoPath;
-        console.log(`      * [OBJ] ${resolvedFilePath} -> ${expoPath}`);
+        ui.printSubStep(`Mapped: ${resolvedFilePath} → ${expoPath}`, 2);
       }
     }
 
@@ -316,6 +310,7 @@ export class RouteAnalyzer {
   static _extractComponentName(node) {
     const elementAttr = node.getAttribute('element');
     const componentAttr = node.getAttribute('Component');
+    const legacyComponentAttr = node.getAttribute('component'); // دعم الإصدارات القديمة
 
     if (elementAttr && elementAttr.getKind() === SyntaxKind.JsxAttribute) {
       const expr = elementAttr.getInitializer()?.getExpression?.();
@@ -327,7 +322,18 @@ export class RouteAnalyzer {
       componentAttr &&
       componentAttr.getKind() === SyntaxKind.JsxAttribute
     ) {
-      return componentAttr.getInitializer()?.getExpression?.()?.getText();
+      return (
+        componentAttr.getInitializer()?.getExpression?.()?.getText() ||
+        componentAttr.getInitializer()?.getText()
+      );
+    } else if (
+      legacyComponentAttr &&
+      legacyComponentAttr.getKind() === SyntaxKind.JsxAttribute
+    ) {
+      return (
+        legacyComponentAttr.getInitializer()?.getExpression?.()?.getText() ||
+        legacyComponentAttr.getInitializer()?.getText()
+      );
     }
     return null;
   }
@@ -353,25 +359,25 @@ export class RouteAnalyzer {
       ) {
         const moduleSpecifier = imp.getModuleSpecifierValue();
         if (moduleSpecifier.startsWith('.')) {
-          // Robust physical path resolution
           const baseDir = path.dirname(sourceFile.getFilePath());
           const absoluteTarget = path.resolve(baseDir, moduleSpecifier);
 
-          const extensions = [
-            '.js',
-            '.jsx',
-            '.ts',
-            '.tsx',
-            '/index.js',
-            '/index.jsx',
-            '/index.ts',
-            '/index.tsx',
+          // إصلاح ثغرة الامتداد المزدوج (التأكد من كل الاحتمالات)
+          const candidates = [
+            absoluteTarget, // قد يحتوي على امتداد مسبقاً
+            `${absoluteTarget}.js`,
+            `${absoluteTarget}.jsx`,
+            `${absoluteTarget}.ts`,
+            `${absoluteTarget}.tsx`,
+            `${absoluteTarget}/index.js`,
+            `${absoluteTarget}/index.jsx`,
+            `${absoluteTarget}/index.ts`,
+            `${absoluteTarget}/index.tsx`,
           ];
-          for (const ext of extensions) {
-            if (fs.existsSync(absoluteTarget + ext)) {
-              return path
-                .relative(projectRoot, absoluteTarget + ext)
-                .replace(/\\/g, '/');
+
+          for (const candidate of candidates) {
+            if (fs.existsSync(candidate)) {
+              return path.relative(projectRoot, candidate).replace(/\\/g, '/');
             }
           }
         }
@@ -381,13 +387,14 @@ export class RouteAnalyzer {
   }
 
   static _calculateExpoPath(routePath, isLayout) {
-    if (!routePath || routePath === '/') {
+    // إصلاح ثغرة المسار الجذري
+    let cleanPath = (routePath || '').replace(/^\/+/, '').replace(/\/+$/, '');
+
+    if (!cleanPath) {
       return isLayout ? 'app/_layout.tsx' : 'app/index.tsx';
     }
 
-    const modifiedPath = routePath
-      .replace(/^\/+/, '') // Remove leading
-      .replace(/\/+$/, '') // Remove trailing
+    const modifiedPath = cleanPath
       .split('/')
       .map((part) => (part.startsWith(':') ? `[${part.substring(1)}]` : part))
       .join('/');
@@ -398,7 +405,7 @@ export class RouteAnalyzer {
   }
 
   static async projectRoutes(rnProjectPath, routeMap) {
-    console.log('\n🏗️  [RouteAnalyzer] Projecting route map to File System...');
+    ui.step('RouteAnalyzer', 'Projecting route map to File System...');
     let count = 0;
 
     for (const [originalFile, expoPath] of Object.entries(routeMap)) {
@@ -414,8 +421,10 @@ export class RouteAnalyzer {
       }
     }
 
-    console.log(
-      `   ✅ Projected ${count} new route files into app/ directory.`
+    ui.printSubStep(
+      `Projected ${count} new route files into app/ directory.`,
+      1,
+      true
     );
   }
 }

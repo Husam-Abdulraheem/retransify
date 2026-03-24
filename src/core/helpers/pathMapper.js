@@ -121,12 +121,12 @@ export class PathMapper {
       return `app/index.tsx`; // Will perform a redirect to /(tabs)/...
     }
 
-    // 2. 🚨 Grouping Layouts inside a Route Group
+    // 2. 🚨 Universal Layout Fallback (Stack/Slot instead of forced Tabs)
     if (basenameLower.includes('layout') || basenameLower === 'appshell') {
-      return `app/(tabs)/_layout.tsx`;
+      return `app/_layout.tsx`;
     }
 
-    // 3. 🚨 Forcing all pages under the same layout/wrapper
+    // 3. 🚨 Standard Pages (Placed cleanly in app/ directory for Stack navigation)
     if (
       this.isInFolder(parts, 'pages') ||
       this.isInFolder(parts, 'screens') ||
@@ -134,7 +134,7 @@ export class PathMapper {
       basenameLower.endsWith('screen') ||
       basenameLower.endsWith('page')
     ) {
-      return `app/(tabs)/${filename.replace(/\.jsx?$/, '.tsx')}`.toLowerCase();
+      return `app/${filename.replace(/\.jsx?$/, '.tsx')}`.toLowerCase();
     }
 
     // 4. Sub-components
