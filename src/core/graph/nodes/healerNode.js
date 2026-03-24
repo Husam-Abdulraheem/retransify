@@ -1,6 +1,13 @@
 // src/core/graph/nodes/healerNode.js
 import { buildFixPrompt } from '../../prompt/promptBuilder.js';
 import { z } from 'zod';
+import {
+  printSubStep,
+  printWarning,
+  printError,
+  startSubSpinner,
+  stopSpinner,
+} from '../../utils/ui.js';
 
 const outputSchema = z.object({
   code: z.string().describe('The complete corrected React Native code'),
@@ -30,13 +37,9 @@ export async function healerNode(state, models = {}) {
     currentFile?.relativeToProject || currentFile?.filePath || 'unknown';
   const newAttemptCount = (healAttempts || 0) + 1;
 
-  console.log(
-    `\n🚑 [HealerNode] Attempting to fix ${filePath} (Attempt ${newAttemptCount})`
-  );
-  console.log(`   Errors: ${errors.slice(0, 2).join(' | ')}`);
-
+  printSubStep(`🚑 AI Healing attempt ${newAttemptCount}/3...`);
   if (!models.smartModel) {
-    console.error('❌ [HealerNode] No smartModel found');
+    printError('HealerNode: no smartModel');
     return { healAttempts: newAttemptCount };
   }
 
@@ -46,23 +49,22 @@ export async function healerNode(state, models = {}) {
   try {
     const structuredModel =
       models.smartModel.withStructuredOutput(outputSchema);
+    startSubSpinner(`AI: Fixing ${filePath}...`);
     const parsed = await structuredModel.invoke(fixPrompt);
+    stopSpinner();
 
     if (parsed.code && parsed.code.length > 50) {
-      console.log(
-        `✨ [HealerNode] Generated fix (${parsed.code.length} chars)`
-      );
+      printSubStep(`✨ Fix generated. Re-verifying...`, 1);
       return {
         generatedCode: parsed.code,
-        // generatedDependencies has been completely removed
         healAttempts: newAttemptCount,
         errors: [], // Reset errors so Verifier can re-check them
       };
     }
   } catch (err) {
-    console.error(`❌ [HealerNode] Error: ${err.message}`);
+    printError(`HealerNode error: ${err.message}`);
   }
 
-  console.warn(`⚠️  [HealerNode] Failed to generate fix`);
+  printWarning('HealerNode: failed to generate fix');
   return { healAttempts: newAttemptCount };
 }

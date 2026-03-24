@@ -28,8 +28,18 @@ export function buildPrompt(fileContext) {
   const isTailwindDetected =
     /className\s*=\s*["'`]/.test(fileContent) ||
     /['"]tailwindcss['"]/.test(fileContent);
-  const targetStyleSystem =
-    tech.styling || (isTailwindDetected ? 'NativeWind' : 'StyleSheet');
+
+  // 🔥 Fix: Map Web 'Tailwind' to Mobile 'NativeWind'
+  let targetStyleSystem = 'StyleSheet'; // Default fallback
+
+  if (
+    tech.styling === 'Tailwind' ||
+    tech.styling === 'NativeWind' ||
+    isTailwindDetected
+  ) {
+    targetStyleSystem = 'NativeWind';
+  }
+
   const isNativeWind = targetStyleSystem === 'NativeWind';
   const hasRouting = tech.routing !== 'None';
 
