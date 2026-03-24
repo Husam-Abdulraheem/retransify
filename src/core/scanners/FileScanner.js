@@ -28,9 +28,6 @@ export async function scanProject(projectRoot, options = {}) {
     try {
       const detection = await FrameworkDetector.detect(projectRoot);
       frameworkType = detection.type;
-      console.log(
-        `🔍 Detected Framework: ${frameworkType} (Confidence: ${detection.confidence})`
-      );
     } catch (error) {
       console.error('❌ Framework Detection Failed:', error.message);
       throw error;

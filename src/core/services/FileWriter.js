@@ -12,7 +12,6 @@ export async function writeConvertedFile(rnProjectPath, relativePath, code) {
     const destPath = path.join(rnProjectPath, relativePath);
     await fs.ensureDir(path.dirname(destPath));
     await fs.writeFile(destPath, code, 'utf-8');
-    console.log(`📁 File written: ${relativePath}`);
   } catch (err) {
     console.error(`❌ Failed to write file ${relativePath}:`, err.message);
   }
