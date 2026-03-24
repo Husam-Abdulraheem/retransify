@@ -239,5 +239,9 @@ function buildFileContext(
 
     // Destination path
     targetPath: pathMap[filePath] || filePath,
+
+    // Determine if it is a Layout file conceptually
+    isLayoutFile:
+      (pathMap[filePath] && pathMap[filePath].endsWith('_layout.tsx')) || false,
   };
 }

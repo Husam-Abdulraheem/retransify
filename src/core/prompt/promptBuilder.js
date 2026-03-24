@@ -1,4 +1,4 @@
-// src/core/prompts/promptBuilder.js
+// src/core/prompt/promptBuilder.js
 import {
   COMMON_DEPENDENCIES,
   LEGACY_TO_EXPO_MAP,
@@ -18,6 +18,7 @@ export function buildPrompt(fileContext) {
     exactImportsMap = {},
     globalContext = {},
     installedPackages = [],
+    isLayoutFile = false,
   } = fileContext;
 
   const facts = globalContext.facts || {};
@@ -52,8 +53,7 @@ STRICT PROHIBITION: DO NOT use manual DOM renderers or root mounting logic. Expo
     : ''
 }
 1. TARGET FRAMEWORK (WEB TO NATIVE MAPPING):
-   - DOM ABSTRACTION: Completely eliminate ALL HTML/DOM elements. Map them to their semantic React Native primitives (e.g., text containers to <Text>, blocks to <View>, interactables to <Pressable>).
-   - BROWSER API ABSTRACTION: Identify any usage of Browser-specific APIs (e.g., Window, Document, DOM storage). Replace them with React Native APIs, Expo SDK features, or standard JavaScript equivalents.
+   - DOM ABSTRACTION: Completely eliminate ALL HTML/DOM elements. Map them to their semantic React Native primitives.
 
 2. STYLING SYSTEM: **${targetStyleSystem}**
 ${
@@ -67,8 +67,16 @@ ${
   hasRouting
     ? `   - The target project uses **Expo Router** (File-based routing).
    - ROUTING ABSTRACTION: Identify ANY web-based or legacy routing library used in the original code. You MUST remove its imports.
-   - Translate all declarative web links and imperative navigation hooks to Expo Router equivalents (import { Link, router } from 'expo-router').
-   - If this file represents a global provider, structure it so it can be used inside an Expo Router '_layout.tsx' file (export a component that wraps <Slot />).`
+${
+  isLayoutFile
+    ? `   - CRITICAL LAYOUT RULE: This file is an Expo Router Layout file. 
+     - If the original web code contains a navigation menu (Navbar, Sidebar, Burger Menu), DO NOT discard it. You MUST convert it into an Expo <Tabs> structure.
+     - Map each web navigation link to a <Tabs.Screen> and configure its 'options={{ title: "...", tabBarIcon: ... }}'.
+     - DO NOT use Web <Outlet /> or render raw {children}. Use <Tabs /> (if there is navigation) or <Stack />.`
+    : `   - Translate all declarative web links and imperative navigation hooks to Expo Router equivalents (import { Link, router } from 'expo-router').
+   - CRITICAL LINKING RULE: Expo Router is strictly FILE-BASED. When defining a path for <Link href="..."> or <Redirect href="..."> or router.push("..."), you MUST ensure the path EXACTLY MATCHES the final destination file names listed in the "PATH REMAPPING" block below, minus the file extension. 
+   - DO NOT copy the old web URLs blindly. If the web code redirects to "/dashboard" but the mapped physical file is "app/overview.tsx", you MUST output href="/overview".`
+}`
     : '   - No specific routing library detected. Use standard React state for conditional rendering if needed.'
 }
 
@@ -83,22 +91,21 @@ ${
      If the original code imports ANY library from this blocklist, or ANY library built exclusively for the Web/DOM, you MUST delete the import. Reverse-engineer its logic and implement the equivalent using pure React Native/Expo features.
    - ICONS ABSTRACTION: Standardize ALL third-party icon libraries to use '@expo/vector-icons' exclusively.
 
-5. MOBILE UI/UX & LAYOUT ADAPTATION (CRITICAL):
-   - NO CSS GRID: React Native uses Flexbox exclusively. Convert all grid layouts to semantic Flexbox structures.
+5. MOBILE UI/UX & LAYOUT ADAPTATION (CRITICAL - FIXES OVERLAPPING & OVERFLOW):
+   - SCROLLING IS NOT AUTOMATIC: Unlike Web, React Native Views do NOT scroll. You MUST wrap the main body of standard screens in a <ScrollView> or use <FlatList> for lists to prevent overlapping and clipped content.
+   - RESPONSIVENESS & WIDTHS: NEVER use fixed large desktop widths (e.g., width: 1000px or w-[1000px]). You MUST convert them to 'w-full', 'flex: 1', or use percentages ('100%') to fit mobile screens.
+   - NO CSS GRID: React Native uses Flexbox exclusively. Convert all grid layouts to semantic Flexbox structures (e.g., using 'flexWrap: wrap' and width percentages).
    - FLEX DIRECTION: React Native 'flexDirection' defaults to 'column'. Explicitly handle horizontal alignments.
-   - RESPONSIVENESS: Replace fixed desktop dimensions with fluid mobile constraints ('w-full', 'flex: 1', percentages).
    - SAFE AREAS: Prevent content overlap with device notches using <SafeAreaView> or 'useSafeAreaInsets'.
-   - NO HOVER STATES: Mobile devices lack a mouse cursor. Convert hover effects to active press states using <Pressable>.
 
 6. TYPESCRIPT STRICTNESS (CRITICAL):
    - The output MUST be valid TypeScript (.tsx).
-   - 🚨 STRICT ARCHITECTURAL MIGRATION: Identify ALL libraries or patterns used for 'runtime type checking', 'legacy DOM manipulation', or 'web-specific behavior'. You MUST completely remove their imports and usages. Replace them strictly with TypeScript static typing (interfaces/types).
+   - STRICT ARCHITECTURAL MIGRATION: Identify ALL libraries or patterns used for 'runtime type checking', 'legacy DOM manipulation', or 'web-specific behavior'. You MUST completely remove their imports and usages. Replace them strictly with TypeScript static typing (interfaces/types).
    - NO implicit 'any'. Infer types intelligently from the original code structure.
    - EXTENSION BAN: Ensure all relative local imports point to the correct file without extensions or with .tsx/.ts.
 `;
 
   // 4. Context & Input Code
-  // ... (Keep the rest of the code contextBlock and inputCodeBlock as is)
   const contextBlock = `
 -----------------------------------
 FILE CONTEXT
@@ -142,6 +149,7 @@ ${contextBlock}
 ${inputCodeBlock}
 `.trim();
 }
+
 export function buildFixPrompt(code, errors, installedPackages = []) {
   return `
 You are a Senior React Native Developer.

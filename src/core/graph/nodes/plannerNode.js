@@ -19,10 +19,10 @@ import { PathMapper } from '../../helpers/pathMapper.js';
 export async function plannerNode(state) {
   console.log('\n🗺️  [PlannerNode] Starting conversion ordering planning...');
 
-  const { filesQueue } = state;
+  const { filesQueue, routeMap = {} } = state;
 
-  // ── 1. Generate path map using PathMapper (no modification) ──
-  const pathMap = PathMapper.generateMap(filesQueue);
+  // ── 1. Generate path map using PathMapper (using new routeMap) ──
+  const pathMap = PathMapper.generateMap(filesQueue, routeMap);
   console.log(
     `📍 [PlannerNode] Generated path map for ${Object.keys(pathMap).length} files`
   );
