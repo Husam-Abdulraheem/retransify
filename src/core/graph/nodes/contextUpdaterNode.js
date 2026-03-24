@@ -2,6 +2,7 @@
 import path from 'path';
 import { Project } from 'ts-morph';
 import { Document } from '@langchain/core/documents';
+import { printSubStep, printWarning } from '../../utils/ui.js';
 
 /**
  * ContextUpdaterNode - Updates VectorStore with new code after conversion
@@ -18,10 +19,6 @@ export async function contextUpdaterNode(state) {
 
   const filePath = currentFile?.relativeToProject || currentFile?.filePath;
   if (!filePath) return {};
-
-  console.log(
-    `\n🔄 [ContextUpdaterNode] Updating VectorStore for: ${filePath}`
-  );
 
   try {
     // Extract new code summary with ts-morph
@@ -46,10 +43,10 @@ export async function contextUpdaterNode(state) {
       [filePath]: `converted_${filePath}`,
     };
 
-    console.log(`✅ [ContextUpdaterNode] VectorStore updated`);
+    printSubStep('VectorStore context updated');
     return { vectorIdMap: newVectorIdMap };
   } catch (err) {
-    console.warn(`⚠️  [ContextUpdaterNode] Update failed: ${err.message}`);
+    printWarning(`Context updater failed: ${err.message}`);
     return {};
   }
 }

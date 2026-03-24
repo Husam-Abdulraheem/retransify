@@ -1,5 +1,6 @@
 // src/core/graph/nodes/filePickerNode.js
 import path from 'path';
+import { printFileStart, printFileSkip, printWarning } from '../../utils/ui.js';
 
 /**
  * FilePickerNode - Pulls the next file from filesQueue for processing
@@ -19,7 +20,6 @@ export async function filePickerNode(state) {
   const { filesQueue, completedFiles = [], facts = {} } = state;
 
   if (!filesQueue || filesQueue.length === 0) {
-    console.log('\n✅ [FilePickerNode] All files processed');
     return { currentFile: null };
   }
 
@@ -29,9 +29,7 @@ export async function filePickerNode(state) {
 
   // ── Check previously completed files (resumption) ───────────
   if (completedFiles.includes(filePath)) {
-    console.log(
-      `⏩ [FilePickerNode] Skipped (previously completed): ${filePath}`
-    );
+    printFileSkip('Skipped (already done)', filePath);
     return {
       filesQueue: remainingFiles,
       currentFile: null, // Will re-invoke for the next file
@@ -44,7 +42,7 @@ export async function filePickerNode(state) {
     /^(main|index)\.(tsx|jsx|js|ts)$/i.test(baseName) &&
     filePath.includes('src')
   ) {
-    console.log(`🚫 [FilePickerNode] Deleting Web Mount File: ${filePath}`);
+    printFileSkip('Deleted (web mount)', filePath);
     return {
       filesQueue: remainingFiles,
       currentFile: null,
@@ -54,15 +52,14 @@ export async function filePickerNode(state) {
   // ── Check ignore list (writePhaseIgnores) ───────────────────
   const writePhaseIgnores = facts.writePhaseIgnores || [];
   if (writePhaseIgnores.some((regex) => regex.test(filePath))) {
-    console.log(`🚫 [FilePickerNode] Blocked by Profile rule: ${filePath}`);
+    printFileSkip('Blocked by profile rule', filePath);
     return {
       filesQueue: remainingFiles,
       currentFile: null,
     };
   }
 
-  console.log(`\n📂 [FilePickerNode] Next file: ${filePath}`);
-  console.log(`   (${remainingFiles.length} files remaining)`);
+  printFileStart(filePath, remainingFiles.length);
 
   // Read file content if not present
   let fileWithContent = nextFile;
@@ -73,7 +70,7 @@ export async function filePickerNode(state) {
       const content = await readFile(absolutePath, 'utf-8');
       fileWithContent = { ...nextFile, content };
     } catch {
-      console.warn(`⚠️  [FilePickerNode] Failed to read: ${filePath}`);
+      printWarning(`Failed to read: ${filePath}`);
     }
   }
 

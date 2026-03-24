@@ -4,6 +4,13 @@ import path from 'path';
 import { buildPrompt } from '../../prompt/promptBuilder.js';
 import { PathMapper } from '../../helpers/pathMapper.js';
 import { z } from 'zod';
+import {
+  printSubStep,
+  printWarning,
+  printError,
+  startSubSpinner,
+  stopSpinner,
+} from '../../utils/ui.js';
 
 // Define the expected output structure
 const outputSchema = z.object({
@@ -40,12 +47,12 @@ export async function executorNode(state, models = {}) {
   } = state;
 
   if (!currentFile) {
-    console.warn('⚠️  [ExecutorNode] No current file found');
+    printWarning('ExecutorNode: no current file');
     return { generatedCode: null };
   }
 
   const filePath = currentFile.relativeToProject || currentFile.filePath;
-  console.log(`\n⚙️  [ExecutorNode] Converting: ${filePath}`);
+  printSubStep('Converting file via AI...');
 
   // 1. 🔥 Read the file from disk
   const absolutePath = path.isAbsolute(filePath)
@@ -55,17 +62,12 @@ export async function executorNode(state, models = {}) {
   try {
     currentFile.content = await fs.readFile(absolutePath, 'utf-8');
   } catch (err) {
-    console.error(
-      `❌ [ExecutorNode] Failed to read file content for ${absolutePath}:`,
-      err
-    );
+    printError(`Failed to read ${absolutePath}: ${err.message}`);
   }
 
   // 2. 🔥 Security check after reading
   if (!currentFile.content || currentFile.content.trim() === '') {
-    console.warn(
-      `⚠️  [ExecutorNode] File content is strictly empty for ${filePath}, skipping AI.`
-    );
+    printWarning(`Empty file, skipping AI: ${filePath}`);
     return { generatedCode: '// Empty file' };
   }
 
@@ -86,13 +88,11 @@ export async function executorNode(state, models = {}) {
           .join('\n\n');
 
         if (ragContext) {
-          console.log(
-            `🔍 [ExecutorNode] RAG: Retrieved ${similarDocs.length} similar files`
-          );
+          printSubStep(`RAG: ${similarDocs.length} context files retrieved`);
         }
       }
     } catch (err) {
-      console.warn(`⚠️  [ExecutorNode] RAG Failed: ${err.message}`);
+      printWarning(`RAG failed: ${err.message}`);
     }
   }
 
@@ -116,7 +116,7 @@ export async function executorNode(state, models = {}) {
 
   const model = models.smartModel;
   if (!model) {
-    console.error('❌ [ExecutorNode] No smartModel found');
+    printError('No smartModel found in ExecutorNode');
     return { generatedCode: null };
   }
 
@@ -128,15 +128,14 @@ export async function executorNode(state, models = {}) {
   while (attempt < MAX_RETRIES) {
     try {
       if (attempt > 0) {
-        console.log(
-          `🔄 [ExecutorNode] Retry attempt ${attempt}/${MAX_RETRIES} for ${filePath}...`
-        );
+        startSubSpinner(`Retry ${attempt}/${MAX_RETRIES} for ${filePath}...`);
       } else {
-        console.log('🤖 [ExecutorNode] Sending to AI...');
+        startSubSpinner('AI: Generating native code...');
       }
 
       const structuredModel = model.withStructuredOutput(outputSchema);
       const response = await structuredModel.invoke(prompt);
+      stopSpinner();
 
       const generatedCode = response.code;
 
@@ -144,7 +143,7 @@ export async function executorNode(state, models = {}) {
         throw new Error('AI returned empty code block');
       }
 
-      console.log(`✅ [ExecutorNode] Generated ${generatedCode.length} chars`);
+      printSubStep(`AI Generated: ${generatedCode.length} chars ✔`);
 
       // Note: We don't write to disk here - that's DiskWriterNode's job
       return {
@@ -153,15 +152,11 @@ export async function executorNode(state, models = {}) {
       };
     } catch (err) {
       attempt++;
-      console.warn(
-        `⚠️  [ExecutorNode] AI Request Failed (Attempt ${attempt}): ${err.message}`
-      );
+      printWarning(`AI attempt ${attempt} failed: ${err.message}`);
 
       // If this was the last attempt, give up and exit
       if (attempt >= MAX_RETRIES) {
-        console.error(
-          `❌ [ExecutorNode] Failed to convert ${filePath} after ${MAX_RETRIES} attempts.`
-        );
+        printError(`Failed after ${MAX_RETRIES} attempts: ${filePath}`);
         return {
           generatedCode: null,
           errors: [
@@ -171,9 +166,7 @@ export async function executorNode(state, models = {}) {
       }
 
       // Exponential Backoff: Double the wait time with each failed attempt (2s -> 4s -> 8s)
-      console.log(
-        `⏳ [ExecutorNode] Waiting ${delayMs / 1000} seconds before retrying...`
-      );
+      printSubStep(`Waiting ${delayMs / 1000}s before retry...`);
       await sleep(delayMs);
       delayMs *= 2;
     }

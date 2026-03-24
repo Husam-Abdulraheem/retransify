@@ -6,6 +6,13 @@ import { MemoryVectorStore } from '../helpers/memoryVectorStoreStub.js';
 import { createEmbeddings } from '../../ai/aiFactory.js';
 import { Document } from '@langchain/core/documents';
 import { PROJECT_PROFILES } from '../../config/profiles.js';
+import {
+  printStep,
+  printSubStep,
+  printWarning,
+  startSubSpinner,
+  stopSpinner,
+} from '../../utils/ui.js';
 
 // ── Embeddings Model Setup ────────────────────────────────────────────────────
 // Used to convert file summaries to vectors for later search in ExecutorNode
@@ -27,7 +34,7 @@ import { PROJECT_PROFILES } from '../../config/profiles.js';
  * @returns {Partial<import('../state.js').GraphState>}
  */
 export async function analyzerNode(state) {
-  console.log('\n🕵️  [AnalyzerNode] Starting project analysis...');
+  printStep('Analyzer — scanning project');
 
   const { projectPath, filesQueue } = state;
 
@@ -40,7 +47,7 @@ export async function analyzerNode(state) {
 
   // ── 2. Analyze Tech Stack ─────────────────────────────────────
   const facts = await analyzeTechStack(projectPath, packageJson);
-  console.log('✅ [AnalyzerNode] Tech Stack:', facts.tech);
+  printSubStep(`Tech Stack: ${JSON.stringify(facts.tech)}`);
 
   // ── 3. Scan files with ts-morph and extract summaries ─────────
   const { vectorStore, vectorIdMap } = await buildVectorStore(
@@ -48,8 +55,8 @@ export async function analyzerNode(state) {
     projectPath
   );
 
-  console.log(
-    `✅ [AnalyzerNode] Indexed ${Object.keys(vectorIdMap).length} files in VectorStore`
+  printSubStep(
+    `Indexed ${Object.keys(vectorIdMap).length} files in VectorStore`
   );
 
   return {
@@ -84,7 +91,7 @@ async function analyzeTechStack(projectPath, packageJson) {
   let mainEntryPoint = null;
   if (entryFiles && entryFiles.length > 0) {
     mainEntryPoint = entryFiles[0];
-    console.log(`🎯 [AnalyzerNode] Entry point: ${mainEntryPoint}`);
+    printSubStep(`Entry point: ${mainEntryPoint}`);
   }
 
   return {
@@ -202,6 +209,7 @@ function getWritePhaseIgnores(tech) {
  * @returns {{ vectorStore: MemoryVectorStore, vectorIdMap: Object }}
  */
 async function buildVectorStore(filesQueue, projectPath) {
+  startSubSpinner(`Indexing ${filesQueue.length} files...`);
   const embeddings = createEmbeddings();
   const documents = [];
   const vectorIdMap = {};
@@ -245,9 +253,7 @@ async function buildVectorStore(filesQueue, projectPath) {
 
       documents.push({ doc, filePath });
     } catch (err) {
-      console.warn(
-        `⚠️  [AnalyzerNode] Failed to analyze: ${filePath} - ${err.message}`
-      );
+      printWarning(`Analyzer skipped ${filePath}: ${err.message}`);
     }
   }
 
@@ -266,6 +272,7 @@ async function buildVectorStore(filesQueue, projectPath) {
     vectorIdMap[filePath] = index;
   });
 
+  stopSpinner();
   return { vectorStore, vectorIdMap };
 }
 

@@ -2,6 +2,13 @@
 import path from 'path';
 import { saveConvertedFile } from '../../services/nativeWriter.js';
 import { CONFLICT_MAP, WEB_ONLY_BLOCKLIST } from '../../config/libraryRules.js';
+import {
+  printSubStep,
+  printSubStepLast,
+  printFileWritten,
+  printWarning,
+  printError,
+} from '../../utils/ui.js';
 
 /**
  * DiskWriterNode - Writes generated code to disk
@@ -24,7 +31,7 @@ export async function diskWriterNode(state) {
   } = state;
 
   if (!generatedCode || !currentFile) {
-    console.warn('⚠️  [DiskWriterNode] No code to write');
+    printWarning('DiskWriterNode: nothing to write');
     return {};
   }
 
@@ -32,15 +39,13 @@ export async function diskWriterNode(state) {
   const baseName = path.basename(filePath);
   const sourceRoot = facts?.sourceRoot || '.';
 
-  console.log(`\n💾 [DiskWriterNode] Writing: ${filePath}`);
-
   // ── 1. Determine destination path ───────────────────────────
   let destPath = resolveDestPath(filePath, pathMap, sourceRoot);
 
   // Override if main App file
   if (currentFile.isMainEntry || /^App\.(tsx|jsx|js|ts)$/i.test(baseName)) {
     destPath = 'app/index.tsx';
-    console.log(`🚀 [DiskWriterNode] App file -> app/index.tsx`);
+    printSubStep(`App entry → ${destPath}`);
   }
 
   // ── 2. Filter and add dependencies to DependencyManager ─────
@@ -50,9 +55,7 @@ export async function diskWriterNode(state) {
       state.installedPackages || []
     );
     if (filteredDeps.length > 0) {
-      console.log(
-        `📦 [DiskWriterNode] Adding dependencies: ${filteredDeps.join(', ')}`
-      );
+      printSubStep(`Queuing deps: ${filteredDeps.join(', ')}`);
       dependencyManager.add(filteredDeps);
     }
   }
@@ -66,14 +69,15 @@ export async function diskWriterNode(state) {
       dependencyManager
     );
 
-    console.log(`✅ [DiskWriterNode] Written successfully: ${destPath}`);
+    printFileWritten(destPath);
+    printSubStepLast(`Saved: ${destPath} ✔`);
 
     return {
       completedFiles: filePath, // Will be added to array by reducer
       errorLog: [], // No new errors
     };
   } catch (err) {
-    console.error(`❌ [DiskWriterNode] Write failed: ${err.message}`);
+    printError(`Write failed: ${err.message}`);
     return {
       errorLog: [
         {

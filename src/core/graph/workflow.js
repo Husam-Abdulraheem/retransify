@@ -15,6 +15,18 @@ import { DependencyManager } from '../helpers/dependencyManager.js';
 import { RouteAnalyzer } from '../scanners/RouteAnalyzer.js';
 import { ensureNativeProject } from '../services/nativeWriter.js';
 import { Verifier } from '../utils/verifier.js';
+import {
+  startSpinner,
+  stopSpinner,
+  succeedSpinner,
+  failSpinner,
+  updateSpinner,
+  printStep,
+  printInfo,
+  printWarning,
+  printError,
+  printSummaryBox,
+} from '../utils/ui.js';
 import path from 'path';
 import fs from 'fs-extra';
 
@@ -123,7 +135,7 @@ function shouldProcessFile(state) {
  */
 function didExecutorSucceed(state) {
   if (!state.generatedCode || state.generatedCode.length < 10) {
-    console.warn('⚠️  [Workflow] ExecutorNode failed - moving to next file');
+    printWarning('[Workflow] ExecutorNode failed - moving to next file');
     return 'failure';
   }
   return 'success';
@@ -144,8 +156,8 @@ function shouldHealOrContinue(state) {
   }
 
   if (healAttempts >= MAX_HEAL_ATTEMPTS) {
-    console.warn(
-      `🛑 [Workflow] Exceeded maximum heal attempts (${MAX_HEAL_ATTEMPTS}) - writing as is`
+    printWarning(
+      `[Workflow] Exceeded maximum heal attempts (${MAX_HEAL_ATTEMPTS}) - writing as is`
     );
     return 'giveUp'; // Exceeded limit -> write what you have
   }
@@ -167,9 +179,7 @@ export async function runMigrationWorkflow(
   filesQueue,
   options = {}
 ) {
-  console.log('\n🚀 [Workflow] Starting migration workflow...');
-  console.log(`   📁 Project: ${projectPath}`);
-  console.log(`   📋 Number of files: ${filesQueue.length}`);
+  const startTime = Date.now();
 
   // ── 1. Initialize Models ─────────────────────────────────────────
   const models = createModelPair({
@@ -184,24 +194,29 @@ export async function runMigrationWorkflow(
   });
 
   // ── 3. Initialize React Native Project ──────────────────────────────
-  console.log('\n📱 [Workflow] Setting up React Native project...');
+  //  ⚠️  stopSpinner BEFORE ensureNativeProject because it runs npm/npx internally
+  printStep('Setting up React Native base project');
+  stopSpinner();
   const rnProjectPath = await ensureNativeProject(
     options.sdkVersion,
     dependencyManager
   );
+  printInfo(`Output path: ${rnProjectPath}`);
 
   // ── 3.5. Phase 1: Pre-flight Dependency Resolution & Route Extraction ────────────────
-  console.log(
-    '\n📦 [Workflow] Executing Project-Wide Dependency Resolution (Phase 1)...'
-  );
+  printStep('Resolving project-wide dependencies');
+  //  ⚠️  stopSpinner again before installAll (npm output must reach the terminal)
+  stopSpinner();
   await dependencyManager.scanAndResolve(filesQueue, models.fastModel);
   await dependencyManager.installAll(rnProjectPath);
 
   // ── 3.6. Route Extraction & Projection ──────────────────────────
   const routeMap = await RouteAnalyzer.analyze(projectPath, filesQueue);
   if (Object.keys(routeMap).length > 0) {
+    updateSpinner(`Projecting ${Object.keys(routeMap).length} routes...`);
     await RouteAnalyzer.projectRoutes(rnProjectPath, routeMap);
   }
+  succeedSpinner(`Routes analyzed (${Object.keys(routeMap).length} routes)`);
 
   // ── 4. Read Installed Packages ───────────────────────────────────
   let installedPackages = [];
@@ -215,7 +230,7 @@ export async function runMigrationWorkflow(
       });
     }
   } catch (e) {
-    console.warn('⚠️  [Workflow] Failed to read package.json:', e.message);
+    printWarning(`Failed to read package.json: ${e.message}`);
   }
 
   // ── 5. Initial State ──────────────────────────────────────
@@ -242,9 +257,11 @@ export async function runMigrationWorkflow(
   };
 
   // ── 6. Build and Run Graph ──────────────────────────────────
-  const graph = buildWorkflow(models);
+  //  ⚠️  LangGraph logs MUST be visible — no spinner wrapper here
+  printStep('Running AI conversion pipeline');
+  console.log(''); // Breathing room before streaming logs
 
-  console.log('\n▶️  [Workflow] Running Graph...\n');
+  const graph = buildWorkflow(models);
 
   try {
     const finalState = await graph.invoke(initialState, {
@@ -252,30 +269,34 @@ export async function runMigrationWorkflow(
       recursionLimit: Math.max(filesQueue.length * 10, 100),
     });
 
-    // ── 8. Final Project Verification with TypeScript ──────────────────
-    console.log('\n🔍 [Workflow] Final project verification...');
+    // ── 7. Final Project Verification with TypeScript ──────────────────
+    startSpinner('Running final TypeScript verification...');
     const verifier = new Verifier();
     await verifier.verifyProject(rnProjectPath);
+    succeedSpinner('Final verification passed');
 
-    // ── 9. Completion Report ─────────────────────────────────────
+    // ── 8. Completion Report ─────────────────────────────────────
     const completed = finalState.completedFiles?.length || 0;
     const failed = finalState.errorLog?.length || 0;
 
-    console.log('\n✨ [Workflow] Migration completed!');
-    console.log(`   ✅ Succeeded: ${completed} files`);
-    console.log(`   ❌ Failed: ${failed} files`);
-    console.log(`   📁 New Project: ${rnProjectPath}`);
+    printSummaryBox({
+      completed,
+      failed,
+      outputPath: rnProjectPath,
+      elapsedMs: Date.now() - startTime,
+    });
 
     if (failed > 0) {
-      console.log('\n⚠️  Files that failed:');
+      printWarning('Files that failed:');
       finalState.errorLog?.forEach((e) =>
-        console.log(`   - ${e.filePath}: ${e.error}`)
+        printError(`  ${e.filePath}: ${e.error}`)
       );
     }
 
     return finalState;
   } catch (err) {
-    console.error('\n💥 [Workflow] Error running Graph:', err.message);
+    stopSpinner();
+    printError(`Graph execution error: ${err.message}`);
     throw err;
   }
 }
