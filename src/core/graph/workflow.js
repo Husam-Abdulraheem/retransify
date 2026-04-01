@@ -13,7 +13,7 @@ import { filePickerNode } from './nodes/filePickerNode.js';
 import { createModelPair } from '../ai/aiFactory.js';
 import { DependencyManager } from '../helpers/dependencyManager.js';
 import { RouteAnalyzer } from '../scanners/RouteAnalyzer.js';
-import { ensureNativeProject } from '../services/nativeWriter.js';
+import { ensureNativeProject } from '../services/ProjectInitializer.js';
 import { Verifier } from '../utils/verifier.js';
 import {
   startSpinner,

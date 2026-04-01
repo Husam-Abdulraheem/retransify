@@ -194,12 +194,17 @@ function buildFileContext(
   let isMainEntry = false;
   if (/^App\.(tsx|jsx|js|ts)$/i.test(baseName)) {
     isMainEntry = true;
-  } else if (
-    facts.mainEntryPoint &&
-    (filePath === facts.mainEntryPoint ||
-      filePath.endsWith(path.basename(facts.mainEntryPoint)))
-  ) {
-    isMainEntry = true;
+  } else if (facts.mainEntryPoint) {
+    const mainBaseName = path.basename(facts.mainEntryPoint);
+    const mainRelative = facts.projectPath
+      ? path
+          .relative(facts.projectPath, facts.mainEntryPoint)
+          .replace(/\\/g, '/')
+      : null;
+
+    if (filePath === mainRelative || baseName === mainBaseName) {
+      isMainEntry = true;
+    }
   }
 
   return {

@@ -1,6 +1,6 @@
 // src/core/graph/nodes/diskWriterNode.js
 import path from 'path';
-import { saveConvertedFile } from '../../services/nativeWriter.js';
+import fs from 'fs-extra';
 import { CONFLICT_MAP, WEB_ONLY_BLOCKLIST } from '../../config/libraryRules.js';
 import {
   printSubStep,
@@ -27,7 +27,6 @@ export async function diskWriterNode(state) {
     pathMap,
     facts,
     dependencyManager,
-    options = {},
   } = state;
 
   if (!generatedCode || !currentFile) {
@@ -42,12 +41,6 @@ export async function diskWriterNode(state) {
   // ── 1. Determine destination path ───────────────────────────
   let destPath = resolveDestPath(filePath, pathMap, sourceRoot);
 
-  // Override if main App file
-  if (currentFile.isMainEntry || /^App\.(tsx|jsx|js|ts)$/i.test(baseName)) {
-    destPath = 'app/index.tsx';
-    printSubStep(`App entry → ${destPath}`);
-  }
-
   // ── 2. Filter and add dependencies to DependencyManager ─────
   if (dependencyManager && generatedDependencies.length > 0) {
     const filteredDeps = filterDependencies(
@@ -60,21 +53,24 @@ export async function diskWriterNode(state) {
     }
   }
 
-  // ── 3. Write to disk (using nativeWriter.js as is) ──────────
+  // ── 3. Write to disk directly using state.rnProjectPath ──────────
   try {
-    await saveConvertedFile(
-      destPath,
-      generatedCode,
-      options.sdkVersion,
-      dependencyManager
+    // Calculate the absolute destination path
+    const absoluteDestPath = path.join(
+      state.rnProjectPath || process.cwd(),
+      destPath
     );
+
+    // Ensure the directory exists, then write the file
+    await fs.ensureDir(path.dirname(absoluteDestPath));
+    await fs.writeFile(absoluteDestPath, generatedCode, 'utf-8');
 
     printFileWritten(destPath);
     printSubStepLast(`Saved: ${destPath} ✔`);
 
     return {
-      completedFiles: filePath, // Will be added to array by reducer
-      errorLog: [], // No new errors
+      completedFiles: filePath,
+      errorLog: [],
     };
   } catch (err) {
     printError(`Write failed: ${err.message}`);

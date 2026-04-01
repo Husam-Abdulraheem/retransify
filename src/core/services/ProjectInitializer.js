@@ -100,6 +100,7 @@ export async function ensureNativeProject(sdkVersion, dependencyManager) {
  * Core file configurations (Pure File Ops)
  */
 async function setupExpoConfig(projectPath) {
+  // 1. Setup app.json
   const appJsonPath = path.join(projectPath, 'app.json');
   if (await fs.pathExists(appJsonPath)) {
     const appJson = await fs.readJson(appJsonPath);
@@ -109,6 +110,18 @@ async function setupExpoConfig(projectPath) {
       appJson.expo.web.bundler = 'metro';
       await fs.writeJson(appJsonPath, appJson, { spaces: 2 });
     }
+  }
+
+  // 2. Ensure base babel.config.js exists for EVERY project
+  const babelConfigPath = path.join(projectPath, 'babel.config.js');
+  if (!(await fs.pathExists(babelConfigPath))) {
+    const baseBabelContent = `module.exports = function(api) {
+  api.cache(true);
+  return {
+    presets: ['babel-preset-expo'],
+  };
+};`;
+    await fs.writeFile(babelConfigPath, baseBabelContent);
   }
 }
 
