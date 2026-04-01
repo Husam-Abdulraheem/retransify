@@ -82,7 +82,7 @@ export class PathMapper {
       if (routeMap[oldPath]) {
         refinedPath = routeMap[oldPath];
       } else {
-        refinedPath = this.determineNewPath(file);
+        refinedPath = this.determineNewPath(file, routeMap);
       }
 
       // 🚨 [Strict Standard]: Uniform casing for routing paths.
@@ -102,7 +102,7 @@ export class PathMapper {
    * @param {Object} file - fileObject from scanner
    * @returns {string} importable new path
    */
-  static determineNewPath(file) {
+  static determineNewPath(file, routeMap = {}) {
     let normalizedPath = file.relativeToProject.replace(/\\/g, '/');
     if (normalizedPath.startsWith('src/')) {
       normalizedPath = normalizedPath.substring(4);
@@ -117,8 +117,9 @@ export class PathMapper {
     if (/^(main|index)\.(js|jsx|ts|tsx)$/.test(normalizedPath)) {
       return `app/_layout.tsx`;
     }
-    if (/^App\.(js|jsx|ts|tsx)$/.test(normalizedPath)) {
-      return `app/index.tsx`; // Will perform a redirect to /(tabs)/...
+    if (/^App\.(js|jsx|ts|tsx)$/i.test(normalizedPath)) {
+      const hasRoutes = Object.keys(routeMap || {}).length > 0;
+      return hasRoutes ? `app/_layout.tsx` : `app/index.tsx`;
     }
 
     // 2. 🚨 Universal Layout Fallback (Stack/Slot instead of forced Tabs)
@@ -181,7 +182,7 @@ export class PathMapper {
     }
 
     // Final Fallback
-    return normalizedPath.replace(/\.js$/, '.ts').replace(/\.jsx$/, '.tsx');
+    return normalizedPath.replace(/\.(js|jsx)$/i, '.tsx');
   }
 
   static isInFolder(parts, folderName) {

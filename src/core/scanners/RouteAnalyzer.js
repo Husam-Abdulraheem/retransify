@@ -30,8 +30,8 @@ export class RouteAnalyzer {
     // 2. Safe File Loading & AST Injection
     for (const fileObj of filesQueue) {
       // Only process component/logic files
-      if (!/\.(jsx?|tsx?)$/.test(fileObj.filePath)) continue;
-
+      const currentPath = fileObj.filePath || fileObj.relativeToProject || '';
+      if (!/\.(jsx?|tsx?)$/i.test(currentPath)) continue;
       const absolutePath =
         fileObj.absolutePath ||
         path.join(projectRoot, fileObj.filePath || fileObj.relativeToProject);
@@ -183,6 +183,9 @@ export class RouteAnalyzer {
     let hasChildren = false;
     let childrenRoutes = [];
 
+    // Check if route has an index attribute
+    const isIndexRoute = opening.getAttribute('index') !== undefined;
+
     if (routeNode.getKind() === SyntaxKind.JsxElement) {
       childrenRoutes = routeNode
         .getJsxChildren()
@@ -203,7 +206,12 @@ export class RouteAnalyzer {
         projectRoot
       );
       if (resolvedFilePath) {
-        const expoPath = this._calculateExpoPath(currentPath, hasChildren);
+        // Pass isIndexRoute to generate proper exact path
+        const expoPath = this._calculateExpoPath(
+          currentPath,
+          hasChildren,
+          isIndexRoute
+        );
         routeMap[resolvedFilePath] = expoPath;
         ui.printSubStep(`Mapped: ${resolvedFilePath} → ${expoPath}`, 2);
       }
@@ -283,7 +291,13 @@ export class RouteAnalyzer {
         projectRoot
       );
       if (resolvedFilePath) {
-        const expoPath = this._calculateExpoPath(currentPath, hasChildren);
+        const isIndexRoute = !!objNode.getProperty('index');
+
+        const expoPath = this._calculateExpoPath(
+          currentPath,
+          hasChildren,
+          isIndexRoute
+        );
         routeMap[resolvedFilePath] = expoPath;
         ui.printSubStep(`Mapped: ${resolvedFilePath} → ${expoPath}`, 2);
       }
@@ -310,7 +324,7 @@ export class RouteAnalyzer {
   static _extractComponentName(node) {
     const elementAttr = node.getAttribute('element');
     const componentAttr = node.getAttribute('Component');
-    const legacyComponentAttr = node.getAttribute('component'); // دعم الإصدارات القديمة
+    const legacyComponentAttr = node.getAttribute('component');
 
     if (elementAttr && elementAttr.getKind() === SyntaxKind.JsxAttribute) {
       const expr = elementAttr.getInitializer()?.getExpression?.();
@@ -346,6 +360,7 @@ export class RouteAnalyzer {
   }
 
   static _resolveImport(sourceFile, componentName, projectRoot) {
+    // 1. Check static imports
     const imports = sourceFile.getImportDeclarations();
     for (const imp of imports) {
       const defaultImport = imp.getDefaultImport()?.getText();
@@ -357,28 +372,34 @@ export class RouteAnalyzer {
         defaultImport === componentName ||
         namedImports.includes(componentName)
       ) {
-        const moduleSpecifier = imp.getModuleSpecifierValue();
-        if (moduleSpecifier.startsWith('.')) {
-          const baseDir = path.dirname(sourceFile.getFilePath());
-          const absoluteTarget = path.resolve(baseDir, moduleSpecifier);
+        return this._verifyAndReturnPath(
+          sourceFile,
+          imp.getModuleSpecifierValue(),
+          projectRoot
+        );
+      }
+    }
 
-          // إصلاح ثغرة الامتداد المزدوج (التأكد من كل الاحتمالات)
-          const candidates = [
-            absoluteTarget, // قد يحتوي على امتداد مسبقاً
-            `${absoluteTarget}.js`,
-            `${absoluteTarget}.jsx`,
-            `${absoluteTarget}.ts`,
-            `${absoluteTarget}.tsx`,
-            `${absoluteTarget}/index.js`,
-            `${absoluteTarget}/index.jsx`,
-            `${absoluteTarget}/index.ts`,
-            `${absoluteTarget}/index.tsx`,
-          ];
+    // 2. Check dynamic imports (e.g., lazy(() => import('./pages/Dashboard')))
+    const callExpressions = sourceFile.getDescendantsOfKind(
+      SyntaxKind.CallExpression
+    );
+    for (const callExpr of callExpressions) {
+      if (callExpr.getExpression().getText() === 'import') {
+        const args = callExpr.getArguments();
+        if (args.length > 0 && args[0].getKind() === SyntaxKind.StringLiteral) {
+          const importPath = args[0].getLiteralText();
 
-          for (const candidate of candidates) {
-            if (fs.existsSync(candidate)) {
-              return path.relative(projectRoot, candidate).replace(/\\/g, '/');
-            }
+          // Match dynamic import path with component name
+          const parentVar = callExpr.getFirstAncestorByKind(
+            SyntaxKind.VariableDeclaration
+          );
+          if (parentVar && parentVar.getName() === componentName) {
+            return this._verifyAndReturnPath(
+              sourceFile,
+              importPath,
+              projectRoot
+            );
           }
         }
       }
@@ -386,43 +407,63 @@ export class RouteAnalyzer {
     return null;
   }
 
-  static _calculateExpoPath(routePath, isLayout) {
-    // إصلاح ثغرة المسار الجذري
+  // Helper method to verify and return correct path structure
+  static _verifyAndReturnPath(sourceFile, moduleSpecifier, projectRoot) {
+    if (moduleSpecifier.startsWith('.')) {
+      const baseDir = path.dirname(sourceFile.getFilePath());
+      const absoluteTarget = path.resolve(baseDir, moduleSpecifier);
+      const candidates = [
+        absoluteTarget,
+        `${absoluteTarget}.js`,
+        `${absoluteTarget}.jsx`,
+        `${absoluteTarget}.ts`,
+        `${absoluteTarget}.tsx`,
+        `${absoluteTarget}/index.js`,
+        `${absoluteTarget}/index.jsx`,
+        `${absoluteTarget}/index.ts`,
+        `${absoluteTarget}/index.tsx`,
+      ];
+      for (const candidate of candidates) {
+        if (fs.existsSync(candidate)) {
+          return path.relative(projectRoot, candidate).replace(/\\/g, '/');
+        }
+      }
+    }
+    return null;
+  }
+
+  static _calculateExpoPath(routePath, isLayout, isIndex = false) {
     let cleanPath = (routePath || '').replace(/^\/+/, '').replace(/\/+$/, '');
 
+    // Handle 404/wildcard routes
+    if (cleanPath === '*') return 'app/[...missing].tsx';
+
+    // Handle root path
     if (!cleanPath) {
+      if (isIndex) return 'app/index.tsx';
       return isLayout ? 'app/_layout.tsx' : 'app/index.tsx';
     }
 
+    // Handle dynamic route parameters
     const modifiedPath = cleanPath
       .split('/')
       .map((part) => (part.startsWith(':') ? `[${part.substring(1)}]` : part))
       .join('/');
 
+    if (isIndex) return `app/${modifiedPath}/index.tsx`;
     return isLayout
       ? `app/${modifiedPath}/_layout.tsx`
       : `app/${modifiedPath}.tsx`;
   }
 
   static async projectRoutes(rnProjectPath, routeMap) {
-    ui.step('RouteAnalyzer', 'Projecting route map to File System...');
-    let count = 0;
+    ui.step('RouteAnalyzer', 'Validating route map for File System...');
 
-    for (const [originalFile, expoPath] of Object.entries(routeMap)) {
-      const absoluteDest = path.join(rnProjectPath, expoPath);
-      await fs.ensureDir(path.dirname(absoluteDest));
-
-      if (!(await fs.pathExists(absoluteDest))) {
-        await fs.writeFile(
-          absoluteDest,
-          `// AI Scaffold for ${originalFile}\n`
-        );
-        count++;
-      }
-    }
+    // Only display routes, do not write empty scaffolding files to prevent Metro crashes
+    const routesCount = Object.keys(routeMap).length;
 
     ui.printSubStep(
-      `Projected ${count} new route files into app/ directory.`,
+      `Validated ${routesCount} routes ready for AI projection. (Scaffolding bypassed to prevent Metro errors)`,
       1,
       true
     );
