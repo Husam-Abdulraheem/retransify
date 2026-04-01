@@ -54,40 +54,37 @@ Your objective is to convert the provided web file into a production-ready, idio
 -----------------------------------
 STRICT ARCHITECTURAL RULES
 -----------------------------------
-${
-  fileContext.isMainEntry
-    ? `[CRITICAL - MAIN ENTRY POINT]
-This is the core App component. You MUST output a standard React Native component to serve as the 'app/index.tsx' screen for Expo Router.
-STRICT PROHIBITION: DO NOT use manual DOM renderers or root mounting logic. Expo Router handles mounting automatically.
-`
-    : ''
-}
 1. TARGET FRAMEWORK (WEB TO NATIVE MAPPING):
    - DOM ABSTRACTION: Completely eliminate ALL HTML/DOM elements. Map them to their semantic React Native primitives.
 
 2. STYLING SYSTEM: **${targetStyleSystem}**
 ${
   isNativeWind
-    ? "   - You MUST use the 'className' prop with Tailwind classes (NativeWind is pre-configured).\n   - Translate standard CSS/inline styles to Tailwind classes where possible."
-    : "   - You MUST use 'StyleSheet.create({...})'.\n   - DO NOT use 'className'. Translate any existing Tailwind classes to standard StyleSheet objects."
+    ? `   - [CRITICAL STYLING RULE]: You MUST use the 'className' prop with Tailwind classes (NativeWind v4 is pre-configured).
+   - STRICT PROHIBITION: You are FORBIDDEN from using 'StyleSheet.create({...})'. Do NOT output any StyleSheet objects.
+   - Translate ALL standard CSS and inline styles to equivalent Tailwind utility classes.
+   - Example: Replace <View style={styles.container}> with <View className="flex-1 items-center justify-center bg-white">.`
+    : `   - You MUST use 'StyleSheet.create({...})'.
+   - STRICT PROHIBITION: DO NOT use the 'className' prop. Translate any existing Tailwind classes to standard StyleSheet objects.`
 }
 
 3. ROUTING & NAVIGATION (CRITICAL):
 ${
   hasRouting
     ? `   - The target project uses **Expo Router** (File-based routing).
-   - ROUTING ABSTRACTION: Identify ANY web-based or legacy routing library used in the original code. You MUST remove its imports.
+   - ROUTING ABSTRACTION: Identify ANY web-based routing library used and remove its imports.`
+    : '   - No specific routing library detected. Use standard React state for conditional rendering if needed.'
+}
 ${
   isLayoutFile
-    ? `   - CRITICAL LAYOUT RULE: This file is an Expo Router Layout file. 
-     - If the original web code contains a navigation menu (Navbar, Sidebar, Burger Menu), DO NOT discard it. You MUST convert it into an Expo <Tabs> structure.
-     - Map each web navigation link to a <Tabs.Screen> and configure its 'options={{ title: "...", tabBarIcon: ... }}'.
-     - DO NOT use Web <Outlet /> or render raw {children}. Use <Tabs /> (if there is navigation) or <Stack />.`
-    : `   - Translate all declarative web links and imperative navigation hooks to Expo Router equivalents (import { Link, router } from 'expo-router').
-   - CRITICAL LINKING RULE: Expo Router is strictly FILE-BASED. When defining a path for <Link href="..."> or <Redirect href="..."> or router.push("..."), you MUST ensure the path EXACTLY MATCHES the final destination file names listed in the "PATH REMAPPING" block below, minus the file extension. 
-   - DO NOT copy the old web URLs blindly. If the web code redirects to "/dashboard" but the mapped physical file is "app/overview.tsx", you MUST output href="/overview".`
-}`
-    : '   - No specific routing library detected. Use standard React state for conditional rendering if needed.'
+    ? `   - [CRITICAL LAYOUT RULE]: This file is a ROUTER LAYOUT ('${fileContext.targetPath}').
+     - You MUST wrap the application and render the Expo Router <Slot /> component.
+     - [CRITICAL SETUP]: You MUST add "import '../global.css';" at the very top of the file if NativeWind is used.
+     - DO NOT output standard UI screen content here. This is ONLY for structural wrappers and Providers.`
+    : `   - [CRITICAL SCREEN RULE]: This file is a STANDARD UI SCREEN ('${fileContext.targetPath}').
+     - STRICT PROHIBITION: You are FORBIDDEN from using the <Slot /> component.
+     - DO NOT abstract the UI away into a Context Provider that returns a <Slot />.
+     - You MUST directly render the actual visual React Native components (Views, Text, FlatList, Input) inside the main export.`
 }
 
 4. DEPENDENCIES & LIBRARIES MAP:
@@ -160,17 +157,36 @@ ${inputCodeBlock}
 `.trim();
 }
 
-export function buildFixPrompt(code, errors, installedPackages = []) {
+export function buildFixPrompt(
+  code,
+  errors,
+  installedPackages = [],
+  state = {}
+) {
+  const facts = state.facts || {};
+  const tech = facts.tech || {};
+
+  const isNativeWind =
+    tech.styling === 'NativeWind' ||
+    tech.styling === 'Tailwind' ||
+    (installedPackages || []).includes('nativewind') ||
+    /className\s*=/.test(code) ||
+    /from ['"]nativewind['"]/.test(code);
+
   return `
-You are a Senior React Native Developer.
+You are a Senior React Native Developer & TypeScript Expert.
 The TypeScript compiler has detected logic or type issues in the following code.
 
 -----------------------------------
-STRICT ARCHITECTURAL CONSTRAINTS
+STRICT HEALING PRINCIPLES & CONSTRAINTS
 -----------------------------------
-- You are FORBIDDEN to use any external library outside this compiled list: [${installedPackages.join(', ')}].
-- Do NOT invent or import new npm packages. If a feature or fix requires a missing package, implement it using standard React Native APIs or a manual polyfill.
-- Output MUST be the corrected code only.
+1. SCOPE ISOLATION (CRITICAL): You can ONLY modify the code provided in this file. You CANNOT modify external files, imported components, or global interfaces.
+2. COMPONENT ADAPTATION: If the error involves a mismatch between passed props and an imported component's signature (e.g., TS2322, TS2769, TS2339), you MUST modify the JSX in THIS file to conform to the component. Strip out unrecognized props, rename them, or coerce the types locally.
+3. WEB DOM LEAKAGE: If the error complains about missing web types (e.g., 'window', 'HTMLInputElement', 'div', 'onClick'${!isNativeWind ? ", 'className'" : ''}), you MUST completely remove them or replace them with their React Native/Expo equivalents.
+${isNativeWind ? "4. STYLING: This project uses NativeWind. Do NOT remove 'className' properties. If there are type errors regarding 'className', ignore them or fix them without removing the property. DO NOT use StyleSheet.create." : "4. STYLING: This project uses standard StyleSheet. Do NOT use 'className'."}
+5. DEPENDENCY RESTRICTION: You are FORBIDDEN to use any external library outside this compiled list: [${installedPackages.join(', ')}]. If a fix requires a missing package, implement it using standard React Native APIs.
+6. NO SUPPRESSION: Do NOT use @ts-ignore or 'any' assertions to bypass errors. You must structurally fix the logic.
+7. OUTPUT FORMAT: Output MUST be the corrected code only.
 
 -----------------------------------
 CODE CONTEXT
@@ -185,9 +201,6 @@ ${errors.join('\n')}
 -----------------------------------
 TASK
 -----------------------------------
-Fix the logic or type errors above. 
-- If an import is missing, ensure it exists in the constraints list before adding it. Otherwise, remove the dependency and rewrite the logic natively.
-- If a type is mismatched, adjust the interface locally.
-- Do NOT simply suppress errors with @ts-ignore unless strictly impossible to resolve.
+Analyze the errors and rewrite the code to be 100% valid TypeScript for React Native. Adapt the current file's logic to resolve the boundaries without assuming external changes.
 `;
 }

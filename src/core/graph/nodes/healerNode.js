@@ -44,7 +44,23 @@ export async function healerNode(state, models = {}) {
   }
 
   // Pass installed libraries to restrict the model
-  const fixPrompt = buildFixPrompt(generatedCode, errors, installedPackages);
+  const MAX_ERRORS = 5;
+  let displayedErrors = errors;
+
+  if (errors.length > MAX_ERRORS) {
+    displayedErrors = errors.slice(0, MAX_ERRORS);
+    displayedErrors.push(
+      `\n... and ${errors.length - MAX_ERRORS} more errors hidden. Fix these top critical errors first, as they often cascade and solve the rest.`
+    );
+  }
+
+  // Pass installed libraries to restrict the model
+  const fixPrompt = buildFixPrompt(
+    generatedCode,
+    displayedErrors,
+    installedPackages,
+    state
+  );
 
   try {
     const structuredModel =
