@@ -8,7 +8,7 @@ import {
   WEB_ONLY_BLOCKLIST,
   COMMON_DEPENDENCIES,
 } from '../config/libraryRules.js';
-import { setupNativeWind } from '../services/nativeWriter.js';
+import { setupNativeWind } from '../services/StyleConfigurator.js';
 import { autoConfigureBabel } from '../utils/babelManager.js';
 import { Doctor } from '../utils/doctor.js';
 import {
@@ -317,7 +317,7 @@ If it works in RN already, use "keep".`;
       return JSON.parse(text);
     }
     return { action: 'keep', package: null };
-  } catch (e) {
+  } catch {
     return { action: 'keep', package: null };
   }
 }
