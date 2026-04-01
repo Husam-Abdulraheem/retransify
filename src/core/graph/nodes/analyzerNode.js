@@ -1,7 +1,8 @@
-// src/core/graph/nodes/analyzerNode.js
 import path from 'path';
 import fs from 'fs-extra';
-import { Project } from 'ts-morph';
+import { Project, SyntaxKind } from 'ts-morph';
+import { FrameworkDetector } from '../../detectors/FrameworkDetector.js';
+import { setupNativeWind } from '../../services/StyleConfigurator.js';
 import { MemoryVectorStore } from '../helpers/memoryVectorStoreStub.js';
 import { createEmbeddings } from '../../ai/aiFactory.js';
 import { Document } from '@langchain/core/documents';
@@ -45,14 +46,57 @@ export async function analyzerNode(state) {
     packageJson = await fs.readJson(packageJsonPath);
   }
 
-  // ── 2. Analyze Tech Stack ─────────────────────────────────────
-  const facts = await analyzeTechStack(projectPath, packageJson);
+  // ── 2. Detect Build Tool ─────────────────────────────────────────
+  const { type: buildToolFramework } =
+    await FrameworkDetector.detect(projectPath);
+
+  // Setup ts-morph Project early for analysis
+  const tsConfigPath = path.join(projectPath, 'tsconfig.json');
+  const tsProject = new Project({
+    tsConfigFilePath: (await fs.pathExists(tsConfigPath))
+      ? tsConfigPath
+      : undefined,
+    skipAddingFilesFromTsConfig: true,
+    skipFileDependencyResolution: true,
+    compilerOptions: {
+      allowJs: true,
+      jsx: 2, // React JSX
+      strict: false,
+      noResolve: true,
+      isolatedModules: true,
+    },
+  });
+
+  // ── 3. Analyze Tech Stack ─────────────────────────────────────
+  const facts = await analyzeTechStack(
+    projectPath,
+    packageJson,
+    tsProject,
+    buildToolFramework,
+    filesQueue
+  );
   printSubStep(`Tech Stack: ${JSON.stringify(facts.tech)}`);
 
-  // ── 3. Scan files with ts-morph and extract summaries ─────────
+  if (
+    facts.tech.styling === 'Tailwind' ||
+    facts.tech.styling === 'NativeWind'
+  ) {
+    printSubStep('Configuring NativeWind automatically...');
+    // إنشاء ملفات tailwind.config.js و babel.config.js
+    await setupNativeWind(state.rnProjectPath);
+
+    // إجبار التثبيت
+    if (state.dependencyManager) {
+      state.dependencyManager.add(['nativewind', 'tailwindcss']);
+      await state.dependencyManager.installAll(state.rnProjectPath);
+    }
+  }
+
+  // ── 4. Scan files with ts-morph and extract summaries ─────────
   const { vectorStore, vectorIdMap } = await buildVectorStore(
     filesQueue,
-    projectPath
+    projectPath,
+    tsProject
   );
 
   printSubStep(
@@ -68,60 +112,159 @@ export async function analyzerNode(state) {
 
 // ── Tech Stack Analysis ───────────────────────────────────────────────────────
 
-async function analyzeTechStack(projectPath, packageJson) {
+async function analyzeTechStack(
+  projectPath,
+  packageJson,
+  tsProject,
+  buildToolFramework,
+  filesQueue
+) {
+  const entryFilePath = await getRealEntryPoint(
+    projectPath,
+    buildToolFramework
+  );
+
   const deps = {
     ...packageJson.dependencies,
     ...packageJson.devDependencies,
   };
 
-  const entryFiles = getEntryFiles(projectPath, packageJson);
+  // Deep AST technical analysis
+  const astTech = await analyzeTechStackAST(
+    entryFilePath,
+    tsProject,
+    deps,
+    filesQueue
+  );
 
   const tech = {
     language: detectLanguage(projectPath, deps),
-    stateManagement: await detectStateManagement(deps, entryFiles),
+    stateManagement: astTech.stateManagement,
     styling: detectStyling(projectPath, deps),
-    routing: await detectRouting(deps, entryFiles),
-    buildTool: detectBuildTool(projectPath),
+    routing: astTech.routing,
+    buildTool: buildToolFramework,
   };
 
-  const sourceRoot = inferSourceRoot(projectPath, entryFiles);
   const writePhaseIgnores = getWritePhaseIgnores(tech);
 
-  // Determine main entry point
-  let mainEntryPoint = null;
-  if (entryFiles && entryFiles.length > 0) {
-    mainEntryPoint = entryFiles[0];
-    printSubStep(`Entry point: ${mainEntryPoint}`);
-  }
+  const sourceRoot = inferSourceRoot(projectPath, entryFilePath);
 
   return {
     tech,
     packageJson,
-    sourceRoot,
-    writePhaseIgnores,
-    mainEntryPoint,
-    entryFiles,
+    mainEntryPoint: entryFilePath,
     projectPath,
+    writePhaseIgnores,
+    sourceRoot,
   };
 }
 
+async function getRealEntryPoint(projectPath, buildTool) {
+  if (buildTool === 'vite' || buildTool === 'Vite') {
+    const htmlPath = path.join(projectPath, 'index.html');
+    if (await fs.pathExists(htmlPath)) {
+      const htmlContent = await fs.readFile(htmlPath, 'utf8');
+      // Search for main script source in index.html
+      const scriptMatch = htmlContent.match(/<script.+?src=["'](.*?)["']/i);
+      if (scriptMatch && scriptMatch[1]) {
+        let scriptPath = scriptMatch[1].replace(/^\//, '');
+        return path.join(projectPath, scriptPath);
+      }
+    }
+  }
+
+  // Fallback for CRA or generic React
+  const possibleCRAEntries = ['src/index.js', 'src/index.jsx', 'src/index.tsx'];
+  for (const entry of possibleCRAEntries) {
+    const fullPath = path.join(projectPath, entry);
+    if (await fs.pathExists(fullPath)) return fullPath;
+  }
+
+  return null;
+}
+
+async function analyzeTechStackAST(entryFilePath, tsProject, deps, filesQueue) {
+  const tech = { stateManagement: 'None', routing: 'None' };
+
+  const coreDeps = [
+    'react-router-dom',
+    'react-redux',
+    '@reduxjs/toolkit',
+    'zustand',
+    'mobx',
+  ];
+  const hasRelevantDeps = coreDeps.some((d) => deps[d]);
+
+  if (!hasRelevantDeps && !deps['react']) return tech;
+
+  const targetFiles = filesQueue.filter(
+    (f) =>
+      /app\.(js|jsx|ts|tsx)$/i.test(f.filename) ||
+      /index\.(js|jsx|ts|tsx)$/i.test(f.filename) ||
+      /main\.(js|jsx|ts|tsx)$/i.test(f.filename) ||
+      /routes?\.(js|jsx|ts|tsx)$/i.test(f.filename)
+  );
+
+  let foundRouting = false;
+  let foundRedux = false;
+  let foundContext = false;
+
+  for (const fileObj of targetFiles) {
+    const sourceFile =
+      tsProject.getSourceFile(fileObj.absolutePath) ||
+      tsProject.addSourceFileAtPath(fileObj.absolutePath);
+
+    const allTags = [
+      ...sourceFile.getDescendantsOfKind(SyntaxKind.JsxOpeningElement),
+      ...sourceFile.getDescendantsOfKind(SyntaxKind.JsxSelfClosingElement),
+    ].map((node) => node.getTagNameNode().getText());
+
+    if (
+      deps['react-router-dom'] &&
+      allTags.some((t) =>
+        ['BrowserRouter', 'Router', 'RouterProvider', 'Routes'].includes(t)
+      )
+    ) {
+      foundRouting = true;
+    }
+
+    if (
+      (deps['react-redux'] || deps['@reduxjs/toolkit']) &&
+      allTags.includes('Provider')
+    ) {
+      foundRedux = true;
+    }
+
+    if (allTags.some((tag) => tag.endsWith('.Provider'))) {
+      foundContext = true;
+    }
+
+    const hasCreateContext = sourceFile
+      .getDescendantsOfKind(SyntaxKind.CallExpression)
+      .some((call) => call.getExpression().getText() === 'createContext');
+
+    if (hasCreateContext) foundContext = true;
+  }
+
+  if (foundRouting) tech.routing = 'react-router-dom';
+  if (foundRedux) tech.stateManagement = 'Redux';
+  else if (foundContext) tech.stateManagement = 'Context API';
+  else if (deps['zustand']) tech.stateManagement = 'Zustand';
+
+  return tech;
+}
+
+function inferSourceRoot(projectPath, entryFilePath) {
+  if (!entryFilePath) return '.';
+  const relativeEntry = path.relative(projectPath, entryFilePath);
+  const dir = path.dirname(relativeEntry);
+  return dir === '.' ? '.' : dir;
+}
 function detectLanguage(projectPath, deps) {
   if (fs.existsSync(path.join(projectPath, 'tsconfig.json')))
     return 'TypeScript';
   if (deps['typescript']) return 'TypeScript';
   return 'JavaScript';
-}
-
-async function detectStateManagement(deps, entryFiles) {
-  if (deps['@reduxjs/toolkit'] || deps['react-redux']) {
-    const isUsed = await verifyLibraryUsage(
-      ['Provider', 'configureStore'],
-      entryFiles
-    );
-    if (isUsed) return 'Redux';
-  }
-  if (deps['zustand']) return 'Zustand';
-  return 'None';
 }
 
 function detectStyling(projectPath, deps) {
@@ -135,68 +278,12 @@ function detectStyling(projectPath, deps) {
   return 'StyleSheet';
 }
 
-async function detectRouting(deps, entryFiles) {
-  if (deps['expo-router']) return 'ExpoRouter';
-  if (deps['react-router-dom'] || deps['react-router-native']) {
-    const isUsed = await verifyLibraryUsage(
-      ['BrowserRouter', 'NativeRouter', 'Routes', 'RouterProvider'],
-      entryFiles
-    );
-    if (isUsed) return 'ReactRouter';
-  }
-  return 'None';
-}
-
-function detectBuildTool(projectPath) {
-  if (fs.existsSync(path.join(projectPath, 'vite.config.js'))) return 'Vite';
-  if (fs.existsSync(path.join(projectPath, 'webpack.config.js')))
-    return 'Webpack';
-  return 'Unknown';
-}
-
-function getEntryFiles(projectPath, packageJson = {}) {
-  const candidates = [
-    'src/index.js',
-    'src/index.tsx',
-    'src/App.js',
-    'src/App.tsx',
-    'src/main.js',
-    'src/main.tsx',
-    'src/store/index.js',
-    'src/store/index.ts',
-    'index.js',
-    'App.js',
-  ];
-  if (packageJson.main) candidates.unshift(packageJson.main);
-  return candidates
-    .map((f) => path.join(projectPath, f))
-    .filter((f) => fs.existsSync(f));
-}
-
-async function verifyLibraryUsage(keywords, files) {
-  for (const file of files) {
-    try {
-      const content = await fs.readFile(file, 'utf8');
-      if (keywords.some((kw) => content.includes(kw))) return true;
-    } catch {
-      /* Ignore read errors */
-    }
-  }
-  return false;
-}
-
-function inferSourceRoot(projectPath, entryFiles) {
-  if (!entryFiles || entryFiles.length === 0) return '.';
-  const primaryEntry = entryFiles[0];
-  const relativeEntry = path.relative(projectPath, primaryEntry);
-  const dir = path.dirname(relativeEntry);
-  return dir === '.' ? '.' : dir;
-}
-
 function getWritePhaseIgnores(tech) {
   let profile = null;
-  if (tech.buildTool === 'Vite') profile = PROJECT_PROFILES?.vite;
-  else if (tech.buildTool === 'CRA') profile = PROJECT_PROFILES?.cra;
+  if (tech.buildTool === 'vite' || tech.buildTool === 'Vite')
+    profile = PROJECT_PROFILES?.vite;
+  else if (tech.buildTool === 'cra' || tech.buildTool === 'CRA')
+    profile = PROJECT_PROFILES?.cra;
   return profile?.writePhaseIgnores || [];
 }
 
@@ -208,24 +295,11 @@ function getWritePhaseIgnores(tech) {
  * @param {string} projectPath
  * @returns {{ vectorStore: MemoryVectorStore, vectorIdMap: Object }}
  */
-async function buildVectorStore(filesQueue, projectPath) {
+async function buildVectorStore(filesQueue, projectPath, tsProject) {
   startSubSpinner(`Indexing ${filesQueue.length} files...`);
   const embeddings = createEmbeddings();
   const documents = [];
   const vectorIdMap = {};
-
-  // Setup ts-morph Project
-  const tsProject = new Project({
-    skipAddingFilesFromTsConfig: true,
-    skipFileDependencyResolution: true,
-    compilerOptions: {
-      allowJs: true,
-      jsx: 2, // React JSX
-      strict: false,
-      noResolve: true,
-      isolatedModules: true,
-    },
-  });
 
   for (const fileObj of filesQueue) {
     const filePath = fileObj.filePath || fileObj.relativeToProject;

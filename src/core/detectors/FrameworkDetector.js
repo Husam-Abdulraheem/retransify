@@ -24,11 +24,15 @@ export class FrameworkDetector {
     const signals = [];
     const packageJsonPath = path.join(rootPath, 'package.json');
 
-    let packageJson = {};
-    if (await fs.pathExists(packageJsonPath)) {
-      packageJson = await fs.readJson(packageJsonPath);
+    if (!(await fs.pathExists(packageJsonPath))) {
+      return {
+        type: 'vite', // Default to vite if no package.json found (modern default)
+        confidence: 'low',
+        signals: ['default:fallback'],
+      };
     }
 
+    const packageJson = await fs.readJson(packageJsonPath);
     const deps = {
       ...packageJson.dependencies,
       ...packageJson.devDependencies,
@@ -42,21 +46,6 @@ export class FrameworkDetector {
     }
 
     // 2. Detect Vite
-    // Strongest Signal: Config file
-    const viteConfigExists =
-      (await fs.pathExists(path.join(rootPath, 'vite.config.js'))) ||
-      (await fs.pathExists(path.join(rootPath, 'vite.config.ts')));
-
-    if (viteConfigExists) {
-      signals.push('file:vite.config.*');
-      return {
-        type: 'vite',
-        confidence: 'high',
-        signals,
-      };
-    }
-
-    // Strong Signal: Vite in devDependencies
     if (deps['vite']) {
       signals.push('package.json:vite');
       return {
@@ -71,17 +60,12 @@ export class FrameworkDetector {
       signals.push('package.json:react-scripts');
       return {
         type: 'cra',
-        confidence: 'high', // Pretty definitive for CRA
+        confidence: 'high',
         signals,
       };
     }
 
-    // 4. Default Fallback (if uncertain)
-    // Could default to CRA or throw error. For now, let's be safe and default to 'vite' structure if ambiguous but likely React
-    // OR we can return a low confidence result.
-    // The previous logic didn't have a definitive "Unknown".
-    // Let's assume Vite if we see 'react' but no scripts, as it's more common now?
-    // actually, let's just return 'vite' with low confidence as a safe modern default.
+    // 4. Default Fallback
     return {
       type: 'vite',
       confidence: 'low',
