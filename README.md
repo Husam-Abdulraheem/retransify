@@ -1,156 +1,181 @@
-# Retransify Local (React 2 Native CLI)
+# ⚛️ Retransify (React to React Native/Expo CLI)
 
-### 🚀 Transform React Web Projects into Native Mobile Apps with AI
+<div align="center">
 
-![License](https://img.shields.io/badge/license-ISC-blue.svg) ![Node](https://img.shields.io/badge/node-v18%2B-green.svg) ![Platform](https://img.shields.io/badge/platform-React%20Native%20%7C%20Expo-blueviolet.svg)
+![License](https://img.shields.io/badge/license-ISC-blue.svg)
+![Node](https://img.shields.io/badge/node-v18%2B-green.svg)
+![Platform](https://img.shields.io/badge/platform-React%20Native%20%7C%20Expo-blueviolet.svg)
+![AI Powered](https://img.shields.io/badge/AI-LangGraph%20powered-FF9900.svg)
+![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)
+
+**Autonomously transition your existing React Web codebases to Production-Ready React Native Expo Mobile Apps via intelligent AI parsing.**
+
+</div>
 
 ## 📋 Table of Contents
 
 - [📖 Overview](#-overview)
 - [🚀 Why Retransify?](#-why-retransify)
-- [✨ Key Features](#-key-features)
-- [🔒 Privacy & Security](#-privacy--security)
-- [🏗️ Architecture](#-architecture)
-- [🛠️ Tech Stack](#-tech-stack)
-- [🏁 Getting Started](#-getting-started)
+- [✨ Key Features (Latest Updates)](#-key-features)
+- [🛠️ Architecture & Workflow](#-architecture--workflow)
+- [🚀 Getting Started](#-getting-started)
 - [📱 Usage](#-usage)
 - [📂 Project Structure](#-project-structure)
-- [🤝 Contributing](#-contributing)
+- [🤝 Contributing (Open Source)](#-contributing)
 - [📄 License](#-license)
+
+---
 
 ## 📖 Overview
 
-**Retransify Local** is a powerful CLI tool designed to autonomously convert existing React (web) projects into optimized React Native (Expo) applications. By leveraging advanced AI models (Gemini or Groq), it deeply analyzes your codebase, understands component relationships, and rewrites them for mobile, ensuring a smooth migration from web to native.
+**Retransify** is a sophisticated CLI tool engineered to dramatically accelerate the migration of React Web applications to React Native (Expo). 
+
+Rebuilt on the latest **LangGraph** framework, Retransify acts as an intelligent set of collaborative autonomous agents. It structurally analyzes your web project down to the Abstract Syntax Tree (AST), understands deep functional relationships, logically maps complex web-routing structures, rewrites UI components flawlessly, and auto-installs mandatory mobile dependencies on the fly.
 
 ## 🚀 Why Retransify?
 
-Migrating a codebase from web to mobile is often a tedious, manual process. Retransify solves this by:
+Transitioning from web to mobile has traditionally been a highly tedious, manual process of translating routing algorithms, replacing `<div>` tags with `<View>`, migrating stylesheets, and painstakingly resolving native dependencies. Retransify automates these painful tasks by:
 
-- **Saving Time**: Automates the repetitive work of rewriting JSX to React Native primitives.
-- **Context-Awareness**: Unlike simple code modders, it understands the _intent_ of your code through full-project analysis.
-- **Modern Standards**: Generates clean, TypeScript-ready code compatible with the latest Expo SDKs.
+- **Replacing brute-force translation with AST precision:** Understands the actual *intent* and design of your code by parsing the Abstract Syntax Tree.
+- **Advanced Graph Machine Learning:** Uses an intelligent continuous feedback loop (Write ➡️ Verify ➡️ Heal) mirroring human pair programming methodologies.
+- **Expo & NativeWind Modern Standards:** Output code is clean, TypeScript-ready, compatible with the newest Expo Router paradigms, and seamlessly manages NativeWind / Tailwind integrations.
 
-## ✨ Key Features
+## ✨ Key Features 
 
-- **🤖 3-Phase Agentic Workflow**:
-  - **Analyzer**: Deeply scans project structure & tech stack.
-  - **Planner**: Formulates a dependency-aware migration strategy.
-  - **Executor**: Implements changes with state persistence & recovery.
-- **🔍 Automated Scanning & AST Parsing**: Precision analysis of your code's abstract syntax tree.
-- **🧠 Context-Aware Conversion**: Intelligent prompts based on full project context, not just isolated files.
-- **📱 Expo Ready**: Automatically scaffolds a new Expo project with router configuration.
-- **⚡ Multiple AI Providers**: Support for Google's **Gemini** (3.0 Flash, 2.5) and **Groq** (Llama 3, Mixtral).
-- **🛤️ Smart Pathing**: Automatically restructures `src/` to Expo's `app/` and `components/` best practices.
-- **🔄 Auto-Healing & Verification**: Iteratively verifies code for missing dependencies or syntax errors and prompts the AI for auto-correction.
-- **🛡️ State Recovery**: Resume interrupted conversions seamlessly with built-in state management.
+Our latest architectural overhaul introduces cutting-edge capabilities transforming how migrations are handled step-by-step:
 
-## 🔒 Privacy & Security
+- **🧠 Cycical AI Workflow (Powered by LangGraph)**:
+    - **Verifier Node**: Actively analyzes the AI-generated code’s AST structure to mathematically flag leftover web DOM elements (`div`, `span`, `img`, `onClick`), standard unhandled syntax errors, and faulty routing structures.
+    - **Healer Node**: Takes rejected verifier metrics and dynamically corrects the AI-generated code without user intervention.
+- **🛤️ Dynamic AST-Based Route Mapping**: 
+    - Intelligent translation of `react-router-dom` to **Expo Router File-Based structures**. 
+    - Smoothly translates web nested dynamic segments (e.g. `/:id`) directly into bracket-syntax (`[id].tsx`) and logically maps legacy hooks like `useParams` to Expo’s `useLocalSearchParams`.
+- **🎨 Deep NativeWind Integration**:
+    - Complete support for NativeWind processing. It detects existing Tailwind setups, seamlessly builds `.css` configurations globally in the new environment, handles TypeScript structural limitations smoothly, and correctly formats modern JSX `className` elements.
+- **📦 Auto Installer Node**:
+    - During parsing, our Agent strictly tracks unrecognized third-party module imports in transformed files, dynamically discovering React Native-compatible alternatives and installing them automatically.
+- **⚡ Multiple AI Integrations**:
+    - First-class API integrations for Google **Gemini** (Pro & Flash models) and **Groq** (Llama 3, Mixtral).
+- **✨ Professional Interactive CLI**: 
+    - Real-time tree-structured terminal interactions mapped seamlessly via a bespoke UI engine allowing clear insights without console clutter.
 
-Your code's privacy is paramount. Retransify is designed with security in mind:
+---
 
-- **Local Execution**: The CLI runs entirely on your local machine. No code is stored on our servers.
-- **Direct AI connection**: Data is sent directly from your machine to the chosen AI provider (Google or Groq) via their official APIs.
-- **API Key Safety**: Your API keys are stored locally in your `.env` file and are never shared or logged.
+## 🛠️ Architecture & Workflow
 
-## 🏗️ Architecture
+Security and code integrity are structurally prioritized via localized generation. Retransify utilizes a rigorous agentic graph logic to ensure maximum output reliability:
 
-The tool follows a robust agentic architecture to ensure reliability:
+```mermaid
+graph TD;
+    A[React Web Codebase] -->|ts-morph / babel| B[Tech Stack & AST Integrations Analysis];
+    B --> C[Project Initializer / Route Mappers];
+    C --> D[LangGraph Processing Engine];
+    
+    subgraph Iterative AI Graph Loop
+    D --> E((Converter Node));
+    E --> F{Verifier Node};
+    F -- "Syntax Error / DOM Element Found" --> G((Healer Node));
+    G --> F;
+    F -- "Validated & Clean" --> H((Auto-Installer Node));
+    end
+    
+    H -- "Unresolved Imports" --> I[Expo / NPM Install Queue];
+    H -- "Ready" --> J[Final React Native Expo File];
+```
 
-1.  **Analysis Phase**: Scans files, parses AST, and builds a dependency graph.
-2.  **Planning Phase**: prioritizes files based on dependencies (e.g., utils -> lower-level components -> screens).
-3.  **Execution Phase**: Iterates through the plan, converting files and maintaining state in case of interruptions.
-
-## 🛠️ Tech Stack
-
-- **Runtime**: [Node.js](https://nodejs.org/)
-- **AI Integration**: [Google Generative AI SDK](https://github.com/google/generative-ai-js), [Groq SDK](https://console.groq.com/docs/libraries/js)
-- **Parsing**: [Babel Parser](https://babeljs.io/docs/en/babel-parser) & Traverse
-- **File System**: [fs-extra](https://github.com/jprichardson/node-fs-extra)
-- **CLI**: [Commander.js](https://github.com/tj/commander.js/)
-
-## 🏁 Getting Started
+## 🚀 Getting Started
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) (v18+ recommended)
+- [Node.js](https://nodejs.org/) (v18+ strictly required)
 - [npm](https://www.npmjs.com/) or [yarn](https://yarnpkg.com/)
-- API Key for **Gemini** or **Groq**
+- Developer API Key for **Gemini** or **Groq**
 
 ### Installation
 
-1.  **Clone the repository**:
+1. **Clone the repository**:
 
-    ```bash
-    git clone <repository-url>
-    cd retransify-local
-    npm install
-    ```
+   ```bash
+   git clone <repository-url>
+   cd retransify-local
+   npm install
+   ```
 
-2.  **Link locally (optional)**:
-    ```bash
-    npm link
-    ```
+2. **Link the CLI locally (Optional but recommended)**:
+   ```bash
+   npm link
+   ```
 
 ### Configuration
 
-Create a `.env` file in the root directory:
+Create a `.env` file in the root project directory specifying your dedicated intelligence provider:
 
 ```env
-# Choose your provider: gemini or groq
+# Choose provider ('gemini' or 'groq')
 AI_PROVIDER=gemini
 
-# API Keys
+# Official Provider API Keys
 GEMINI_API_KEY=your_gemini_api_key
 GROQ_API_KEY=your_groq_api_key
 ```
 
+---
+
 ## 📱 Usage
 
-The CLI is **interactive**. Run the convert command to start the wizard:
+The Retransify engine is fully **interactive**. Run the convert wrapper to begin the migration wizard:
 
 ```bash
-# Start conversion (Interactive)
-node cli.js convert ./path-to-your-react-app
+# Start your targeted project conversion
+node cli.js convert ./path-to-your-react-web-app
 ```
 
-**Options:**
+**Custom Runtime Options:**
 
-- `--sdk <version>`: Target a specific Expo SDK version (e.g., `--sdk 50`).
+- `--sdk <version>`: Explicitly target a specific Expo SDK version (e.g., `--sdk 50`).
+
+---
 
 ## 📂 Project Structure
 
+A quick overview of our internal modern graph architecture, for contributors looking to jump in:
+
 ```text
 retransify-local/
-├── cli.js              # CLI Entry Point
-├── package.json        # Project metadata & dependencies
+├── cli.js                # Command Line Tool Initializer
+├── package.json          # Node dependencies & Git workflow setups
 └── src/
-    ├── cli/            # Command handling and interactive prompts
-    ├── types.js        # Type definitions
-    └── core/
-        ├── ai/         # AI Client Wrappers (Gemini, Groq)
-        ├── commands/   # CLI commands execution logic
-        ├── config/     # Configuration management & environment setup
-        ├── context/    # Context generation and dependency graphing
-        ├── detectors/  # Technology and library detection logic
-        ├── helpers/    # Helper utilities (Retry, Logging, etc.)
-        ├── parser/     # AST parsing and code analysis
-        ├── phases/     # High-level Agentic Workflow (Analyzer, Planner, Executor)
-        ├── prompt/     # Prompt definitions and engineering
-        ├── scanners/   # File system scanning and filtering
-        ├── services/   # Core internal services (DependencyManager, StateManager, ProjectInitializer, etc.)
-        └── utils/      # General utilities
+    ├── cli/              # Handling UI workflows, nested spinners, layout structures
+    ├── core/
+    │   ├── ai/           # Low-level Agent Wrappers & Models (Gemini, Groq)
+    │   ├── commands/     # Commander.js executions logic
+    │   ├── detectors/    # Stack resolving parsers via Package / TS Config definitions
+    │   ├── graph/        # Core LangGraph execution state, edges, definitions, nodes
+    │   │   └── nodes/    # Nodes list: verifierNode, healerNode, autoInstaller, converter  
+    │   ├── parsers/      # Babel/AST execution layers 
+    │   ├── prompt/       # Instruction synthesis and system tuning configurations
+    │   ├── scanners/     # High-end RouteAnalyzers, file recursive readers
+    │   ├── services/     # Cross-layer services: ProjectInitializer, StyleConfigurator
+    │   └── utils/        # Extracted pure functions
+    └── types.js          # Definitions core
 ```
 
-## 🤝 Contributing
+---
 
-Contributions are welcome! Please follow these steps:
+## 🤝 Contributing 
 
-1.  Fork the repository.
-2.  Create a feature branch (`git checkout -b feature/amazing-feature`).
-3.  Commit your changes.
-4.  Push to the branch.
-5.  Open a Pull Request.
+**Retransify is fully open source**, and we deeply welcome contributions from the advanced React / AI developer community! Whether you want to refine our AST logic, introduce new Agent nodes to the LangGraph core, or support new AI frameworks logic, your help is incredibly valued.
+
+### Contribution Guidelines
+
+1. **Fork the Repository**: Establish a localized workspace on your profile.
+2. **Setup the branch**: Work on isolated branches (e.g., `git checkout -b feature/langgraph-optimizer`).
+3. **Commit Cleanly**: Adhere to functional commits focusing precisely on module additions.
+4. **Validations & Testing**: Run `npm run lint` and `npm test` via vitest locally prior to confirming your PR.
+5. **Open a Pull Request**: Fully explain what structural enhancements were added.
+
+---
 
 ## 📄 License
 
-This project is licensed under the ISC License.
+This open-source project is distributed thoroughly under the **ISC License**. Feel fully empowered to fork, experiment, and integrate!
