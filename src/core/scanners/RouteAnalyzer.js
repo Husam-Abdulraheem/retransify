@@ -435,7 +435,7 @@ export class RouteAnalyzer {
   static _calculateExpoPath(routePath, isLayout, isIndex = false) {
     let cleanPath = (routePath || '').replace(/^\/+/, '').replace(/\/+$/, '');
 
-    // Handle 404/wildcard routes
+    // Handle pure 404/wildcard root routes
     if (cleanPath === '*') return 'app/[...missing].tsx';
 
     // Handle root path
@@ -444,10 +444,13 @@ export class RouteAnalyzer {
       return isLayout ? 'app/_layout.tsx' : 'app/index.tsx';
     }
 
-    // Handle dynamic route parameters
+    // Handle dynamic route parameters and nested wildcards
     const modifiedPath = cleanPath
       .split('/')
-      .map((part) => (part.startsWith(':') ? `[${part.substring(1)}]` : part))
+      .map((part) => {
+        if (part === '*') return '[...missing]';
+        return part.startsWith(':') ? `[${part.substring(1)}]` : part;
+      })
       .join('/');
 
     if (isIndex) return `app/${modifiedPath}/index.tsx`;
