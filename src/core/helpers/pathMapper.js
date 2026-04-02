@@ -86,9 +86,17 @@ export class PathMapper {
       }
 
       // 🚨 [Strict Standard]: Uniform casing for routing paths.
-      // Any file located within the app/ folder must be lowercase to avoid routing issues.
+      // Any file located within the app/ folder should generally be lowercase to avoid routing issues.
+      // EXCEPTION: Dynamic segments (e.g. [itemId].tsx) MUST preserve camelCase for useLocalSearchParams to work properly.
       if (refinedPath.startsWith('app/')) {
-        refinedPath = refinedPath.toLowerCase();
+        refinedPath = refinedPath
+          .split('/')
+          .map((segment) =>
+            segment.includes('[') && segment.includes(']')
+              ? segment
+              : segment.toLowerCase()
+          )
+          .join('/');
       }
 
       pathMap[oldPath] = refinedPath;
