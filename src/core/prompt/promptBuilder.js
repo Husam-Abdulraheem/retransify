@@ -72,7 +72,13 @@ ${
 ${
   hasRouting
     ? `   - The target project uses **Expo Router** (File-based routing).
-   - ROUTING ABSTRACTION: Identify ANY web-based routing library used and remove its imports.`
+   - ROUTING ABSTRACTION: Identify ANY web-based routing library used and remove its imports.
+${
+  (fileContext.targetPath || '').includes('[') &&
+  (fileContext.targetPath || '').includes(']')
+    ? `   - [DYNAMIC ROUTING RULE EXTREMELY CRITICAL]: The target file name has brackets indicating a dynamic route ('${fileContext.targetPath}'). You MUST completely eliminate React Router's 'match.params', 'useParams', or 'useRouteMatch'. You MUST replace them with absolute generic hook call: 'const { ... } = useLocalSearchParams();' imported exclusively from 'expo-router'.`
+    : ''
+}`
     : '   - No specific routing library detected. Use standard React state for conditional rendering if needed.'
 }
 ${
