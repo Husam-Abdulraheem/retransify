@@ -29,30 +29,83 @@ export async function setupNativeWind(projectPath) {
     console.log('✅ Created tailwind.config.js (v4 preset)');
   }
 
-  // 4. تحديث babel.config.js (كما فعلنا سابقاً)
+  // 4. تحديث babel.config.js (استخدام AST المعماري لمنع تعطل الملف)
   const babelConfigPath = path.join(projectPath, 'babel.config.js');
   if (await fs.pathExists(babelConfigPath)) {
     let babelContent = await fs.readFile(babelConfigPath, 'utf8');
     if (!babelContent.includes('jsxImportSource')) {
-      babelContent = babelContent.replace(
-        /presets:\s*\[\s*['"`]babel-preset-expo['"`]\s*\]/,
-        `presets: [\n      ['babel-preset-expo', { jsxImportSource: "nativewind" }],\n      "nativewind/babel",\n    ]`
-      );
-      if (!babelContent.includes('react-native-reanimated/plugin')) {
-        if (babelContent.includes('plugins: [')) {
-          babelContent = babelContent.replace(
-            /plugins:\s*\[/,
-            "plugins: [\n      'react-native-reanimated/plugin',"
+      try {
+        const { Project, SyntaxKind } = await import('ts-morph');
+        const project = new Project({ useInMemoryFileSystem: true });
+        const sourceFile = project.createSourceFile(
+          'temp-babel.js',
+          babelContent,
+          { overwrite: true }
+        );
+
+        const moduleExports = sourceFile
+          .getStatements()
+          .find(
+            (stmt) =>
+              stmt.getKind() === SyntaxKind.ExpressionStatement &&
+              stmt.getText().startsWith('module.exports')
           );
-        } else {
-          babelContent = babelContent.replace(
-            /(presets:\s*\[[\s\S]*?\],)/,
-            "$1\n    plugins: [\n      'react-native-reanimated/plugin',\n    ],"
-          );
+
+        if (moduleExports) {
+          const returnStatement = moduleExports.getDescendantsOfKind(
+            SyntaxKind.ReturnStatement
+          )[0];
+          if (returnStatement) {
+            const objectLiteral = returnStatement.getFirstChildByKind(
+              SyntaxKind.ObjectLiteralExpression
+            );
+            if (objectLiteral) {
+              // 1. ضبط الـ presets بشكل صارم للمواصفات المطلوبة
+              let presetsProp = objectLiteral.getProperty('presets');
+              if (!presetsProp) {
+                presetsProp = objectLiteral.addPropertyAssignment({
+                  name: 'presets',
+                  initializer: '[]',
+                });
+              }
+              presetsProp.setInitializer(
+                "[\n      ['babel-preset-expo', { jsxImportSource: 'nativewind' }],\n      'nativewind/babel',\n    ]"
+              );
+
+              // 2. ضبط الـ plugins (إضافة reanimated وضمان عدم التكرار)
+              let pluginsProp = objectLiteral.getProperty('plugins');
+              if (!pluginsProp) {
+                pluginsProp = objectLiteral.addPropertyAssignment({
+                  name: 'plugins',
+                  initializer: '[]',
+                });
+              }
+
+              const pluginsArray = pluginsProp.getFirstChildByKind(
+                SyntaxKind.ArrayLiteralExpression
+              );
+              if (pluginsArray) {
+                const elements = pluginsArray
+                  .getElements()
+                  .map((e) => e.getText().replace(/['"]/g, ''));
+                if (!elements.includes('react-native-reanimated/plugin')) {
+                  pluginsArray.addElement("'react-native-reanimated/plugin'");
+                }
+              }
+
+              babelContent = sourceFile.getText();
+            }
+          }
         }
+      } catch (err) {
+        console.warn(
+          '⚠️ Could not parse babel.config.js with AST:',
+          err.message
+        );
       }
+
       await fs.writeFile(babelConfigPath, babelContent);
-      console.log('✅ Updated babel.config.js for NativeWind v4');
+      console.log('✅ Updated babel.config.js for NativeWind v4 (AST-based)');
     }
   }
 
