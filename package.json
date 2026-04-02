@@ -1,7 +1,7 @@
 {
   "name": "retransify-local",
   "version": "1.0.0",
-  "description": "convert react code to react native",
+  "description": "CLI tool that autonomously converts React web projects into production-ready React Native (Expo) apps using AI and LangGraph agentic workflows.",
   "bin": {
     "retransify": "./cli.js"
   },
@@ -32,8 +32,19 @@
     "format": "prettier --write .",
     "prepare": "husky"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "react-native",
+    "expo",
+    "react",
+    "migration",
+    "cli",
+    "ai",
+    "langgraph",
+    "code-conversion",
+    "nativewind",
+    "expo-router"
+  ],
+  "author": "Husam Abdulraheem",
   "license": "Apache-2.0",
   "type": "module",
   "devDependencies": {
