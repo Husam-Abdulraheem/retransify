@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![License](https://img.shields.io/badge/license-ISC-blue.svg)
+![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)
 ![Node](https://img.shields.io/badge/node-v18%2B-green.svg)
 ![Platform](https://img.shields.io/badge/platform-React%20Native%20%7C%20Expo-blueviolet.svg)
 ![AI Powered](https://img.shields.io/badge/AI-LangGraph%20powered-FF9900.svg)
@@ -178,4 +178,4 @@ retransify-local/
 
 ## 📄 License
 
-This open-source project is distributed thoroughly under the **ISC License**. Feel fully empowered to fork, experiment, and integrate!
+This open-source project is distributed under the **Apache License 2.0**. You are free to use, modify, distribute, and contribute — just retain the original copyright notice. See the [LICENSE](./LICENSE) file for full details.
