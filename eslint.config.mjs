@@ -6,11 +6,12 @@ export default [
   // This is the strict plugin that will prevent ESLint from interfering with the outputs
   {
     ignores: [
-      'node_modules/',
-      'converted-expo-app/',
-      'dist/',
-      'build/',
-      'tests/fixtures/',
+      'node_modules/**',
+      'converted-expo-app/**',
+      'templates/**',
+      'dist/**',
+      'build/**',
+      'tests/fixtures/**',
     ],
   },
   js.configs.recommended,
