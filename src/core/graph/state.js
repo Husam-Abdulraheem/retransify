@@ -46,6 +46,18 @@ export const GraphState = Annotation.Root({
     default: () => ({}),
   }),
 
+  // Extracted metadata for each route (links count, inputs count, etc.)
+  routeMetadata: Annotation({
+    reducer: (_, x) => x,
+    default: () => ({}),
+  }),
+
+  // Selected layout architecture determined by layoutAgent (tabs, drawer, modal, etc.)
+  navigationSchema: Annotation({
+    reducer: (_, x) => x,
+    default: () => ({}),
+  }),
+
   // ── Current File ─────────────────────────────────────────────
   // File object currently being processed
   currentFile: Annotation({

@@ -10,6 +10,7 @@ import { autoInstallerNode } from './nodes/autoInstallerNode.js';
 import { contextUpdaterNode } from './nodes/contextUpdaterNode.js';
 import { diskWriterNode } from './nodes/diskWriterNode.js';
 import { filePickerNode } from './nodes/filePickerNode.js';
+import { runLayoutAgent } from './nodes/layoutAgentNode.js';
 import { createModelPair } from '../ai/aiFactory.js';
 import { DependencyManager } from '../helpers/dependencyManager.js';
 import { RouteAnalyzer } from '../scanners/RouteAnalyzer.js';
@@ -26,9 +27,11 @@ import {
   printWarning,
   printError,
   printSummaryBox,
+  printNavigationSchema,
 } from '../utils/ui.js';
 import path from 'path';
 import fs from 'fs-extra';
+import { execSync } from 'child_process';
 
 // ── Build Workflow ─────────────────────────────────────────────────────────
 
@@ -211,10 +214,35 @@ export async function runMigrationWorkflow(
   await dependencyManager.installAll(rnProjectPath);
 
   // ── 3.6. Route Extraction & Projection ──────────────────────────
-  const routeMap = await RouteAnalyzer.analyze(projectPath, filesQueue);
+  const { routeMap, routeMetadata, providers } = await RouteAnalyzer.analyze(
+    projectPath,
+    filesQueue
+  );
+  let navigationSchema = { type: 'stack' };
+
   if (Object.keys(routeMap).length > 0) {
     updateSpinner(`Projecting ${Object.keys(routeMap).length} routes...`);
     await RouteAnalyzer.projectRoutes(rnProjectPath, routeMap);
+
+    // ── 3.7. Determine Navigation Layout ──────────────────────────
+    navigationSchema = await runLayoutAgent(routeMap, routeMetadata, models);
+    printNavigationSchema(navigationSchema);
+
+    if (navigationSchema.type === 'drawer') {
+      printStep('Installing Drawer Navigation Dependencies');
+      try {
+        startSpinner(
+          'Installing react-native-gesture-handler and react-native-reanimated...'
+        );
+        execSync(
+          'npx expo install react-native-gesture-handler react-native-reanimated',
+          { cwd: rnProjectPath, stdio: 'ignore' }
+        );
+        succeedSpinner('Drawer dependencies installed successfully.');
+      } catch (e) {
+        failSpinner('Failed to install drawer dependencies. ' + e.message);
+      }
+    }
   }
   succeedSpinner(`Routes analyzed (${Object.keys(routeMap).length} routes)`);
 
@@ -240,6 +268,9 @@ export async function runMigrationWorkflow(
     filesQueue,
     pathMap: {},
     routeMap,
+    routeMetadata: routeMetadata || {},
+    globalProviders: providers || [],
+    navigationSchema,
     facts: {},
     vectorStore: null,
     vectorIdMap: {},
