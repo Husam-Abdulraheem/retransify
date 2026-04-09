@@ -291,6 +291,52 @@ export function printSummaryBox({ completed, failed, outputPath, elapsedMs }) {
   console.log('');
 }
 
+// ── Navigation Schema Display ──────────────────────────────────
+
+/**
+ * Prints a visual block summarizing the navigation architecture
+ * decided by the Layout Agent.
+ *
+ * @param {{ type: string, tabs?: string[], drawerScreens?: string[], modals?: string[] }} schema
+ */
+export function printNavigationSchema(schema) {
+  const icons = { tabs: '📑', drawer: '☰ ', stack: '📋' };
+  const typeLabel = schema.type?.toUpperCase() ?? 'STACK';
+  const icon = icons[schema.type] ?? '📋';
+
+  console.log('');
+  console.log(
+    pc.bold(pc.magenta(`  ${icon}  Navigation Architecture: ${typeLabel}`))
+  );
+
+  if (schema.type === 'tabs' && schema.tabs?.length > 0) {
+    schema.tabs.forEach((tab, i) => {
+      const isLast = i === schema.tabs.length - 1;
+      const branch = isLast ? '└─' : '├─';
+      console.log(pc.magenta(`     ${branch} Tab: `) + pc.dim(tab));
+    });
+  }
+
+  if (schema.type === 'drawer' && schema.drawerScreens?.length > 0) {
+    schema.drawerScreens.forEach((screen, i) => {
+      const isLast = i === schema.drawerScreens.length - 1;
+      const branch = isLast ? '└─' : '├─';
+      console.log(pc.magenta(`     ${branch} Drawer: `) + pc.dim(screen));
+    });
+  }
+
+  if (schema.modals?.length > 0) {
+    console.log(pc.magenta('     ├─ Modals:'));
+    schema.modals.forEach((modal, i) => {
+      const isLast = i === schema.modals.length - 1;
+      const branch = isLast ? '└─' : '├─';
+      console.log(pc.dim(`     │  ${branch} ${modal}`));
+    });
+  }
+
+  console.log('');
+}
+
 // ── Legacy / Object API Wrapper ────────────────────────────────
 export const ui = {
   step: printStep,
