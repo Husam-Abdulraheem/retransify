@@ -2,7 +2,76 @@ import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { ChatGroq } from '@langchain/groq';
 import { GoogleGenerativeAIEmbeddings } from '@langchain/google-genai';
 import dotenv from 'dotenv';
+import pc from 'picocolors';
 dotenv.config();
+
+/**
+ * safeInvoke - A robust wrapper that handles model failures by retrying
+ * and eventually falling back to a secondary model (Flash).
+ *
+ * @param {Object} primaryModel - Primary AI model
+ * @param {Object} fallbackModel - Secondary AI model (Flash)
+ * @param {string|Object} prompt - Input prompt
+ * @param {Object} options - Options (schema, maxRetries, etc.)
+ */
+export async function safeInvoke(
+  primaryModel,
+  fallbackModel = null,
+  prompt,
+  options = {}
+) {
+  const {
+    schema = null,
+    maxRetries = 3,
+    initialDelayMs = 2000,
+    onRetry = null,
+    onFallback = null,
+  } = options;
+
+  let attempt = 0;
+  let delayMs = initialDelayMs;
+
+  while (attempt < maxRetries) {
+    try {
+      const model = schema
+        ? primaryModel.withStructuredOutput(schema)
+        : primaryModel;
+
+      if (attempt > 0 && onRetry) {
+        onRetry(attempt, maxRetries);
+      }
+
+      return await model.invoke(prompt);
+    } catch (err) {
+      attempt++;
+
+      // If we still have retries left, wait and back off
+      if (attempt < maxRetries) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        delayMs *= 2; // Exponential backoff
+      } else {
+        // No more retries for primary model
+        if (fallbackModel) {
+          if (onFallback) onFallback();
+
+          console.log(
+            pc.yellow(
+              `  ⚠  Model is currently overloaded. Switching to Gemini Flash to ensure continuity...`
+            )
+          );
+
+          const fModel = schema
+            ? fallbackModel.withStructuredOutput(schema)
+            : fallbackModel;
+          return await fModel.invoke(prompt);
+        }
+
+        // Rethrow if no fallback
+        throw err;
+      }
+    }
+  }
+}
 
 const PROVIDER = process.env.AI_PROVIDER || 'gemini';
 

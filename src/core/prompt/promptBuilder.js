@@ -4,6 +4,7 @@ import {
   LEGACY_TO_EXPO_MAP,
   WEB_ONLY_BLOCKLIST,
 } from '../config/libraryRules.js';
+import { PathMapper } from '../helpers/pathMapper.js';
 
 /**
  * Builds a smart and flexible prompt based on context
@@ -19,7 +20,35 @@ export function buildPrompt(fileContext) {
     globalContext = {},
     installedPackages = [],
     isLayoutFile = false,
+    navigationSchema = {},
+    requiredData = [],
   } = fileContext;
+
+  const isRootLayout = fileContext.targetPath === 'app/_layout.tsx';
+  const isGroupLayout = fileContext.targetPath?.match(
+    /^app\/\((tabs|drawer)\)\/_layout\.tsx$/
+  );
+
+  const providers = globalContext.globalProviders || [];
+  const hasProviders = providers.length > 0;
+
+  let providerWrapperText = '';
+  if (isRootLayout && hasProviders) {
+    const providerRules = providers
+      .map((p) => {
+        if (p.source) {
+          const exactPath = PathMapper.calculateExactRelativePath(
+            fileContext.targetPath,
+            p.source
+          );
+          return `     - [CRITICAL ARCHITECTURE RULE]: You MUST wrap your <Stack> (or <Slot>) inside <${p.name}>. You MUST import it exactly like this: import { ${p.name} } from "${exactPath}";`;
+        }
+        return `     - [CRITICAL ARCHITECTURE RULE]: You MUST wrap your <Stack> inside <${p.name}>.`;
+      })
+      .join('\n');
+
+    providerWrapperText = `\n${providerRules}`;
+  }
 
   const facts = globalContext.facts || {};
   const tech = facts.tech || {};
@@ -84,9 +113,21 @@ ${
 ${
   isLayoutFile
     ? `   - [CRITICAL LAYOUT RULE]: This file is a ROUTER LAYOUT ('${fileContext.targetPath}').
-     - You MUST wrap the application and render the Expo Router <Slot /> component.
-     - [CRITICAL SETUP]: You MUST add "import '../global.css';" at the very top of the file if NativeWind is used.
-     - DO NOT output standard UI screen content here. This is ONLY for structural wrappers and Providers.`
+${
+  isGroupLayout
+    ? `     - You MUST render the Expo Router <${navigationSchema.type === 'tabs' ? 'Tabs' : 'Drawer'}> component.
+     - [NAVIGATION ARCHITECTURE]: Configure these screens as items: ${(navigationSchema.type === 'tabs' ? navigationSchema.tabs : navigationSchema.drawerScreens || []).join(', ')}`
+    : `     - You MUST wrap the application and render the Expo Router ${navigationSchema.type === 'tabs' || navigationSchema.type === 'drawer' ? '<Stack>' : '<Stack> or <Slot>'} component.
+${providerWrapperText}`
+}
+${navigationSchema.modals && navigationSchema.modals.length > 0 && isRootLayout ? `     - [MODALS CONFIGURATION]: The following paths MUST be configured as modals (e.g. options={{ presentation: 'modal' }}): ${navigationSchema.modals.join(', ')}` : ''}
+${isRootLayout ? `     - [CRITICAL SETUP]: You MUST add "import '${PathMapper.calculateExactRelativePath(fileContext.targetPath || 'app/_layout.tsx', 'global.css')}';" at the very top of the file if NativeWind is used.` : ''}
+     - DO NOT output standard UI screen content (page-specific text/images) here. This is ONLY for structural wrappers, Providers, and global Navigation (e.g. Header, Navbar, Layout).
+     - [GLOBAL WRAPPERS RULE EXTREMELY CRITICAL]: If the original code included a global '<Layout>', '<Header>', or '<Navbar>' that wraps the routes or app, you MUST PRESERVE IT by putting the <Stack> or <Slot> INSIDE it or alongside it. Do NOT delete custom Layout wrappers.
+     - [HEADER HIDING - CHOOSE EXACTLY ONE STRATEGY]:
+       * CASE A — If you preserved a custom Header/Layout wrapper: apply screenOptions={{ headerShown: false }} on the <Stack> itself. This hides ALL native headers globally. Do NOT also add options={{ headerShown: false }} on individual <Stack.Screen> children.
+       * CASE B — If there is NO custom Header/Layout wrapper AND navigation is tabs/drawer: add ONE <Stack.Screen name="(${navigationSchema.type})" options={{ headerShown: false }} /> inside <Stack> to hide only that group's native header. Do NOT apply screenOptions globally.
+       * NEVER apply both strategies simultaneously.`
     : `   - [CRITICAL SCREEN RULE]: This file is a STANDARD UI SCREEN ('${fileContext.targetPath}').
      - STRICT PROHIBITION: You are FORBIDDEN from using the <Slot /> component.
      - DO NOT abstract the UI away into a Context Provider that returns a <Slot />.
@@ -116,6 +157,27 @@ ${
    - STRICT ARCHITECTURAL MIGRATION: Identify ALL libraries or patterns used for 'runtime type checking', 'legacy DOM manipulation', or 'web-specific behavior'. You MUST completely remove their imports and usages. Replace them strictly with TypeScript static typing (interfaces/types).
    - NO implicit 'any'. Infer types intelligently from the original code structure.
    - EXTENSION BAN: Ensure all relative local imports point to the correct file without extensions or with .tsx/.ts.
+
+7. CODE FORMATTING & LEGIBILITY (CRITICAL FOR PARSERS):
+   - You MUST format the output code legibly with proper newlines and indentation.
+   - DO NOT minify the code under any circumstances, even for short files.
+   - You MUST ensure quotes and string templates are perfectly valid to prevent JSON parsing failures.
+
+${
+  requiredData.length > 0
+    ? `8. DATA DEPENDENCY & PROP INJECTION (CRITICAL):
+${requiredData
+  .map((data) => {
+    const newTargetPath = pathMap[data.originalSource] || data.originalSource;
+    const exactPath = PathMapper.calculateExactRelativePath(
+      fileContext.targetPath || filePath,
+      newTargetPath
+    );
+    return `   - In the original web code, this component received '${data.propName}' as a prop. In Expo Router, screens do NOT receive props. You MUST import it directly: 'import ${data.propName} from "${exactPath}";' and use it as a replacement for 'props.${data.propName}'.`;
+  })
+  .join('\n')}`
+    : ''
+}
 `;
 
   // 4. Context & Input Code
@@ -192,7 +254,11 @@ STRICT HEALING PRINCIPLES & CONSTRAINTS
 ${isNativeWind ? "4. STYLING: This project uses NativeWind. Do NOT remove 'className' properties. If there are type errors regarding 'className', ignore them or fix them without removing the property. DO NOT use StyleSheet.create." : "4. STYLING: This project uses standard StyleSheet. Do NOT use 'className'."}
 5. DEPENDENCY RESTRICTION: You are FORBIDDEN to use any external library outside this compiled list: [${installedPackages.join(', ')}]. If a fix requires a missing package, implement it using standard React Native APIs.
 6. NO SUPPRESSION: Do NOT use @ts-ignore or 'any' assertions to bypass errors. You must structurally fix the logic.
-7. OUTPUT FORMAT: Output MUST be the corrected code only.
+7. CODE FORMATTING & LEGIBILITY:
+   - You MUST format the output code legibly with proper newlines and indentation.
+   - DO NOT minify the code under any circumstances, even for short files.
+   - You MUST ensure quotes and string templates are perfectly valid.
+8. OUTPUT FORMAT: Output MUST be the corrected code only.
 
 -----------------------------------
 CODE CONTEXT
@@ -208,5 +274,6 @@ ${errors.join('\n')}
 TASK
 -----------------------------------
 Analyze the errors and rewrite the code to be 100% valid TypeScript for React Native. Adapt the current file's logic to resolve the boundaries without assuming external changes.
+Ensure the resulting code is pretty-printed, indented, and NOT on a single line.
 `;
 }
