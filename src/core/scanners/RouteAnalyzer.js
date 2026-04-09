@@ -15,7 +15,9 @@ export class RouteAnalyzer {
   static async analyze(projectRoot, filesQueue) {
     ui.step('RouteAnalyzer', 'Extracting AST routing tree...');
     const routeMap = {};
+    const routeMetadata = {};
     const routingSourceFiles = [];
+    const allProvidersMap = new Map();
 
     // 1. Safe Isolated ts-morph Project Setup
     const project = new Project({
@@ -74,6 +76,13 @@ export class RouteAnalyzer {
     for (const sf of routingSourceFiles) {
       const processedNodes = new Set();
 
+      const extractedProviders = this._extractProviders(sf, projectRoot);
+      extractedProviders.forEach((p) => {
+        if (!allProvidersMap.has(p.name)) {
+          allProvidersMap.set(p.name, p);
+        }
+      });
+
       // Process JSX <Route> Definitions
       const jsxElements = [
         ...sf.getDescendantsOfKind(SyntaxKind.JsxElement),
@@ -103,7 +112,9 @@ export class RouteAnalyzer {
             sf,
             routeMap,
             processedNodes,
-            projectRoot
+            projectRoot,
+            routeMetadata,
+            project
           );
         }
       }
@@ -140,7 +151,9 @@ export class RouteAnalyzer {
               sf,
               routeMap,
               processedNodes,
-              projectRoot
+              projectRoot,
+              routeMetadata,
+              project
             );
           }
         }
@@ -148,9 +161,13 @@ export class RouteAnalyzer {
     }
 
     console.log(
-      `   ✅ Extracted ${Object.keys(routeMap).length} mapped routes.`
+      `   ✅ Extracted ${Object.keys(routeMap).length} mapped routes and ${allProvidersMap.values().length} providers.`
     );
-    return routeMap;
+    return {
+      routeMap,
+      routeMetadata,
+      providers: Array.from(allProvidersMap.values()),
+    };
   }
 
   // ─── INTERNAL AST PROCESSING METHODS ─────────────────────────────────────────
@@ -161,7 +178,9 @@ export class RouteAnalyzer {
     sourceFile,
     routeMap,
     processedElements,
-    projectRoot
+    projectRoot,
+    routeMetadata,
+    project
   ) {
     processedElements.add(routeNode);
 
@@ -213,6 +232,25 @@ export class RouteAnalyzer {
           isIndexRoute
         );
         routeMap[resolvedFilePath] = expoPath;
+
+        // 🔍 Trace Prop Dependencies (e.g. <Home data={data} />)
+        const requiredData = this._tracePropDependencies(
+          routeNode,
+          sourceFile,
+          projectRoot
+        );
+
+        const meta = this._extractComponentMetadata(
+          project,
+          resolvedFilePath,
+          projectRoot
+        );
+        if (meta) {
+          routeMetadata[resolvedFilePath] = {
+            ...meta,
+            requiredData: requiredData || [],
+          };
+        }
         ui.printSubStep(`Mapped: ${resolvedFilePath} → ${expoPath}`, 2);
       }
     }
@@ -224,7 +262,9 @@ export class RouteAnalyzer {
         sourceFile,
         routeMap,
         processedElements,
-        projectRoot
+        projectRoot,
+        routeMetadata,
+        project
       );
     }
   }
@@ -235,7 +275,9 @@ export class RouteAnalyzer {
     sourceFile,
     routeMap,
     processedObjects,
-    projectRoot
+    projectRoot,
+    routeMetadata,
+    project
   ) {
     processedObjects.add(objNode);
 
@@ -299,6 +341,25 @@ export class RouteAnalyzer {
           isIndexRoute
         );
         routeMap[resolvedFilePath] = expoPath;
+
+        // 🔍 Trace Prop Dependencies from Object-style route
+        const requiredData = this._tracePropDependenciesFromObject(
+          objNode,
+          sourceFile,
+          projectRoot
+        );
+
+        const meta = this._extractComponentMetadata(
+          project,
+          resolvedFilePath,
+          projectRoot
+        );
+        if (meta) {
+          routeMetadata[resolvedFilePath] = {
+            ...meta,
+            requiredData: requiredData || [],
+          };
+        }
         ui.printSubStep(`Mapped: ${resolvedFilePath} → ${expoPath}`, 2);
       }
     }
@@ -312,7 +373,9 @@ export class RouteAnalyzer {
             sourceFile,
             routeMap,
             processedObjects,
-            projectRoot
+            projectRoot,
+            routeMetadata,
+            project
           );
         }
       }
@@ -320,6 +383,38 @@ export class RouteAnalyzer {
   }
 
   // ─── HELPERS ─────────────────────────────────────────────────────────────────
+
+  static _extractComponentMetadata(project, resolvedFilePath, projectRoot) {
+    if (!resolvedFilePath) return null;
+    const absoluteTarget = path.join(projectRoot, resolvedFilePath);
+    const sourceFile = project.getSourceFile(absoluteTarget);
+    if (!sourceFile) return null;
+
+    const jsxElements = [
+      ...sourceFile.getDescendantsOfKind(SyntaxKind.JsxElement),
+      ...sourceFile.getDescendantsOfKind(SyntaxKind.JsxSelfClosingElement),
+    ];
+
+    let inputsCount = 0;
+    let formsCount = 0;
+    let linksCount = 0;
+
+    for (const el of jsxElements) {
+      const tagName =
+        el.getKind() === SyntaxKind.JsxElement
+          ? el.getOpeningElement().getTagNameNode().getText()
+          : el.getTagNameNode().getText();
+
+      const lowerName = tagName.toLowerCase();
+
+      if (lowerName === 'input' || lowerName === 'textarea') inputsCount++;
+      if (lowerName === 'form') formsCount++;
+      if (lowerName === 'a' || lowerName === 'link' || lowerName === 'navlink')
+        linksCount++;
+    }
+
+    return { inputsCount, formsCount, linksCount };
+  }
 
   static _extractComponentName(node) {
     const elementAttr = node.getAttribute('element');
@@ -470,5 +565,117 @@ export class RouteAnalyzer {
       1,
       true
     );
+  }
+
+  /**
+   * Traces props passed to a JSX route element back to their original import source.
+   * Only tracks props that originate from 'ImportDeclaration'.
+   */
+  static _tracePropDependencies(routeNode, sourceFile, projectRoot) {
+    const opening =
+      routeNode.getKind() === SyntaxKind.JsxElement
+        ? routeNode.getOpeningElement()
+        : routeNode;
+    const elementAttr = opening.getAttribute('element');
+    if (!elementAttr || elementAttr.getKind() !== SyntaxKind.JsxAttribute)
+      return [];
+
+    const jsxExpr = elementAttr.getInitializer()?.getExpression();
+    if (!jsxExpr) return [];
+
+    return this._extractPropsFromJsx(jsxExpr, sourceFile, projectRoot);
+  }
+
+  /**
+   * Traces props from an object-style route { path: '/', element: <Home /> }
+   */
+  static _tracePropDependenciesFromObject(objNode, sourceFile, projectRoot) {
+    const elementProp = objNode.getProperty('element');
+    if (!elementProp || elementProp.getKind() !== SyntaxKind.PropertyAssignment)
+      return [];
+
+    const init = elementProp.getInitializer();
+    if (!init) return [];
+
+    return this._extractPropsFromJsx(init, sourceFile, projectRoot);
+  }
+
+  /**
+   * Core helper to extract props and trace their import sources.
+   * IMPEMENTATION GUARD: Only matches props from ImportDeclarations.
+   */
+  static _extractPropsFromJsx(jsxNode, sourceFile, projectRoot) {
+    const requiredData = [];
+    let openingElement;
+
+    if (jsxNode.getKind() === SyntaxKind.JsxElement) {
+      openingElement = jsxNode.getOpeningElement();
+    } else if (jsxNode.getKind() === SyntaxKind.JsxSelfClosingElement) {
+      openingElement = jsxNode;
+    } else {
+      return [];
+    }
+
+    const attributes = openingElement.getAttributes();
+    for (const attr of attributes) {
+      if (attr.getKind() === SyntaxKind.JsxAttribute) {
+        const propName = attr.getNameNode().getText();
+        const init = attr.getInitializer();
+
+        // Check if the value is a variable {productData}
+        if (init && init.getKind() === SyntaxKind.JsxExpression) {
+          const expression = init.getExpression();
+          if (expression && expression.getKind() === SyntaxKind.Identifier) {
+            const varName = expression.getText();
+
+            // Check if this identifier is imported in the current file
+            const importPath = this._resolveImport(
+              sourceFile,
+              varName,
+              projectRoot
+            );
+
+            if (importPath) {
+              requiredData.push({
+                propName,
+                originalSource: importPath,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    return requiredData;
+  }
+  /**
+   * Scans the AST for any components acting as Providers (e.g., <CartProvider>).
+   */
+  static _extractProviders(sourceFile, projectRoot) {
+    const providers = [];
+    const jsxElements = [
+      ...sourceFile.getDescendantsOfKind(SyntaxKind.JsxElement),
+      ...sourceFile.getDescendantsOfKind(SyntaxKind.JsxSelfClosingElement),
+    ];
+
+    for (const el of jsxElements) {
+      const tagName =
+        el.getKind() === SyntaxKind.JsxElement
+          ? el.getOpeningElement().getTagNameNode().getText()
+          : el.getTagNameNode().getText();
+
+      if (tagName.includes('Provider')) {
+        const importPath = this._resolveImport(
+          sourceFile,
+          tagName,
+          projectRoot
+        );
+        providers.push({
+          name: tagName,
+          source: importPath,
+        });
+      }
+    }
+    return providers;
   }
 }
