@@ -20,10 +20,64 @@ import { printStep, printSubStep, printWarning } from '../../utils/ui.js';
 export async function plannerNode(state) {
   printStep('Planner — ordering files for conversion');
 
-  const { filesQueue, routeMap = {} } = state;
+  const { filesQueue, routeMap = {}, navigationSchema = {} } = state;
+
+  // ── 0. Inject Virtual Files for Route Groups ────────────
+  if (navigationSchema.type === 'tabs' || navigationSchema.type === 'drawer') {
+    const groupName = navigationSchema.type === 'tabs' ? 'tabs' : 'drawer';
+    const groupLayoutPath = `app/(${groupName})/_layout.tsx`;
+
+    // 1. Inject group layout
+    if (!filesQueue.some((f) => f.relativeToProject === groupLayoutPath)) {
+      const navComponent = navigationSchema.type === 'tabs' ? 'Tabs' : 'Drawer';
+      const importPath =
+        navigationSchema.type === 'drawer'
+          ? 'expo-router/drawer'
+          : 'expo-router';
+      filesQueue.push({
+        filePath: groupLayoutPath,
+        relativeToProject: groupLayoutPath,
+        absolutePath: `__virtual/${groupLayoutPath}`,
+        isVirtual: true,
+        hasJSX: true,
+        content: [
+          '// [VIRTUAL FILE INJECTED BY RETRANSIFY]',
+          `// TARGET: This file MUST export the ${navComponent} navigator for the (${groupName}) route group.`,
+          `// INSTRUCTION: Import ${navComponent} from '${importPath}' and render it as the default export.`,
+          `// REQUIRED SCREENS: ${(navigationSchema.tabs || navigationSchema.drawerScreens || []).join(', ')}`,
+          `import { ${navComponent} } from '${importPath}';`,
+          `export default function GroupLayout() { return null; }`,
+        ].join('\n'),
+      });
+    }
+
+    // 2. Inject redirect index
+    const rootIndexPath = `app/index.tsx`;
+    if (!filesQueue.some((f) => f.relativeToProject === rootIndexPath)) {
+      filesQueue.push({
+        filePath: rootIndexPath,
+        relativeToProject: rootIndexPath,
+        absolutePath: `__virtual/${rootIndexPath}`,
+        isVirtual: true,
+        hasJSX: true,
+        content: [
+          '// [VIRTUAL FILE INJECTED BY RETRANSIFY]',
+          `// TARGET: This file MUST redirect the app root / to the navigation group /(${groupName}).`,
+          `// CRITICAL INSTRUCTION: You MUST import { Redirect } from 'expo-router' and return <Redirect href="/(${groupName})" />.`,
+          `// DO NOT redirect to "/". You MUST redirect specifically to "/(${groupName})".`,
+          `import { Redirect } from 'expo-router';`,
+          `export default function Index() { return null; }`,
+        ].join('\n'),
+      });
+    }
+  }
 
   // ── 1. Generate path map using PathMapper (using new routeMap) ──
-  const pathMap = PathMapper.generateMap(filesQueue, routeMap);
+  const pathMap = PathMapper.generateMap(
+    filesQueue,
+    routeMap,
+    navigationSchema
+  );
   printSubStep(`Path map generated for ${Object.keys(pathMap).length} files`);
 
   // ── 2. Build dependency graph from file imports ─────────────

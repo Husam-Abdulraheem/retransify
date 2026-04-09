@@ -1,5 +1,6 @@
 // src/core/graph/nodes/healerNode.js
 import { buildFixPrompt } from '../../prompt/promptBuilder.js';
+import { safeInvoke } from '../../ai/aiFactory.js';
 import { z } from 'zod';
 import {
   printSubStep,
@@ -10,21 +11,21 @@ import {
 } from '../../utils/ui.js';
 
 const outputSchema = z.object({
-  code: z.string().describe('The complete corrected React Native code'),
+  code: z
+    .string()
+    .describe(
+      'The complete corrected React Native code. You MUST format this code legibly with proper newlines and indentation. DO NOT minify.'
+    ),
 });
 
 /**
  * HealerNode - Fixes code based on VerifierNode errors
  *
- * Inputs: state.generatedCode, state.errors, state.healAttempts
- * Outputs: state.generatedCode (updated), state.healAttempts (incremented)
- *
  * @param {import('../state.js').GraphState} state
- * @param {{ smartModel: Session }} models
+ * @param {{ smartModel: Session, fastModel: Session }} models
  * @returns {Partial<import('../state.js').GraphState>}
  */
 export async function healerNode(state, models = {}) {
-  // Fetch installedPackages from the state
   const {
     generatedCode,
     errors,
@@ -38,12 +39,12 @@ export async function healerNode(state, models = {}) {
   const newAttemptCount = (healAttempts || 0) + 1;
 
   printSubStep(`🚑 AI Healing attempt ${newAttemptCount}/3...`);
+
   if (!models.smartModel) {
     printError('HealerNode: no smartModel');
     return { healAttempts: newAttemptCount };
   }
 
-  // Pass installed libraries to restrict the model
   const MAX_ERRORS = 5;
   let displayedErrors = errors;
 
@@ -54,7 +55,6 @@ export async function healerNode(state, models = {}) {
     );
   }
 
-  // Pass installed libraries to restrict the model
   const fixPrompt = buildFixPrompt(
     generatedCode,
     displayedErrors,
@@ -63,10 +63,22 @@ export async function healerNode(state, models = {}) {
   );
 
   try {
-    const structuredModel =
-      models.smartModel.withStructuredOutput(outputSchema);
-    startSubSpinner(`AI: Fixing ${filePath}...`);
-    const parsed = await structuredModel.invoke(fixPrompt);
+    startSubSpinner(`AI Healing: Fixing ${filePath}...`);
+
+    const parsed = await safeInvoke(
+      models.smartModel,
+      models.fastModel,
+      fixPrompt,
+      {
+        schema: outputSchema,
+        onRetry: (attempt, total) => {
+          startSubSpinner(
+            `Healing Retry ${attempt}/${total} for ${filePath}...`
+          );
+        },
+      }
+    );
+
     stopSpinner();
 
     if (parsed.code && parsed.code.length > 50) {
@@ -74,11 +86,12 @@ export async function healerNode(state, models = {}) {
       return {
         generatedCode: parsed.code,
         healAttempts: newAttemptCount,
-        errors: [], // Reset errors so Verifier can re-check them
+        errors: [],
       };
     }
   } catch (err) {
-    printError(`HealerNode error: ${err.message}`);
+    stopSpinner();
+    printError(`HealerNode failed after all attempts: ${err.message}`);
   }
 
   printWarning('HealerNode: failed to generate fix');

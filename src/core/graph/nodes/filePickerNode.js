@@ -37,10 +37,13 @@ export async function filePickerNode(state) {
   }
 
   // ── Check Web Mount files to delete ─────────────────────────
+  // Only skip if the file is in the src/ root (e.g. src/main.tsx, src/index.tsx)
+  // DO NOT skip virtual files (isVirtual) or non-src roots
   const baseName = path.basename(filePath);
   if (
     /^(main|index)\.(tsx|jsx|js|ts)$/i.test(baseName) &&
-    filePath.includes('src')
+    !nextFile.isVirtual &&
+    (filePath.startsWith('src/') || filePath.startsWith('src\\'))
   ) {
     printFileSkip('Deleted (web mount)', filePath);
     return {

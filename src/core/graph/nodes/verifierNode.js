@@ -1,5 +1,4 @@
 import crypto from 'crypto';
-import path from 'path';
 import { Project, SyntaxKind } from 'ts-morph';
 import { printSubStep, printWarning } from '../../utils/ui.js';
 
@@ -13,13 +12,11 @@ export async function verifierNode(state) {
 
   const filePath =
     currentFile?.relativeToProject || currentFile?.filePath || 'unknown.tsx';
-  printSubStep(
-    'Verifying Structural AST Constraints (Bypass TS Strict Mode)...'
-  );
+  printSubStep('Verifying Structural AST Constraints ...');
 
   const errors = [];
 
-  // تهيئة بيئة بسيطة جداً للتحليل الهيكلي فقط (AST Parsing)
+  // Initializing a simple environment for structural analysis only (AST Parsing)
   const project = new Project({
     compilerOptions: { allowJs: true, jsx: 4 }, // JSX React
     skipAddingFilesFromTsConfig: true,
@@ -30,7 +27,7 @@ export async function verifierNode(state) {
   });
 
   try {
-    // الفحص الهيكلي العميق (AST Linter) - هنا القوة الحقيقية وبدون أي غباء من المترجم
+    // Deep structural analysis (AST Linter) - here is the real power without any compiler stupidity
     const astErrors = analyzeASTForErrors(sourceFile, filePath, state.pathMap);
     errors.push(...astErrors);
   } catch (error) {
@@ -57,12 +54,12 @@ export async function verifierNode(state) {
 
   return {
     errors,
-    missingDependencies: [], // تم إلغاء تتبع المكاتب المفقودة عبر المترجم لأنه غير دقيق
+    missingDependencies: [], // Removed tracking missing dependencies via the compiler because it is inaccurate
     lastErrorHash: errorHash,
   };
 }
 
-// الدالة المساعدة analyzeASTForErrors تظل كما هي تماماً لأنها مكتوبة بعبقرية
+// The helper function analyzeASTForErrors remains exactly the same because it is written with genius
 function analyzeASTForErrors(sourceFile, filePath, pathMap = {}) {
   const errors = [];
   const isComponent =
@@ -74,26 +71,28 @@ function analyzeASTForErrors(sourceFile, filePath, pathMap = {}) {
       SyntaxKind.JsxSelfClosingElement
     );
 
-    // 1. منع عناصر الويب
+    // 1. Prevent web elements
     const checkDynamicTagName = (tagName, line) => {
       if (/^[a-z]/.test(tagName)) {
         errors.push(
-          `Line ${line}: Unsupported Web DOM element <\${tagName}> detected. Use React Native components.`
+          `Line ${line}: Unsupported Web DOM element <${tagName}> detected. Use React Native components.`
         );
       }
     };
 
-    // 2. بناء قائمة المسارات الصالحة
+    // 2. Building a list of valid routes
     const validRoutes = new Set(
       Object.values(pathMap).map((p) => {
         let route = '/' + p.replace(/^app\//i, '').replace(/\.tsx$/i, '');
+        // Fix: Remove Expo Route Groups e.g., /(tabs) or /(drawer)
+        route = route.replace(/\/\([^)]+\)/g, '');
         if (route.endsWith('/index')) route = route.replace('/index', '');
         if (route.endsWith('/_layout')) route = route.replace('/_layout', '');
         return route === '' ? '/' : route.toLowerCase();
       })
     );
 
-    // 3. فحص الروابط الميتة
+    // 3. Checking for dead links
     const checkHrefForDeadLinks = (element, line) => {
       const tagName = element.getTagNameNode().getText();
       if (tagName === 'Link' || tagName === 'Redirect') {
@@ -118,7 +117,7 @@ function analyzeASTForErrors(sourceFile, filePath, pathMap = {}) {
             if (!isMatch) {
               const available = Array.from(validRoutes).join(', ');
               errors.push(
-                `Line ${line}: CRITICAL ROUTING ERROR. Dead link "${val}". Valid routes are: [\${available}].`
+                `Line ${line}: CRITICAL ROUTING ERROR. Dead link "${val}". Valid routes are: [${available}].`
               );
             }
           }
