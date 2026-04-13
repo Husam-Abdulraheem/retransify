@@ -7,8 +7,6 @@ import {
   failSpinner,
 } from '../../utils/ui.js';
 import { buildLayoutAgentPrompt } from '../../prompt/layoutPrompt.js';
-import { safeInvoke } from '../../ai/aiFactory.js';
-
 const layoutAgentSchema = z.object({
   type: z
     .enum(['tabs', 'drawer', 'stack'])
@@ -58,12 +56,8 @@ export async function runLayoutAgent(routeMap, routeMetadata, models) {
   const prompt = buildLayoutAgentPrompt(routeMap, routeMetadata);
 
   try {
-    const result = await safeInvoke(
-      models.fastModel,
-      null, // No fallback for layout agent - it's already using fastModel
-      prompt,
-      { schema: layoutAgentSchema }
-    );
+    const model = models.fastModel.withStructuredOutput(layoutAgentSchema);
+    const result = await model.invoke(prompt);
 
     succeedSpinner(`Determined Architecture: ${result.type.toUpperCase()}`);
 

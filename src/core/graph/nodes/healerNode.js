@@ -1,6 +1,5 @@
 // src/core/graph/nodes/healerNode.js
 import { buildFixPrompt } from '../../prompt/promptBuilder.js';
-import { safeInvoke } from '../../ai/aiFactory.js';
 import { z } from 'zod';
 import {
   printSubStep,
@@ -65,19 +64,11 @@ export async function healerNode(state, models = {}) {
   try {
     startSubSpinner(`AI Healing: Fixing ${filePath}...`);
 
-    const parsed = await safeInvoke(
-      models.smartModel,
-      models.fastModel,
-      fixPrompt,
-      {
-        schema: outputSchema,
-        onRetry: (attempt, total) => {
-          startSubSpinner(
-            `Healing Retry ${attempt}/${total} for ${filePath}...`
-          );
-        },
-      }
-    );
+    const fallbackModel = models.fastModel.withStructuredOutput(outputSchema);
+    const primaryModel = models.smartModel.withStructuredOutput(outputSchema);
+    const model = primaryModel.withFallbacks({ fallbacks: [fallbackModel] });
+
+    const parsed = await model.invoke(fixPrompt);
 
     stopSpinner();
 

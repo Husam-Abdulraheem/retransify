@@ -3,7 +3,6 @@ import fs from 'fs-extra';
 import path from 'path';
 import { buildPrompt } from '../../prompt/promptBuilder.js';
 import { PathMapper } from '../../helpers/pathMapper.js';
-import { safeInvoke } from '../../ai/aiFactory.js';
 import { z } from 'zod';
 import {
   printSubStep,
@@ -131,19 +130,11 @@ export async function executorNode(state, models = {}) {
   try {
     startSubSpinner('AI: Generating native code...');
 
-    const response = await safeInvoke(
-      models.smartModel,
-      models.fastModel,
-      prompt,
-      {
-        schema: outputSchema,
-        onRetry: (attempt, total) => {
-          startSubSpinner(
-            `Retry ${attempt}/${total} for ${filePath}... [Model busy]`
-          );
-        },
-      }
-    );
+    const fallbackModel = models.fastModel.withStructuredOutput(outputSchema);
+    const primaryModel = models.smartModel.withStructuredOutput(outputSchema);
+    const model = primaryModel.withFallbacks({ fallbacks: [fallbackModel] });
+
+    const response = await model.invoke(prompt);
 
     stopSpinner();
     let generatedCode = response.code;
