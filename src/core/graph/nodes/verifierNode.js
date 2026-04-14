@@ -3,7 +3,7 @@ import { Project, SyntaxKind } from 'ts-morph';
 import { printSubStep, printWarning } from '../../utils/ui.js';
 
 export async function verifierNode(state) {
-  const { generatedCode, currentFile } = state;
+  const { generatedCode, currentFile, installedPackages = [] } = state;
 
   if (!generatedCode) {
     printWarning('VerifierNode: no code to verify');
@@ -26,6 +26,17 @@ export async function verifierNode(state) {
     overwrite: true,
   });
 
+  // Detect missing third-party dependencies AND illegal Node.js imports
+  const { missingDeps, illegalImportErrors } = detectMissingDependencies(
+    sourceFile,
+    installedPackages
+  );
+
+  // Illegal Node.js imports → structural errors (routed to Healer, not AutoInstaller)
+  if (illegalImportErrors.length > 0) {
+    errors.push(...illegalImportErrors);
+  }
+
   try {
     // Deep structural analysis (AST Linter) - here is the real power without any compiler stupidity
     const astErrors = analyzeASTForErrors(sourceFile, filePath, state.pathMap);
@@ -35,9 +46,13 @@ export async function verifierNode(state) {
     errors.push(`Critical Syntax Error: Could not parse file.`);
   }
 
-  if (errors.length === 0) {
+  if (missingDeps.length > 0) {
+    printSubStep(`📦 Missing dependencies detected: ${missingDeps.join(', ')}`);
+  }
+
+  if (errors.length === 0 && missingDeps.length === 0) {
     printSubStep('Structural Verification Passed ✔');
-  } else {
+  } else if (errors.length > 0) {
     printSubStep(
       `Verification failed: ${errors.length} structural error(s) detected`
     );
@@ -54,8 +69,84 @@ export async function verifierNode(state) {
 
   return {
     errors,
-    missingDependencies: [], // Removed tracking missing dependencies via the compiler because it is inaccurate
+    missingDependencies: missingDeps, // Populated from import analysis (TS2307 equivalent)
     lastErrorHash: errorHash,
+  };
+}
+
+/**
+ * Scans all import declarations in the generated code.
+ * - Detects missing third-party packages (→ AutoInstaller)
+ * - Detects illegal Node.js built-in imports (→ Healer as structural errors)
+ */
+function detectMissingDependencies(sourceFile, installedPackages = []) {
+  const missing = [];
+  const illegalImports = [];
+  const installedSet = new Set(installedPackages);
+
+  // Node.js built-ins that are NOT available in React Native / Expo
+  const nodeBuiltIns = new Set([
+    'fs',
+    'path',
+    'crypto',
+    'http',
+    'https',
+    'os',
+    'stream',
+    'events',
+    'util',
+    'child_process',
+    'net',
+    'tls',
+    'dns',
+    'readline',
+    'zlib',
+    'buffer',
+    'assert',
+    'vm',
+    'cluster',
+  ]);
+
+  const importDecls = sourceFile.getImportDeclarations();
+  for (const decl of importDecls) {
+    const moduleSpecifier = decl.getModuleSpecifierValue();
+
+    // Skip relative imports and path aliases
+    if (
+      moduleSpecifier.startsWith('.') ||
+      moduleSpecifier.startsWith('/') ||
+      moduleSpecifier.startsWith('@/')
+    ) {
+      continue;
+    }
+
+    // Normalize scoped packages: '@scope/pkg/sub' -> '@scope/pkg'
+    // and plain packages: 'pkg/sub' -> 'pkg'
+    const parts = moduleSpecifier.split('/');
+    const packageName = moduleSpecifier.startsWith('@')
+      ? parts.slice(0, 2).join('/')
+      : parts[0];
+
+    // 🚨 1. Illegal Node.js built-in → structural error for Healer
+    if (nodeBuiltIns.has(packageName)) {
+      illegalImports.push(
+        `Line ${decl.getStartLineNumber()}: Illegal import '${packageName}'. Node.js built-in modules are NOT supported in React Native. You MUST remove this import and use Expo/React Native alternatives.`
+      );
+      continue;
+    }
+
+    // 🚨 2. Missing third-party package → AutoInstaller
+    if (!installedSet.has(packageName)) {
+      // Never flag react / react-native themselves as missing
+      if (packageName !== 'react' && packageName !== 'react-native') {
+        missing.push(packageName);
+      }
+    }
+  }
+
+  return {
+    missingDeps: [...new Set(missing)],
+    illegalImportErrors: illegalImports,
   };
 }
 
