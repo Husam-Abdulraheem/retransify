@@ -25,6 +25,10 @@ export function buildPrompt(fileContext) {
   } = fileContext;
 
   const isRootLayout = fileContext.targetPath === 'app/_layout.tsx';
+
+  const isHomeScreen =
+    fileContext.targetPath === 'app/(tabs)/index.tsx' ||
+    fileContext.targetPath === 'app/index.tsx';
   const isGroupLayout = fileContext.targetPath?.match(
     /^app\/\((tabs|drawer)\)\/_layout\.tsx$/
   );
@@ -122,16 +126,18 @@ ${providerWrapperText}`
 }
 ${navigationSchema.modals && navigationSchema.modals.length > 0 && isRootLayout ? `     - [MODALS CONFIGURATION]: The following paths MUST be configured as modals (e.g. options={{ presentation: 'modal' }}): ${navigationSchema.modals.join(', ')}` : ''}
 ${isRootLayout ? `     - [CRITICAL SETUP]: You MUST add "import '${PathMapper.calculateExactRelativePath(fileContext.targetPath || 'app/_layout.tsx', 'global.css')}';" at the very top of the file if NativeWind is used.` : ''}
-     - DO NOT output standard UI screen content (page-specific text/images) here. This is ONLY for structural wrappers, Providers, and global Navigation (e.g. Header, Navbar, Layout).
-     - [GLOBAL WRAPPERS RULE EXTREMELY CRITICAL]: If the original code included a global '<Layout>', '<Header>', or '<Navbar>' that wraps the routes or app, you MUST PRESERVE IT by putting the <Stack> or <Slot> INSIDE it or alongside it. Do NOT delete custom Layout wrappers.
-     - [HEADER HIDING - CHOOSE EXACTLY ONE STRATEGY]:
-       * CASE A — If you preserved a custom Header/Layout wrapper: apply screenOptions={{ headerShown: false }} on the <Stack> itself. This hides ALL native headers globally. Do NOT also add options={{ headerShown: false }} on individual <Stack.Screen> children.
-       * CASE B — If there is NO custom Header/Layout wrapper AND navigation is tabs/drawer: add ONE <Stack.Screen name="(${navigationSchema.type})" options={{ headerShown: false }} /> inside <Stack> to hide only that group's native header. Do NOT apply screenOptions globally.
-       * NEVER apply both strategies simultaneously.`
+     - [WEB TO MOBILE LAYOUT PATTERN (CRITICAL)]: Web apps often use a global <Layout> component that wraps the children in a container alongside a <Header> and <Footer>.
+     - 🚨 PROBLEM: In React Native, wrapping the main Navigator (<Stack> or <Tabs>) inside a custom UI container or <ScrollView> breaks the gesture system and crashes the app.
+     - ✅ THE ARCHITECTURAL SOLUTION:
+        1. DO NOT wrap the <Stack> or <Tabs> in any UI container. The Navigator MUST be the root visual element (only wrapped by Context Providers).
+        2. If you find a <Header> or <Navbar> in the web layout, EXTRACT it, ensure it has an 'export' keyword so it can be imported globally, and integrate it natively using \`<Stack screenOptions={{ header: () => <Header /> }} />\`.
+        3. If you find a global <Footer>, completely DELETE it from this root file. (Footers belong on the Home screen, not the root layout).
+        4. [DOUBLE HEADER PREVENTION]: If the navigation is tabs or drawer, add ONE <Stack.Screen name="(${navigationSchema.type})" options={{ headerShown: false }} /> inside <Stack>.`
     : `   - [CRITICAL SCREEN RULE]: This file is a STANDARD UI SCREEN ('${fileContext.targetPath}').
      - STRICT PROHIBITION: You are FORBIDDEN from using the <Slot /> component.
      - DO NOT abstract the UI away into a Context Provider that returns a <Slot />.
-     - You MUST directly render the actual visual React Native components (Views, Text, FlatList, Input) inside the main export.`
+     - You MUST directly render the actual visual React Native components (Views, Text, FlatList, Input) inside the main export.
+${isHomeScreen ? `     - [MOBILE FOOTER RECOVERY EXTREMELY CRITICAL]: In mobile apps, global footers belong at the bottom of the Home screen, NOT in the root layout. If the original web project had a global <Footer> component, you MUST import it into THIS file and place it at the very bottom of your main <ScrollView>. Calculate the exact relative path to the Footer component if necessary.` : ''}`
 }
 
 4. DEPENDENCIES & LIBRARIES MAP:
