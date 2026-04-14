@@ -6,6 +6,7 @@ import { plannerNode } from './nodes/plannerNode.js';
 import { executorNode } from './nodes/executorNode.js';
 import { verifierNode } from './nodes/verifierNode.js';
 import { healerNode } from './nodes/healerNode.js';
+import { retryNode } from './nodes/retryNode.js';
 import { autoInstallerNode } from './nodes/autoInstallerNode.js';
 import { contextUpdaterNode } from './nodes/contextUpdaterNode.js';
 import { diskWriterNode } from './nodes/diskWriterNode.js';
@@ -59,6 +60,8 @@ function buildWorkflow(models) {
 
   workflow.addNode(NODE_NAMES.HEALER, (state) => healerNode(state, models));
 
+  workflow.addNode(NODE_NAMES.RETRY_HANDLER, (state) => retryNode(state));
+
   workflow.addNode(NODE_NAMES.AUTO_INSTALLER, (state) =>
     autoInstallerNode(state)
   );
@@ -85,7 +88,14 @@ function buildWorkflow(models) {
   // After Executor -> check if generation succeeded
   workflow.addConditionalEdges(NODE_NAMES.EXECUTOR, didExecutorSucceed, {
     success: NODE_NAMES.VERIFIER,
-    failure: NODE_NAMES.FILE_PICKER, // Generation failed -> move to next file
+    failure: NODE_NAMES.FILE_PICKER, // Permanent failure -> move to next file
+    retry: NODE_NAMES.RETRY_HANDLER, // Transient 503/429 -> wait and retry same file
+  });
+
+  // After RetryNode -> either retry same file (→ Executor) or give up (→ FilePicker)
+  workflow.addConditionalEdges(NODE_NAMES.RETRY_HANDLER, afterRetry, {
+    retry: NODE_NAMES.EXECUTOR, // Same file re-enters Executor (order preserved)
+    abort: NODE_NAMES.FILE_PICKER, // Max retries exceeded -> skip to next file
   });
 
   // After Verifier -> either Healer (if failed) or ContextUpdater (if succeeded)
@@ -133,15 +143,41 @@ function shouldProcessFile(state) {
   return 'process'; // Process current file
 }
 
+const MAX_RETRY = 3;
+
 /**
  * Did ExecutorNode succeed in generating the code?
  */
 function didExecutorSucceed(state) {
   if (!state.generatedCode || state.generatedCode.length < 10) {
-    printWarning('[Workflow] ExecutorNode failed - moving to next file');
+    const isTransient = state.errors?.some((e) => e.startsWith('TRANSIENT:'));
+    if (isTransient) {
+      printWarning('[Workflow] Transient API error — routing to RetryNode...');
+      return 'retry';
+    }
+    printWarning(
+      '[Workflow] ExecutorNode failed permanently — moving to next file'
+    );
     return 'failure';
   }
   return 'success';
+}
+
+/**
+ * Should RetryNode retry the same file or abort and move on?
+ */
+function afterRetry(state) {
+  if (state.retryCount > MAX_RETRY) {
+    const filePath =
+      state.currentFile?.relativeToProject ||
+      state.currentFile?.filePath ||
+      'unknown';
+    printWarning(
+      `[Workflow] Max retries (${MAX_RETRY}) exceeded for: ${filePath} — skipping`
+    );
+    return 'abort'; // → FILE_PICKER
+  }
+  return 'retry'; // → EXECUTOR (same file, order preserved)
 }
 
 /**

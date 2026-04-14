@@ -157,7 +157,26 @@ export async function executorNode(state, models = {}) {
     };
   } catch (err) {
     stopSpinner();
-    printError(`Failed after all attempts: ${filePath} - ${err.message}`);
+
+    const isTransient =
+      err.message?.includes('503') ||
+      err.message?.includes('529') ||
+      err.message?.includes('429') ||
+      err.message?.includes('Too Many Requests') ||
+      err.message?.includes('Service Unavailable') ||
+      err.message?.includes('overloaded');
+
+    if (isTransient) {
+      printWarning(
+        `Transient API error for ${filePath}, will retry: ${err.message}`
+      );
+      return {
+        generatedCode: null,
+        errors: [`TRANSIENT:${err.message}`],
+      };
+    }
+
+    printError(`Failed permanently: ${filePath} - ${err.message}`);
     return {
       generatedCode: null,
       errors: [`AI Conversion failed: ${err.message}`],

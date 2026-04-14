@@ -87,5 +87,6 @@ export async function filePickerNode(state) {
     lastErrorHash: null, // Reset error hash
     installAttempts: 0, // Reset auto-installer circuit breaker
     missingDependencies: [], // Reset missing dependencies array
+    retryCount: 0, // [Critical] Reset transient retry counter — prevent retry leak
   };
 }

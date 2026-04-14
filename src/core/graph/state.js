@@ -134,6 +134,12 @@ export const GraphState = Annotation.Root({
     default: () => 0,
   }),
 
+  // Number of transient-error retry attempts for the current file (reset in filePickerNode)
+  retryCount: Annotation({
+    reducer: (_, x) => x,
+    default: () => 0,
+  }),
+
   // ── Dependency Management ────────────────────────────────────
   // DependencyManager instance (populated at start of workflow)
   dependencyManager: Annotation({
@@ -167,6 +173,7 @@ export const NODE_NAMES = {
   CONTEXT_UPDATER: 'contextUpdaterNode',
   DISK_WRITER: 'diskWriterNode',
   FILE_PICKER: 'filePickerNode', // Helper node: pulls next file from filesQueue
+  RETRY_HANDLER: 'retryNode', // Handles transient 503/429 with exponential backoff
 };
 
 export const MAX_HEAL_ATTEMPTS = 3;

@@ -32,7 +32,7 @@ export function createSmartModel() {
   return new ChatGoogleGenerativeAI({
     model: process.env.AI_SMART_MODEL || 'gemini-2.5-pro',
     temperature: 0.2,
-    maxRetries: 3,
+    maxRetries: 6,
   });
 }
 
