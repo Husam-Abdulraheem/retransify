@@ -105,6 +105,50 @@ export async function plannerNode(state) {
   }
   printSubStep(`Path map generated for ${Object.keys(pathMap).length} files`);
 
+  // ── 1.5. Ensure Root Index (app/index.tsx) ─────────────────────────────
+  // 1. Check if there is a target file for app/index.tsx
+  const hasRootIndex = Object.values(pathMap).some(
+    (p) => p === 'app/index.tsx'
+  );
+
+  if (!hasRootIndex) {
+    // 2. Search for the actual App component to use as entry point
+    const appComponentFile = filesQueue.find((f) =>
+      f.relativeToProject.match(/App\.(jsx|tsx|js|ts)$/i)
+    );
+
+    if (appComponentFile) {
+      // Map App component to be the Expo starting screen
+      pathMap[appComponentFile.relativeToProject] = 'app/index.tsx';
+      printSubStep(`Mapped main App component to app/index.tsx`);
+    } else {
+      // 3. Safe Fallback: Inject a virtual index file to prevent app crash
+      const virtualIndexPath = 'app/index.tsx';
+      filesQueue.push({
+        filePath: virtualIndexPath,
+        relativeToProject: virtualIndexPath,
+        absolutePath: `__virtual/${virtualIndexPath}`,
+        isVirtual: true,
+        hasJSX: true,
+        content: [
+          '// [VIRTUAL FILE INJECTED BY RETRANSIFY]',
+          `import { View, Text } from 'react-native';`,
+          `export default function Index() {`,
+          `  return (`,
+          `    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>`,
+          `      <Text>No explicit root route or App component found.</Text>`,
+          `    </View>`,
+          `  );`,
+          `}`,
+        ].join('\n'),
+      });
+      pathMap[virtualIndexPath] = virtualIndexPath;
+      printWarning(
+        `No root index found. Injected virtual fallback: ${virtualIndexPath}`
+      );
+    }
+  }
+
   // ── 2. Build dependency graph from file imports ─────────────
   const dependencyGraph = buildDependencyGraph(filesQueue);
 

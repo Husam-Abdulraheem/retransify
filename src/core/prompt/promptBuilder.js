@@ -26,6 +26,7 @@ export function buildPrompt(fileContext) {
   } = fileContext;
 
   const isRootLayout = fileContext.targetPath === 'app/_layout.tsx';
+  const isIndexFile = fileContext.targetPath === 'app/index.tsx';
 
   const isGroupLayout = fileContext.targetPath?.match(
     /^app\/\((tabs|drawer)\)\/_layout\.tsx$/
@@ -163,6 +164,11 @@ ${
 }
      - [WEB TO MOBILE LAYOUT PATTERN (CRITICAL)]: In React Native, the Navigator MUST be the root visual element. DO NOT wrap the Navigator inside any UI container or ScrollView.`
     : `   - [CRITICAL SCREEN RULE]: This file is a STANDARD UI SCREEN ('${fileContext.targetPath}').
+${
+  isIndexFile
+    ? `     - [INDEX FILE RULE]: If the source file is just a wrapper (e.g., App.tsx) that imports and renders a main component (like <Home />), DO NOT invent UI. Simply import that component and render it.`
+    : ''
+}
      - DO NOT import or use <Header> or <Footer>. The Header is handled centrally by the root _layout.tsx file.
      - The Footer MUST BE COMPLETELY IGNORED and removed from this mobile version.
      - SCROLLING: Wrap the main body of this screen in a <ScrollView className="flex-1"> or <View className="flex-1"> depending on content length to prevent clipping.`
