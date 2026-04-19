@@ -1,4 +1,5 @@
 import path from 'path';
+import { Project } from 'ts-morph';
 
 export class PathMapper {
   /**
@@ -224,5 +225,77 @@ export class PathMapper {
     }
 
     return normalizedPath;
+  }
+
+  /**
+   * Uses ts-morph to deterministically extract all local import paths from a
+   * file's content and resolves them to project-relative paths.
+   *
+   * This is used by ExecutorNode for Deterministic JIT Context retrieval.
+   * Using ts-morph (NOT Regex) ensures correctness with multi-line imports,
+   * comments, and complex syntax.
+   *
+   * @param {string} fileContent - Source code of the file being converted
+   * @param {string} currentFilePath - Project-relative path of the current file
+   * @param {Object} pathAliases - Path aliases from tsconfig/jsconfig (optional)
+   * @returns {string[]} Array of normalized project-relative paths for all local imports
+   */
+  static async resolveLocalImports(
+    fileContent,
+    currentFilePath,
+    pathAliases = {}
+  ) {
+    if (!fileContent || !currentFilePath) return [];
+
+    let sourceFile;
+    try {
+      const tempProject = new Project({
+        useInMemoryFileSystem: true,
+        compilerOptions: { allowJs: true, jsx: 2, noResolve: true },
+      });
+      sourceFile = tempProject.createSourceFile('__temp__.tsx', fileContent);
+    } catch {
+      return [];
+    }
+
+    const currentDir = path.dirname(currentFilePath).replace(/\\/g, '/');
+    const resolved = [];
+
+    for (const imp of sourceFile.getImportDeclarations()) {
+      let spec = imp.getModuleSpecifierValue();
+
+      // Resolve path aliases to relative paths
+      for (const [alias, targets] of Object.entries(pathAliases)) {
+        const aliasPrefix = alias.replace(/\*$/, '');
+        if (spec.startsWith(aliasPrefix)) {
+          const targetPrefix = (targets[0] || '').replace(/\*$/, '');
+          spec = spec.replace(aliasPrefix, targetPrefix);
+          break;
+        }
+      }
+
+      // Only process local/relative imports
+      if (!spec.startsWith('.') && !spec.startsWith('/')) continue;
+
+      // Resolve to project-relative path using posix
+      const joined = path.posix.join(currentDir, spec).replace(/\\/g, '/');
+
+      // Attempt all common extensions (ts-morph won't resolve without file system)
+      const candidates = [
+        joined,
+        `${joined}.js`,
+        `${joined}.jsx`,
+        `${joined}.ts`,
+        `${joined}.tsx`,
+        `${joined}/index.js`,
+        `${joined}/index.jsx`,
+        `${joined}/index.ts`,
+        `${joined}/index.tsx`,
+      ];
+
+      resolved.push(...candidates);
+    }
+
+    return [...new Set(resolved)];
   }
 }

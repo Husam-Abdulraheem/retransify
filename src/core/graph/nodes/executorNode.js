@@ -73,31 +73,34 @@ export async function executorNode(state, models = {}) {
     }
   }
 
-  // ── 1. Retrieve similar context from VectorStore (RAG) ────────
+  // ── 1. Deterministic JIT Context from ContextStore ────────────────
+  // Uses ts-morph to extract local imports from the current file, then fetches
+  // their pre-indexed summaries from ContextStore by exact file path.
+  // No semantic search, no guessing — only what is actually imported.
   let ragContext = '';
   if (vectorStore && currentFile.content) {
     try {
-      // Remove imports to ensure the vector search focuses on component logic
-      const logicOnlyContent = currentFile.content
-        .replace(/^import\s+.*?;?\s*$/gm, '')
-        .trim();
-      const searchQuery =
-        logicOnlyContent.slice(0, 800) || currentFile.content.slice(0, 500);
+      const localPaths = await PathMapper.resolveLocalImports(
+        currentFile.content,
+        filePath,
+        facts.pathAliases || {}
+      );
 
-      const similarDocs = await vectorStore.similaritySearch(searchQuery, 3);
+      if (localPaths.length > 0) {
+        const contextDocs = vectorStore.getDocumentsByPaths(localPaths);
 
-      if (similarDocs.length > 0) {
-        ragContext = similarDocs
-          .filter((doc) => doc.metadata.filePath !== filePath)
+        ragContext = contextDocs
           .map((doc) => `--- ${doc.metadata.filePath} ---\n${doc.pageContent}`)
           .join('\n\n');
 
         if (ragContext) {
-          printSubStep(`RAG: ${similarDocs.length} context files retrieved`);
+          printSubStep(
+            `RAG: ${contextDocs.length} imported files retrieved (deterministic)`
+          );
         }
       }
     } catch (err) {
-      printWarning(`RAG failed: ${err.message}`);
+      printWarning(`Context retrieval failed: ${err.message}`);
     }
   }
 
