@@ -3,9 +3,7 @@ import fs from 'fs-extra';
 import { Project, SyntaxKind } from 'ts-morph';
 import { FrameworkDetector } from '../../detectors/FrameworkDetector.js';
 import { setupNativeWind } from '../../services/StyleConfigurator.js';
-import { MemoryVectorStore } from '../helpers/memoryVectorStoreStub.js';
-import { createEmbeddings } from '../../ai/aiFactory.js';
-import { Document } from '@langchain/core/documents';
+import { ContextStore } from '../helpers/ContextStore.js';
 import { PROJECT_PROFILES } from '../../config/profiles.js';
 import {
   printStep,
@@ -15,8 +13,6 @@ import {
   stopSpinner,
 } from '../../utils/ui.js';
 
-// ── Embeddings Model Setup ────────────────────────────────────────────────────
-// Used to convert file summaries to vectors for later search in ExecutorNode
 // ── Main Node Function ────────────────────────────────────────────────────────
 
 /**
@@ -107,20 +103,17 @@ export async function analyzerNode(state) {
   }
 
   // ── 4. Scan files with ts-morph and extract summaries ─────────
-  const { vectorStore, vectorIdMap, enrichedFiles } = await buildVectorStore(
+  const { contextStore, enrichedFiles } = await buildContextStore(
     filesQueue,
     projectPath,
     tsProject
   );
 
-  printSubStep(
-    `Indexed ${Object.keys(vectorIdMap).length} files in VectorStore`
-  );
+  printSubStep(`Indexed ${contextStore.size} files in ContextStore`);
 
   return {
     facts,
-    vectorStore,
-    vectorIdMap,
+    vectorStore: contextStore,
     filesQueue: enrichedFiles,
   };
 }
@@ -302,23 +295,27 @@ function getWritePhaseIgnores(tech) {
   return profile?.writePhaseIgnores || [];
 }
 
-// ── Build VectorStore with ts-morph ───────────────────────────────────────────
+// ── Build ContextStore with ts-morph ─────────────────────────────────────────
 
 /**
- * Scans files with ts-morph, extracts summaries, and stores them in MemoryVectorStore
+ * Scans files with ts-morph, extracts AST summaries, and stores them in ContextStore.
+ * No embeddings, no vectors — pure deterministic Key-Value storage.
+ *
  * @param {Array} filesQueue - Array of file objects
  * @param {string} projectPath
- * @returns {{ vectorStore: MemoryVectorStore, vectorIdMap: Object, enrichedFiles: Array }}
+ * @param {import('ts-morph').Project} tsProject
+ * @returns {{ contextStore: ContextStore, enrichedFiles: Array }}
  */
-async function buildVectorStore(filesQueue, projectPath, tsProject) {
+async function buildContextStore(filesQueue, projectPath, tsProject) {
   startSubSpinner(`Indexing ${filesQueue.length} files...`);
-  const embeddings = createEmbeddings();
-  const documents = [];
-  const vectorIdMap = {};
+  const contextStore = new ContextStore();
   const enrichedFiles = [];
 
   for (const fileObj of filesQueue) {
-    const filePath = fileObj.filePath || fileObj.relativeToProject;
+    const filePath = (fileObj.filePath || fileObj.relativeToProject).replace(
+      /\\/g,
+      '/'
+    );
     const absolutePath = path.isAbsolute(filePath)
       ? filePath
       : path.join(projectPath, filePath);
@@ -330,49 +327,29 @@ async function buildVectorStore(filesQueue, projectPath, tsProject) {
         filePath
       );
 
-      // Create enriched file object
-      enrichedFiles.push({
-        ...fileObj,
-        hasJSX,
-      });
+      enrichedFiles.push({ ...fileObj, hasJSX });
 
       if (!summary) continue;
 
-      // Create LangChain Document
-      const doc = new Document({
-        pageContent: summary,
-        metadata: {
-          filePath: filePath,
-          absolutePath: absolutePath,
-          type: 'source_file',
-          hasJSX,
+      contextStore.addDocuments([
+        {
+          pageContent: summary,
+          metadata: {
+            filePath,
+            absolutePath,
+            type: 'source_file',
+            hasJSX,
+          },
         },
-      });
-
-      documents.push({ doc, filePath });
+      ]);
     } catch (err) {
       printWarning(`Analyzer skipped ${filePath}: ${err.message}`);
       enrichedFiles.push({ ...fileObj, hasJSX: false });
     }
   }
 
-  if (documents.length === 0) {
-    // Create empty VectorStore to avoid errors
-    const emptyStore = new MemoryVectorStore(embeddings);
-    return { vectorStore: emptyStore, vectorIdMap: {}, enrichedFiles };
-  }
-
-  // Create VectorStore from Documents
-  const docs = documents.map((d) => d.doc);
-  const vectorStore = await MemoryVectorStore.fromDocuments(docs, embeddings);
-
-  // Build vectorIdMap: filePath -> index (MemoryVectorStore uses index as ID)
-  documents.forEach(({ filePath }, index) => {
-    vectorIdMap[filePath] = index;
-  });
-
   stopSpinner();
-  return { vectorStore, vectorIdMap, enrichedFiles };
+  return { contextStore, enrichedFiles };
 }
 
 /**
@@ -462,20 +439,31 @@ async function extractFileSummary(tsProject, absolutePath, relativePath) {
       });
     }
 
-    // 4. Hooks (functions starting with "use")
+    // 4. Hooks — full signatures (name, params, return type)
     const hooks = sourceFile
       .getFunctions()
       .filter((f) => f.getName()?.startsWith('use'));
     if (hooks.length > 0) {
       summaryParts.push('HOOKS:');
-      hooks.forEach((h) => summaryParts.push(`  ${h.getName()}`));
+      hooks.forEach((h) => {
+        const params = h
+          .getParameters()
+          .map((p) => `${p.getName()}: ${p.getType().getText()}`)
+          .join(', ');
+        const returnType = h.getReturnType().getText().slice(0, 120);
+        summaryParts.push(`  ${h.getName()}(${params}): ${returnType}`);
+      });
     }
 
-    // 5. Imports (to understand dependencies)
-    const imports = sourceFile.getImportDeclarations().slice(0, 5); // Only first 5
-    if (imports.length > 0) {
-      summaryParts.push('IMPORTS:');
-      imports.forEach((imp) => {
+    // 5. Local imports only (no external packages — they are irrelevant for RAG context).
+    // All imports are included — no arbitrary limit.
+    const localImports = sourceFile.getImportDeclarations().filter((imp) => {
+      const spec = imp.getModuleSpecifierValue();
+      return spec.startsWith('.') || spec.startsWith('/');
+    });
+    if (localImports.length > 0) {
+      summaryParts.push('LOCAL_IMPORTS:');
+      localImports.forEach((imp) => {
         summaryParts.push(`  from '${imp.getModuleSpecifierValue()}'`);
       });
     }
