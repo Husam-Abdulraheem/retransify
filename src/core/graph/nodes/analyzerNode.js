@@ -52,10 +52,15 @@ export async function analyzerNode(state) {
 
   // Setup ts-morph Project early for analysis
   const tsConfigPath = path.join(projectPath, 'tsconfig.json');
+  const jsConfigPath = path.join(projectPath, 'jsconfig.json');
+  const configPath = (await fs.pathExists(tsConfigPath))
+    ? tsConfigPath
+    : (await fs.pathExists(jsConfigPath))
+      ? jsConfigPath
+      : undefined;
+
   const tsProject = new Project({
-    tsConfigFilePath: (await fs.pathExists(tsConfigPath))
-      ? tsConfigPath
-      : undefined,
+    tsConfigFilePath: configPath,
     skipAddingFilesFromTsConfig: true,
     skipFileDependencyResolution: true,
     compilerOptions: {
@@ -67,6 +72,14 @@ export async function analyzerNode(state) {
     },
   });
 
+  // Extract Path Aliases for dynamic mapping
+  const pathAliases = tsProject.getCompilerOptions().paths || {};
+  if (Object.keys(pathAliases).length > 0) {
+    printSubStep(
+      `Detected ${Object.keys(pathAliases).length} path aliases in config`
+    );
+  }
+
   // ── 3. Analyze Tech Stack ─────────────────────────────────────
   const facts = await analyzeTechStack(
     projectPath,
@@ -75,6 +88,7 @@ export async function analyzerNode(state) {
     buildToolFramework,
     filesQueue
   );
+  facts.pathAliases = pathAliases;
   printSubStep(`Tech Stack: ${JSON.stringify(facts.tech)}`);
 
   if (
@@ -93,7 +107,7 @@ export async function analyzerNode(state) {
   }
 
   // ── 4. Scan files with ts-morph and extract summaries ─────────
-  const { vectorStore, vectorIdMap } = await buildVectorStore(
+  const { vectorStore, vectorIdMap, enrichedFiles } = await buildVectorStore(
     filesQueue,
     projectPath,
     tsProject
@@ -107,6 +121,7 @@ export async function analyzerNode(state) {
     facts,
     vectorStore,
     vectorIdMap,
+    filesQueue: enrichedFiles,
   };
 }
 
@@ -159,7 +174,7 @@ async function analyzeTechStack(
   };
 }
 
-async function getRealEntryPoint(projectPath, buildTool) {
+export async function getRealEntryPoint(projectPath, buildTool) {
   if (buildTool === 'vite' || buildTool === 'Vite') {
     const htmlPath = path.join(projectPath, 'index.html');
     if (await fs.pathExists(htmlPath)) {
@@ -254,7 +269,7 @@ async function analyzeTechStackAST(entryFilePath, tsProject, deps, filesQueue) {
   return tech;
 }
 
-function inferSourceRoot(projectPath, entryFilePath) {
+export function inferSourceRoot(projectPath, entryFilePath) {
   if (!entryFilePath) return '.';
   const relativeEntry = path.relative(projectPath, entryFilePath);
   const dir = path.dirname(relativeEntry);
@@ -293,13 +308,14 @@ function getWritePhaseIgnores(tech) {
  * Scans files with ts-morph, extracts summaries, and stores them in MemoryVectorStore
  * @param {Array} filesQueue - Array of file objects
  * @param {string} projectPath
- * @returns {{ vectorStore: MemoryVectorStore, vectorIdMap: Object }}
+ * @returns {{ vectorStore: MemoryVectorStore, vectorIdMap: Object, enrichedFiles: Array }}
  */
 async function buildVectorStore(filesQueue, projectPath, tsProject) {
   startSubSpinner(`Indexing ${filesQueue.length} files...`);
   const embeddings = createEmbeddings();
   const documents = [];
   const vectorIdMap = {};
+  const enrichedFiles = [];
 
   for (const fileObj of filesQueue) {
     const filePath = fileObj.filePath || fileObj.relativeToProject;
@@ -308,11 +324,18 @@ async function buildVectorStore(filesQueue, projectPath, tsProject) {
       : path.join(projectPath, filePath);
 
     try {
-      const summary = await extractFileSummary(
+      const { summary, hasJSX } = await extractFileSummary(
         tsProject,
         absolutePath,
         filePath
       );
+
+      // Create enriched file object
+      enrichedFiles.push({
+        ...fileObj,
+        hasJSX,
+      });
+
       if (!summary) continue;
 
       // Create LangChain Document
@@ -322,19 +345,21 @@ async function buildVectorStore(filesQueue, projectPath, tsProject) {
           filePath: filePath,
           absolutePath: absolutePath,
           type: 'source_file',
+          hasJSX,
         },
       });
 
       documents.push({ doc, filePath });
     } catch (err) {
       printWarning(`Analyzer skipped ${filePath}: ${err.message}`);
+      enrichedFiles.push({ ...fileObj, hasJSX: false });
     }
   }
 
   if (documents.length === 0) {
     // Create empty VectorStore to avoid errors
     const emptyStore = new MemoryVectorStore(embeddings);
-    return { vectorStore: emptyStore, vectorIdMap: {} };
+    return { vectorStore: emptyStore, vectorIdMap: {}, enrichedFiles };
   }
 
   // Create VectorStore from Documents
@@ -347,7 +372,7 @@ async function buildVectorStore(filesQueue, projectPath, tsProject) {
   });
 
   stopSpinner();
-  return { vectorStore, vectorIdMap };
+  return { vectorStore, vectorIdMap, enrichedFiles };
 }
 
 /**
@@ -357,18 +382,18 @@ async function buildVectorStore(filesQueue, projectPath, tsProject) {
  * @param {Project} tsProject - ts-morph Project instance
  * @param {string} absolutePath
  * @param {string} relativePath
- * @returns {string|null} Summary text
+ * @returns {Promise<{ summary: string|null, hasJSX: boolean }>} Summary text
  */
 async function extractFileSummary(tsProject, absolutePath, relativePath) {
   const ext = path.extname(absolutePath);
   const validExts = ['.js', '.jsx', '.ts', '.tsx', '.mjs'];
-  if (!validExts.includes(ext)) return null;
+  if (!validExts.includes(ext)) return { summary: null, hasJSX: false };
 
   let content;
   try {
     content = await fs.readFile(absolutePath, 'utf-8');
   } catch {
-    return null;
+    return { summary: null, hasJSX: false };
   }
 
   // Add file to ts-morph (or update if exists)
@@ -378,8 +403,14 @@ async function extractFileSummary(tsProject, absolutePath, relativePath) {
       tsProject.getSourceFile(absolutePath) ||
       tsProject.createSourceFile(absolutePath, content, { overwrite: true });
   } catch {
-    return null;
+    return { summary: null, hasJSX: false };
   }
+
+  // Detect JSX
+  const hasJSX =
+    sourceFile.getDescendantsOfKind(SyntaxKind.JsxOpeningElement).length > 0 ||
+    sourceFile.getDescendantsOfKind(SyntaxKind.JsxSelfClosingElement).length >
+      0;
 
   const summaryParts = [`FILE: ${relativePath}`];
 
@@ -453,5 +484,5 @@ async function extractFileSummary(tsProject, absolutePath, relativePath) {
     summaryParts.push(`CONTENT_PREVIEW: ${content.slice(0, 200)}`);
   }
 
-  return summaryParts.join('\n');
+  return { summary: summaryParts.join('\n'), hasJSX };
 }

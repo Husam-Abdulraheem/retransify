@@ -43,7 +43,10 @@ describe('RouteAnalyzer', () => {
     vi.spyOn(fs, 'readFile').mockResolvedValue('mock content');
     vi.spyOn(fs, 'existsSync').mockImplementation(() => true);
 
-    const routeMap = await RouteAnalyzer.analyze(projectRoot, mockFilesQueue);
+    const { routeMap } = await RouteAnalyzer.analyze(
+      projectRoot,
+      mockFilesQueue
+    );
 
     console.log('DEBUG RouteMap (JSX):', JSON.stringify(routeMap, null, 2));
 
@@ -81,7 +84,10 @@ describe('RouteAnalyzer', () => {
 
     vi.spyOn(fs, 'existsSync').mockImplementation(() => true);
 
-    const routeMap = await RouteAnalyzer.analyze(projectRoot, mockFilesQueue);
+    const { routeMap } = await RouteAnalyzer.analyze(
+      projectRoot,
+      mockFilesQueue
+    );
     console.log('DEBUG RouteMap (Nested):', JSON.stringify(routeMap, null, 2));
 
     const keys = Object.keys(routeMap);
@@ -114,7 +120,10 @@ describe('RouteAnalyzer', () => {
 
     vi.spyOn(fs, 'existsSync').mockImplementation(() => true);
 
-    const routeMap = await RouteAnalyzer.analyze(projectRoot, mockFilesQueue);
+    const { routeMap } = await RouteAnalyzer.analyze(
+      projectRoot,
+      mockFilesQueue
+    );
     console.log('DEBUG RouteMap (Dynamic):', JSON.stringify(routeMap, null, 2));
 
     const keys = Object.keys(routeMap);

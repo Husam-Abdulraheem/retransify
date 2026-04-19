@@ -10,14 +10,16 @@ export class RouteAnalyzer {
    *
    * @param {string} projectRoot - The absolute path of the Web project
    * @param {Array<Object>} filesQueue - Queue of files to be scanned
+   * @param {string} sourceRoot - The source folder (e.g. 'src' or '.')
    * @returns {Object} routeMap - { "originalFilePath": "expo/path/file.tsx" }
    */
-  static async analyze(projectRoot, filesQueue) {
+  static async analyze(projectRoot, filesQueue, _sourceRoot = '.') {
     ui.step('RouteAnalyzer', 'Extracting AST routing tree...');
     const routeMap = {};
     const routeMetadata = {};
     const routingSourceFiles = [];
     const allProvidersMap = new Map();
+    let globalHeader = null;
 
     // 1. Safe Isolated ts-morph Project Setup
     const project = new Project({
@@ -47,6 +49,22 @@ export class RouteAnalyzer {
           overwrite: true,
         });
 
+        // Providers/Header extraction should NOT depend on react-router presence.
+        const extractedProviders = this._extractProviders(
+          sourceFile,
+          projectRoot
+        );
+        extractedProviders.forEach((p) => {
+          if (!allProvidersMap.has(p.name)) {
+            allProvidersMap.set(p.name, p);
+          }
+        });
+
+        const extractedHeader = this._extractHeader(sourceFile, projectRoot);
+        if (extractedHeader && !globalHeader) {
+          globalHeader = extractedHeader;
+        }
+
         // Fast check for routing imports before heavy AST traversal
         const hasRouting = sourceFile
           .getImportDeclarations()
@@ -64,7 +82,12 @@ export class RouteAnalyzer {
 
     if (routingSourceFiles.length === 0) {
       ui.printSubStep('No react-router usage detected.', 1, true);
-      return routeMap;
+      return {
+        routeMap: {},
+        routeMetadata: {},
+        providers: [],
+        globalHeader: null,
+      };
     }
 
     ui.printSubStep(
@@ -72,16 +95,9 @@ export class RouteAnalyzer {
       1
     );
 
-    // 3. Process Routing Trees
+    // 3. Process Routing Trees (only for files that actually use react-router)
     for (const sf of routingSourceFiles) {
       const processedNodes = new Set();
-
-      const extractedProviders = this._extractProviders(sf, projectRoot);
-      extractedProviders.forEach((p) => {
-        if (!allProvidersMap.has(p.name)) {
-          allProvidersMap.set(p.name, p);
-        }
-      });
 
       // Process JSX <Route> Definitions
       const jsxElements = [
@@ -114,7 +130,8 @@ export class RouteAnalyzer {
             processedNodes,
             projectRoot,
             routeMetadata,
-            project
+            project,
+            _sourceRoot
           );
         }
       }
@@ -153,7 +170,8 @@ export class RouteAnalyzer {
               processedNodes,
               projectRoot,
               routeMetadata,
-              project
+              project,
+              _sourceRoot
             );
           }
         }
@@ -161,13 +179,68 @@ export class RouteAnalyzer {
     }
 
     console.log(
-      `   ✅ Extracted ${Object.keys(routeMap).length} mapped routes and ${allProvidersMap.values().length} providers.`
+      `   ✅ Extracted ${Object.keys(routeMap).length} mapped routes and ${allProvidersMap.size} providers.`
     );
     return {
       routeMap,
       routeMetadata,
       providers: Array.from(allProvidersMap.values()),
+      globalHeader,
     };
+  }
+
+  /**
+   * Scans the AST for global UI components like <Header> or <Navbar>
+   */
+  static _extractHeader(sourceFile, projectRoot) {
+    const jsxElements = [
+      ...sourceFile.getDescendantsOfKind(SyntaxKind.JsxElement),
+      ...sourceFile.getDescendantsOfKind(SyntaxKind.JsxSelfClosingElement),
+    ];
+
+    for (const el of jsxElements) {
+      const tagName =
+        el.getKind() === SyntaxKind.JsxElement
+          ? el.getOpeningElement().getTagNameNode().getText()
+          : el.getTagNameNode().getText();
+
+      if (['Header', 'Navbar', 'TopBar', 'NavigationBar'].includes(tagName)) {
+        const resolved = this._resolveImportWithType(
+          sourceFile,
+          tagName,
+          projectRoot
+        );
+        if (resolved) {
+          return {
+            name: tagName,
+            source: resolved.path,
+            isDefault: resolved.isDefault,
+          };
+        }
+
+        // Fallback: header component declared locally in the same file (common in CRA layouts)
+        // In this case, we can still reference the containing file and instruct the converter
+        // to export the component so `app/_layout.tsx` can import it.
+        const hasLocalHeaderDeclaration =
+          sourceFile.getFunctions().some((fn) => fn.getName() === tagName) ||
+          sourceFile
+            .getVariableDeclarations()
+            .some((v) => v.getName() === tagName);
+
+        if (hasLocalHeaderDeclaration) {
+          const selfPath = path
+            .relative(projectRoot, sourceFile.getFilePath())
+            .replace(/\\/g, '/');
+          return {
+            name: tagName,
+            source: selfPath,
+            isDefault: false,
+            isLocal: true,
+          };
+        }
+      }
+    }
+    return null;
   }
 
   // ─── INTERNAL AST PROCESSING METHODS ─────────────────────────────────────────
@@ -180,7 +253,8 @@ export class RouteAnalyzer {
     processedElements,
     projectRoot,
     routeMetadata,
-    project
+    project,
+    _sourceRoot = '.'
   ) {
     processedElements.add(routeNode);
 
@@ -231,7 +305,24 @@ export class RouteAnalyzer {
           hasChildren,
           isIndexRoute
         );
-        routeMap[resolvedFilePath] = expoPath;
+
+        // --- 1-to-Many Collision Resolution ---
+        // If a component maps to multiple routes (e.g., /shoes and /shirts -> Category.js),
+        // we MUST merge them into a dynamic route (/[id].tsx) for Expo Router.
+        if (
+          routeMap[resolvedFilePath] &&
+          routeMap[resolvedFilePath] !== expoPath
+        ) {
+          routeMap[resolvedFilePath] = this._mergeIntoDynamicRoute(
+            routeMap[resolvedFilePath],
+            expoPath
+          );
+          ui.warn(
+            `Merged multiple static routes targeting ${resolvedFilePath} into dynamic route: ${routeMap[resolvedFilePath]}`
+          );
+        } else {
+          routeMap[resolvedFilePath] = expoPath;
+        }
 
         // 🔍 Trace Prop Dependencies (e.g. <Home data={data} />)
         const requiredData = this._tracePropDependencies(
@@ -264,7 +355,8 @@ export class RouteAnalyzer {
         processedElements,
         projectRoot,
         routeMetadata,
-        project
+        project,
+        _sourceRoot
       );
     }
   }
@@ -277,7 +369,8 @@ export class RouteAnalyzer {
     processedObjects,
     projectRoot,
     routeMetadata,
-    project
+    project,
+    _sourceRoot = '.'
   ) {
     processedObjects.add(objNode);
 
@@ -340,7 +433,21 @@ export class RouteAnalyzer {
           hasChildren,
           isIndexRoute
         );
-        routeMap[resolvedFilePath] = expoPath;
+
+        if (
+          routeMap[resolvedFilePath] &&
+          routeMap[resolvedFilePath] !== expoPath
+        ) {
+          routeMap[resolvedFilePath] = this._mergeIntoDynamicRoute(
+            routeMap[resolvedFilePath],
+            expoPath
+          );
+          ui.warn(
+            `Merged multiple static object routes targeting ${resolvedFilePath} into dynamic route: ${routeMap[resolvedFilePath]}`
+          );
+        } else {
+          routeMap[resolvedFilePath] = expoPath;
+        }
 
         // 🔍 Trace Prop Dependencies from Object-style route
         const requiredData = this._tracePropDependenciesFromObject(
@@ -375,7 +482,8 @@ export class RouteAnalyzer {
             processedObjects,
             projectRoot,
             routeMetadata,
-            project
+            project,
+            _sourceRoot
           );
         }
       }
@@ -383,6 +491,29 @@ export class RouteAnalyzer {
   }
 
   // ─── HELPERS ─────────────────────────────────────────────────────────────────
+
+  static _mergeIntoDynamicRoute(oldPath, newPath) {
+    const oldParts = oldPath.split('/');
+    const newParts = newPath.split('/');
+
+    // If they have different nested lengths, fallback to generic [id]
+    if (oldParts.length !== newParts.length) {
+      const dir = oldParts.slice(0, -1).join('/');
+      return `${dir}/[id].tsx`;
+    }
+
+    // Compare segments and replace varying parts with [id]
+    const merged = oldParts.map((oldPart, i) => {
+      if (oldPart === newParts[i]) return oldPart;
+
+      if (oldPart.endsWith('.tsx') && newParts[i].endsWith('.tsx')) {
+        return '[id].tsx';
+      }
+      return '[id]';
+    });
+
+    return merged.join('/');
+  }
 
   static _extractComponentMetadata(project, resolvedFilePath, projectRoot) {
     if (!resolvedFilePath) return null;
@@ -455,6 +586,19 @@ export class RouteAnalyzer {
   }
 
   static _resolveImport(sourceFile, componentName, projectRoot) {
+    const result = this._resolveImportWithType(
+      sourceFile,
+      componentName,
+      projectRoot
+    );
+    return result ? result.path : null;
+  }
+
+  /**
+   * Resolves import path AND detects whether the component was imported as default or named.
+   * Returns { path: string, isDefault: boolean } or null.
+   */
+  static _resolveImportWithType(sourceFile, componentName, projectRoot) {
     // 1. Check static imports
     const imports = sourceFile.getImportDeclarations();
     for (const imp of imports) {
@@ -463,19 +607,27 @@ export class RouteAnalyzer {
         .getNamedImports()
         .map((n) => n.getAliasNode()?.getText() || n.getName());
 
-      if (
-        defaultImport === componentName ||
-        namedImports.includes(componentName)
-      ) {
-        return this._verifyAndReturnPath(
+      if (defaultImport === componentName) {
+        const resolvedPath = this._verifyAndReturnPath(
           sourceFile,
           imp.getModuleSpecifierValue(),
           projectRoot
         );
+        return resolvedPath ? { path: resolvedPath, isDefault: true } : null;
+      }
+
+      if (namedImports.includes(componentName)) {
+        const resolvedPath = this._verifyAndReturnPath(
+          sourceFile,
+          imp.getModuleSpecifierValue(),
+          projectRoot
+        );
+        return resolvedPath ? { path: resolvedPath, isDefault: false } : null;
       }
     }
 
     // 2. Check dynamic imports (e.g., lazy(() => import('./pages/Dashboard')))
+    // Dynamic imports always resolve the module's default export
     const callExpressions = sourceFile.getDescendantsOfKind(
       SyntaxKind.CallExpression
     );
@@ -485,16 +637,18 @@ export class RouteAnalyzer {
         if (args.length > 0 && args[0].getKind() === SyntaxKind.StringLiteral) {
           const importPath = args[0].getLiteralText();
 
-          // Match dynamic import path with component name
           const parentVar = callExpr.getFirstAncestorByKind(
             SyntaxKind.VariableDeclaration
           );
           if (parentVar && parentVar.getName() === componentName) {
-            return this._verifyAndReturnPath(
+            const resolvedPath = this._verifyAndReturnPath(
               sourceFile,
               importPath,
               projectRoot
             );
+            return resolvedPath
+              ? { path: resolvedPath, isDefault: true }
+              : null;
           }
         }
       }
@@ -528,15 +682,17 @@ export class RouteAnalyzer {
   }
 
   static _calculateExpoPath(routePath, isLayout, isIndex = false) {
+    // Deterministic Expo Router root (chosen by user): always `app/`
+    const basePath = 'app';
     let cleanPath = (routePath || '').replace(/^\/+/, '').replace(/\/+$/, '');
 
-    // Handle pure 404/wildcard root routes
-    if (cleanPath === '*') return 'app/[...missing].tsx';
+    // Support for top-level catch-all
+    if (cleanPath === '*') return `${basePath}/[...missing].tsx`;
 
     // Handle root path
     if (!cleanPath) {
-      if (isIndex) return 'app/index.tsx';
-      return isLayout ? 'app/_layout.tsx' : 'app/index.tsx';
+      if (isIndex) return `${basePath}/index.tsx`;
+      return isLayout ? `${basePath}/_layout.tsx` : `${basePath}/index.tsx`;
     }
 
     // Handle dynamic route parameters and nested wildcards
@@ -548,10 +704,10 @@ export class RouteAnalyzer {
       })
       .join('/');
 
-    if (isIndex) return `app/${modifiedPath}/index.tsx`;
+    if (isIndex) return `${basePath}/${modifiedPath}/index.tsx`;
     return isLayout
-      ? `app/${modifiedPath}/_layout.tsx`
-      : `app/${modifiedPath}.tsx`;
+      ? `${basePath}/${modifiedPath}/_layout.tsx`
+      : `${basePath}/${modifiedPath}.tsx`;
   }
 
   static async projectRoutes(rnProjectPath, routeMap) {
@@ -649,7 +805,9 @@ export class RouteAnalyzer {
     return requiredData;
   }
   /**
-   * Scans the AST for any components acting as Providers (e.g., <CartProvider>).
+   * Scans the AST for any components acting as Providers (e.g., <CartProvider>)
+   * and dynamically detects global Layout wrappers around <Routes> or <Switch>.
+   * Uses two strategies: deep container detection + sibling scanning.
    */
   static _extractProviders(sourceFile, projectRoot) {
     const providers = [];
@@ -664,16 +822,21 @@ export class RouteAnalyzer {
           ? el.getOpeningElement().getTagNameNode().getText()
           : el.getTagNameNode().getText();
 
-      if (tagName.includes('Provider')) {
-        const importPath = this._resolveImport(
+      // 🚨 نلتقط مزودات السياق فقط (مثل CartProvider).
+      // يُمنع التقاط مكونات الواجهة (مثل Layout) لتجنب انهيار الـ Stack
+      if (tagName.endsWith('Provider')) {
+        const resolved = this._resolveImportWithType(
           sourceFile,
           tagName,
           projectRoot
         );
-        providers.push({
-          name: tagName,
-          source: importPath,
-        });
+        if (resolved && !providers.some((p) => p.name === tagName)) {
+          providers.push({
+            name: tagName,
+            source: resolved.path,
+            isDefault: resolved.isDefault,
+          });
+        }
       }
     }
     return providers;
