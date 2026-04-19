@@ -1,5 +1,5 @@
 // src/core/graph/nodes/retryNode.js
-import { printWarning, printError } from '../../utils/ui.js';
+import { printWarning } from '../../utils/ui.js';
 
 /**
  * RetryNode - Handles transient API errors (503/429) by waiting before retrying the same file.

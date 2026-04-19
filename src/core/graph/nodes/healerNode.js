@@ -58,7 +58,8 @@ export async function healerNode(state, models = {}) {
     generatedCode,
     displayedErrors,
     installedPackages,
-    state
+    state,
+    state.exactImportsMap
   );
 
   try {

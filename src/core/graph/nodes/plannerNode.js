@@ -22,10 +22,32 @@ export async function plannerNode(state) {
 
   const { filesQueue, routeMap = {}, navigationSchema = {} } = state;
 
-  // ── 0. Inject Virtual Files for Route Groups ────────────
+  // Deterministic Expo Router root (chosen by user): always `app/`
+  const appRoot = 'app';
+
+  // ── 0.1. ALWAYS Inject Root Layout (The Host for Providers & Layouts) ────────────
+  const rootLayoutPath = `${appRoot}/_layout.tsx`;
+  if (!filesQueue.some((f) => f.relativeToProject === rootLayoutPath)) {
+    filesQueue.push({
+      filePath: rootLayoutPath,
+      relativeToProject: rootLayoutPath,
+      absolutePath: `__virtual/${rootLayoutPath}`,
+      isVirtual: true,
+      hasJSX: true,
+      content: [
+        '// [VIRTUAL FILE INJECTED BY RETRANSIFY]',
+        `import { Stack } from 'expo-router';`,
+        `export default function RootLayout() {`,
+        `  // AI will dynamically inject Providers and Custom Headers here based on AST Context.`,
+        `  return <Stack screenOptions={{ headerShown: true }} />;\n}`,
+      ].join('\n'),
+    });
+  }
+
+  // ── 0.2. Inject Virtual Files for Route Groups ────────────
   if (navigationSchema.type === 'tabs' || navigationSchema.type === 'drawer') {
     const groupName = navigationSchema.type === 'tabs' ? 'tabs' : 'drawer';
-    const groupLayoutPath = `app/(${groupName})/_layout.tsx`;
+    const groupLayoutPath = `${appRoot}/(${groupName})/_layout.tsx`;
 
     // 1. Inject group layout
     if (!filesQueue.some((f) => f.relativeToProject === groupLayoutPath)) {
@@ -42,17 +64,17 @@ export async function plannerNode(state) {
         hasJSX: true,
         content: [
           '// [VIRTUAL FILE INJECTED BY RETRANSIFY]',
-          `// TARGET: This file MUST export the ${navComponent} navigator for the (${groupName}) route group.`,
-          `// INSTRUCTION: Import ${navComponent} from '${importPath}' and render it as the default export.`,
-          `// REQUIRED SCREENS: ${(navigationSchema.tabs || navigationSchema.drawerScreens || []).join(', ')}`,
           `import { ${navComponent} } from '${importPath}';`,
-          `export default function GroupLayout() { return null; }`,
+          `export default function GroupLayout() {`,
+          `  // CRITICAL: Prevent double-headers in Tabs/Drawer`,
+          `  return <${navComponent} screenOptions={{ headerShown: false }} />;`,
+          `}`,
         ].join('\n'),
       });
     }
 
     // 2. Inject redirect index
-    const rootIndexPath = `app/index.tsx`;
+    const rootIndexPath = `${appRoot}/index.tsx`;
     if (!filesQueue.some((f) => f.relativeToProject === rootIndexPath)) {
       filesQueue.push({
         filePath: rootIndexPath,
@@ -78,6 +100,9 @@ export async function plannerNode(state) {
     routeMap,
     navigationSchema
   );
+  if (state.assetMap) {
+    Object.assign(pathMap, state.assetMap);
+  }
   printSubStep(`Path map generated for ${Object.keys(pathMap).length} files`);
 
   // ── 2. Build dependency graph from file imports ─────────────

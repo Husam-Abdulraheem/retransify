@@ -46,6 +46,40 @@ export async function verifierNode(state) {
     errors.push(`Critical Syntax Error: Could not parse file.`);
   }
 
+  // TypeScript diagnostics for catching parameter mismatches and type errors
+  // that the AI hallucinated (e.g., calling renderItem(cart[0]) without the 2nd arg)
+  try {
+    const diagnostics = sourceFile.getPreEmitDiagnostics();
+    for (const diag of diagnostics) {
+      const rawMessage = diag.getMessageText();
+      const message =
+        typeof rawMessage === 'string'
+          ? rawMessage
+          : rawMessage.getMessageText?.() || String(rawMessage);
+
+      // Only capture diagnostics about parameters, arguments, types, and assignments.
+      // Skip module resolution errors (TS2307) — those are false positives since we
+      // don't have real node_modules in the in-memory project.
+      const code = diag.getCode?.();
+      if (code === 2307) continue; // Cannot find module — handled by detectMissingDependencies
+
+      const isRelevant =
+        message.includes('Expected') ||
+        message.includes('argument') ||
+        message.includes('not assignable') ||
+        message.includes('does not exist on type') ||
+        message.includes('Property') ||
+        message.includes('parameter');
+
+      if (isRelevant) {
+        const line = diag.getLineNumber?.() || '?';
+        errors.push(`[TS${code || ''} L${line}]: ${message}`);
+      }
+    }
+  } catch {
+    // Diagnostics engine failure is non-fatal — structural checks above still apply
+  }
+
   if (missingDeps.length > 0) {
     printSubStep(`📦 Missing dependencies detected: ${missingDeps.join(', ')}`);
   }
@@ -157,6 +191,24 @@ function analyzeASTForErrors(sourceFile, filePath, pathMap = {}) {
     /\.(tsx|jsx)$/i.test(filePath) || sourceFile.getText().includes('react');
 
   if (isComponent) {
+    // 🚨 Metro static require rule: require() must be called with a string literal only.
+    // Dynamic require breaks bundling and usually fails silently at runtime.
+    const callExpressions = sourceFile.getDescendantsOfKind(
+      SyntaxKind.CallExpression
+    );
+    for (const callExpr of callExpressions) {
+      const callee = callExpr.getExpression()?.getText?.();
+      if (callee !== 'require') continue;
+      const args = callExpr.getArguments();
+      const firstArg = args?.[0];
+      if (!firstArg) continue;
+      if (firstArg.getKind() !== SyntaxKind.StringLiteral) {
+        errors.push(
+          `Line ${callExpr.getStartLineNumber()}: CRITICAL ASSET ERROR. Dynamic require() detected. Metro Bundler requires a static string literal, e.g. require("@/assets/logo.png"). Use a static lookup map instead.`
+        );
+      }
+    }
+
     const jsxElements = sourceFile.getDescendantsOfKind(SyntaxKind.JsxElement);
     const jsxSelfClosing = sourceFile.getDescendantsOfKind(
       SyntaxKind.JsxSelfClosingElement
@@ -173,14 +225,17 @@ function analyzeASTForErrors(sourceFile, filePath, pathMap = {}) {
 
     // 2. Building a list of valid routes
     const validRoutes = new Set(
-      Object.values(pathMap).map((p) => {
-        let route = '/' + p.replace(/^app\//i, '').replace(/\.tsx$/i, '');
-        // Fix: Remove Expo Route Groups e.g., /(tabs) or /(drawer)
-        route = route.replace(/\/\([^)]+\)/g, '');
-        if (route.endsWith('/index')) route = route.replace('/index', '');
-        if (route.endsWith('/_layout')) route = route.replace('/_layout', '');
-        return route === '' ? '/' : route.toLowerCase();
-      })
+      Object.values(pathMap)
+        .filter((p) => /^app\//i.test(p))
+        .map((p) => {
+          let route =
+            '/' + p.replace(/^app\//i, '').replace(/\.(tsx|jsx|ts|js)$/i, '');
+          // Fix: Remove Expo Route Groups e.g., /(tabs) or /(drawer)
+          route = route.replace(/\/\([^)]+\)/g, '');
+          if (route.endsWith('/index')) route = route.replace('/index', '');
+          if (route.endsWith('/_layout')) route = route.replace('/_layout', '');
+          return route === '' ? '/' : route.toLowerCase();
+        })
     );
 
     // 3. Checking for dead links
