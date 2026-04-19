@@ -73,12 +73,12 @@ export async function autoConfigureBabel(projectPath) {
           initializer: presetsConfig,
         });
 
-        // ─── Remove old plugins ──────────────────────────────────────────
-        let pluginsProp = objectLiteral.getProperty('plugins');
-        if (pluginsProp) pluginsProp.remove(); // Remove old plugins
-
-        // Add plugins only if there are actual plugins
+        // ─── Rebuild plugins only if we have something to inject ────────────
         if (pluginsToAdd.length > 0 || reanimatedPlugin) {
+          // Remove old plugins first, then rebuild
+          let pluginsProp = objectLiteral.getProperty('plugins');
+          if (pluginsProp) pluginsProp.remove();
+
           const uniquePlugins = [...new Set(pluginsToAdd)];
 
           let pluginsStringArray = uniquePlugins.map((p) =>
@@ -105,6 +105,7 @@ export async function autoConfigureBabel(projectPath) {
             initializer: pluginsConfig,
           });
         }
+        // If nothing to add, leave existing plugins property intact
       }
     }
   }

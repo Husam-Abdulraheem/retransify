@@ -49,6 +49,8 @@ export const COMMON_DEPENDENCIES = [
   'expo-router',
   'expo-linking',
   'expo-constants',
+  'expo-image',
+  'babel-plugin-module-resolver',
 ];
 
 // Mandatory mapping (Legacy/Web -> Expo)

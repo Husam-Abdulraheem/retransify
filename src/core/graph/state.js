@@ -109,6 +109,19 @@ export const GraphState = Annotation.Root({
     default: () => [],
   }),
 
+  // ── Global Providers ─────────────────────────────────────────
+  // Providers detected in the project (e.g., Redux Provider, Theme Provider)
+  globalProviders: Annotation({
+    reducer: (_, x) => x,
+    default: () => [],
+  }),
+
+  // Global Header
+  globalHeader: Annotation({
+    reducer: (_, x) => x,
+    default: () => null,
+  }),
+
   // ── Errors ───────────────────────────────────────────────────
   // Current file errors (populated from VerifierNode)
   errors: Annotation({
@@ -155,6 +168,16 @@ export const GraphState = Annotation.Root({
 
   // ── Execution Options ────────────────────────────────────────
   options: Annotation({
+    reducer: (_, x) => x,
+    default: () => ({}),
+  }),
+
+  // إضافة الحقول المفقودة لمنع تسرب البيانات (Data Leaks)
+  generatedDependencies: Annotation({
+    reducer: (_, x) => x,
+    default: () => [],
+  }),
+  assetMap: Annotation({
     reducer: (_, x) => x,
     default: () => ({}),
   }),

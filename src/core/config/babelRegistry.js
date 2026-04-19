@@ -9,4 +9,17 @@ export const BABEL_REGISTRY = {
       { moduleName: '@env', path: '.env' },
     ],
   },
+  // Key matches npm package name so babelManager can find it in package.json dependencies
+  'babel-plugin-module-resolver': {
+    plugin: [
+      'module-resolver',
+      {
+        root: ['./'],
+        alias: {
+          '@': './',
+        },
+      },
+    ],
+    isLast: false,
+  },
 };

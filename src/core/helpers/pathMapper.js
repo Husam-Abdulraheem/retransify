@@ -3,19 +3,25 @@ import path from 'path';
 export class PathMapper {
   /**
    * Calculates the exact new relative import paths for a file based on pathMap.
+   * Handles Path Aliases dynamically and Node-style resolution.
+   *
    * @param {string} currentFilePath - Original path (relative to project)
    * @param {string} currentFileContent - Original file content
    * @param {Object} pathMap - Map of old paths to new paths
+   * @param {Object} pathAliases - Dynamic aliases from tsconfig/jsconfig
    * @returns {Object} { [oldImportString]: newExactImportString }
    */
-  static calculateExactImports(currentFilePath, currentFileContent, pathMap) {
+  static calculateExactImports(
+    currentFilePath,
+    currentFileContent,
+    pathMap,
+    pathAliases = {}
+  ) {
     const exactImports = {};
     if (!currentFileContent || !currentFilePath || !pathMap)
       return exactImports;
 
-    // Matches exactly: import ... from './something' or '../something'
-    // OR matches project-root-like imports that we might want to remap
-    const importRegex = /(?:from|import)\s+['"]([^'"]+)['"]/g;
+    const importRegex = /(?:from|import|require\()\s*['"]([^'"]+)['"]/g;
     let match;
 
     const currentDir = path.dirname(currentFilePath).replace(/\\/g, '/');
@@ -24,37 +30,64 @@ export class PathMapper {
     while ((match = importRegex.exec(currentFileContent)) !== null) {
       const importString = match[1];
 
-      // 1. Resolve absolute-like path of the imported file in the original structure
-      let importedProjectRelative;
+      let isAlias = false;
+      let normalizedImportString = importString;
 
-      if (importString.startsWith('.')) {
-        // Relative import
-        importedProjectRelative = path.posix
-          .join(currentDir, importString)
-          .replace(/\\/g, '/');
-      } else {
-        // Root-relative or aliased import (check if it exists in our project structure)
-        // We check if the string matches any of our known file paths (or their basename)
-        importedProjectRelative = importString.replace(/\\/g, '/');
-      }
-
-      // 2. Find the mapped new path
-      let newImportedPath = null;
-
-      if (pathMap[importedProjectRelative]) {
-        newImportedPath = pathMap[importedProjectRelative];
-      } else {
-        // Prefix match for missing extensions
-        for (const [oldPath, newPath] of Object.entries(pathMap)) {
-          const oldPathBase = oldPath.replace(/\.[^/.]+$/, '');
-          if (oldPathBase === importedProjectRelative) {
-            newImportedPath = newPath;
-            break;
-          }
+      for (const [alias, targets] of Object.entries(pathAliases)) {
+        const aliasPrefix = alias.replace(/\*$/, '');
+        if (importString.startsWith(aliasPrefix)) {
+          isAlias = true;
+          const targetPrefix = targets[0].replace(/\*$/, '');
+          normalizedImportString = importString.replace(
+            aliasPrefix,
+            targetPrefix
+          );
+          break;
         }
       }
 
-      // 3. Calculate the exact new relative import using the POSIX-safe helper
+      if (!importString.startsWith('.') && !isAlias) {
+        continue;
+      }
+
+      let importedProjectRelative;
+      if (normalizedImportString.startsWith('.')) {
+        importedProjectRelative = path.posix
+          .join(currentDir, normalizedImportString)
+          .replace(/\\/g, '/');
+      } else {
+        importedProjectRelative = normalizedImportString;
+      }
+
+      const possiblePaths = [
+        importedProjectRelative,
+        `${importedProjectRelative}.js`,
+        `${importedProjectRelative}.jsx`,
+        `${importedProjectRelative}.ts`,
+        `${importedProjectRelative}.tsx`,
+        `${importedProjectRelative}/index.js`,
+        `${importedProjectRelative}/index.jsx`,
+        `${importedProjectRelative}/index.ts`,
+        `${importedProjectRelative}/index.tsx`,
+      ];
+
+      let newImportedPath = null;
+      for (const possible of possiblePaths) {
+        if (pathMap[possible]) {
+          newImportedPath = pathMap[possible];
+          break;
+        }
+      }
+
+      if (!newImportedPath) {
+        const dynamicMatch = Object.keys(pathMap).find((key) =>
+          key.startsWith(`${importedProjectRelative}.`)
+        );
+        if (dynamicMatch) {
+          newImportedPath = pathMap[dynamicMatch];
+        }
+      }
+
       if (newImportedPath) {
         exactImports[importString] = this.calculateExactRelativePath(
           newCurrentPath,
@@ -68,39 +101,35 @@ export class PathMapper {
 
   /**
    * Calculates the exact POSIX-compliant relative path between two files.
-   * Retains file extensions for non-JS/TS assets (like JSON or images).
-   *
-   * @param {string} newSourcePath - The new path of the file making the import (e.g., app/(tabs)/index.tsx)
-   * @param {string} newTargetPath - The new path of the target file (e.g., components/Header.tsx)
-   * @returns {string} The exact relative import string
+   * Handles trimming of '/index' for cleaner imports.
    */
   static calculateExactRelativePath(newSourcePath, newTargetPath) {
     const sourceDir = path.dirname(newSourcePath);
     let relativePath = path.relative(sourceDir, newTargetPath);
 
-    // Enforce POSIX slashes for JavaScript imports (Fix for Windows paths)
+    // Enforce POSIX slashes (Windows fix)
     relativePath = relativePath.split(path.sep).join('/');
 
-    // Prefix with './' if it is in the same directory
     if (!relativePath.startsWith('.')) {
       relativePath = './' + relativePath;
     }
 
-    // Remove extensions ONLY for JS/TS/JSX/TSX files. Keep .json, .png, etc.
+    // Remove extensions ONLY for JS/TS/JSX/TSX files
     if (/\.(jsx?|tsx?)$/i.test(relativePath)) {
       relativePath = relativePath.replace(/\.(jsx?|tsx?)$/i, '');
+    }
+
+    // Fix index imports (e.g. ./components/Button/index -> ./components/Button)
+    if (relativePath.endsWith('/index')) {
+      relativePath = relativePath.slice(0, -6);
+      if (relativePath === '.') relativePath = './index'; // Edge case for root index
     }
 
     return relativePath;
   }
 
   /**
-   * Generates a map of old paths to new paths based on file role and conventions.
-   * Prioritizes precise routes generated by RouteAnalyzer.
-   * @param {Array<Object>} files - List of file objects from fileScanner
-   * @param {Object} routeMap - Custom overrides generated by AST scanning
-   * @param {Object} navigationSchema - The navigation architecture decisions
-   * @returns {Object} { [oldPath]: newPath }
+   * Generates a map of old paths to new paths using Structural Mirroring.
    */
   static generateMap(files, routeMap = {}, navigationSchema = {}) {
     const pathMap = {};
@@ -120,7 +149,6 @@ export class PathMapper {
       const oldPath = file.relativeToProject;
       let refinedPath;
 
-      // If RouteAnalyzer found this file to be a routed component/layout, use it exactly
       if (routeMap[oldPath]) {
         refinedPath = routeMap[oldPath];
 
@@ -133,30 +161,39 @@ export class PathMapper {
           );
           const normalizedPath = refinedPath.toLowerCase();
 
-          // 🔒 Defensive Check: Do NOT double-inject the route group if it's already there
-          if (!refinedPath.includes(`app/${routeGroup}/`)) {
+          const groupBase = refinedPath.startsWith('src/app/')
+            ? 'src/app'
+            : 'app';
+
+          if (!refinedPath.includes(`${groupBase}/${routeGroup}/`)) {
             if (
               navigationSchema.type === 'tabs' &&
               normalizedTabs.includes(normalizedPath)
             ) {
-              refinedPath = refinedPath.replace('app/', `app/${routeGroup}/`);
+              refinedPath = refinedPath.replace(
+                `${groupBase}/`,
+                `${groupBase}/${routeGroup}/`
+              );
             } else if (
               navigationSchema.type === 'drawer' &&
               normalizedDrawer.includes(normalizedPath)
             ) {
-              refinedPath = refinedPath.replace('app/', `app/${routeGroup}/`);
+              refinedPath = refinedPath.replace(
+                `${groupBase}/`,
+                `${groupBase}/${routeGroup}/`
+              );
             }
           }
         }
       } else {
-        // 👈 هذه הـ else الآن مرتبطة بشكل صحيح بـ if (routeMap[oldPath])
-        refinedPath = this.determineNewPath(file, routeMap);
+        refinedPath = this.determineNewPath(file);
       }
 
-      // 🚨 [Strict Standard]: Uniform casing for routing paths.
-      // Any file located within the app/ folder should generally be lowercase to avoid routing issues.
-      // EXCEPTION: Dynamic segments (e.g. [itemId].tsx) MUST preserve camelCase for useLocalSearchParams to work properly.
-      if (refinedPath.startsWith('app/')) {
+      // Uniform casing for routing paths in app/ or src/app/
+      if (
+        refinedPath.startsWith('app/') ||
+        refinedPath.startsWith('src/app/')
+      ) {
         refinedPath = refinedPath
           .split('/')
           .map((segment) =>
@@ -168,121 +205,24 @@ export class PathMapper {
       }
 
       pathMap[oldPath] = refinedPath;
-    } // 👈 هنا تنتهي حلقة الـ for بشكل صحيح لتعالج جميع الملفات
+    }
 
-    return pathMap; // 👈 هنا يتم إرجاع الخريطة المكتملة بعد انتهاء الحلقة
+    return pathMap;
   }
 
   /**
-   * Determines the new path for a single file.
-   * @param {Object} file - fileObject from scanner
-   * @returns {string} importable new path
+   * Determines the new path for a single file using Structural Mirroring.
+   * Preserves original domain architecture and prefix (src/).
    */
-  static determineNewPath(file, routeMap = {}) {
+  static determineNewPath(file) {
     let normalizedPath = file.relativeToProject.replace(/\\/g, '/');
-    if (normalizedPath.startsWith('src/')) {
-      normalizedPath = normalizedPath.substring(4);
+
+    const ext = path.extname(normalizedPath);
+    if (['.js', '.jsx', '.ts', '.tsx'].includes(ext)) {
+      const newExt = file.hasJSX ? '.tsx' : '.ts';
+      return normalizedPath.replace(/\.[tj]sx?$/i, newExt);
     }
 
-    const parts = normalizedPath.split('/');
-    const filename = parts[parts.length - 1];
-    const basename = path.basename(filename, path.extname(filename));
-    const basenameLower = basename.toLowerCase();
-
-    // 1. Root Fallbacks
-    if (/^(main|index)\.(js|jsx|ts|tsx)$/.test(normalizedPath)) {
-      return `app/_layout.tsx`;
-    }
-    if (/^App\.(js|jsx|ts|tsx)$/i.test(normalizedPath)) {
-      const hasRoutes = Object.keys(routeMap || {}).length > 0;
-      return hasRoutes ? `app/_layout.tsx` : `app/index.tsx`;
-    }
-
-    // 2. 🚨 Universal Layout Fallback (Stack/Slot instead of forced Tabs)
-    // IMPORTANT: only treat as root layout if it's NOT a component/helper layout.
-    // Otherwise, we end up with multiple different sources writing to app/_layout.tsx.
-    if (
-      (basenameLower.includes('layout') || basenameLower === 'appshell') &&
-      !this.isInFolder(parts, 'components')
-    ) {
-      return `app/_layout.tsx`;
-    }
-
-    // 3. 🚨 Standard Pages (Placed cleanly in app/ directory for Stack navigation)
-    if (
-      this.isInFolder(parts, 'pages') ||
-      this.isInFolder(parts, 'screens') ||
-      this.isInFolder(parts, 'views') ||
-      basenameLower.endsWith('screen') ||
-      basenameLower.endsWith('page')
-    ) {
-      return `app/${filename.replace(/\.jsx?$/, '.tsx')}`.toLowerCase();
-    }
-
-    // 4. Sub-components
-    if (this.isInFolder(parts, 'components')) {
-      return `components/${this.cleanPath(parts, ['components'])}`.replace(
-        /\.jsx?$/,
-        '.tsx'
-      );
-    }
-
-    // 5. Shared Files (Hooks, Services, Utils)
-    // 🚨 [Content-Aware Extension Rule]: If the file contains JSX, it MUST be .tsx
-    const safeExtension = file.hasJSX ? '.tsx' : '.ts';
-
-    if (this.isInFolder(parts, 'hooks'))
-      return `hooks/${this.cleanPath(parts, ['hooks'])}`.replace(
-        /\.jsx?$/i,
-        '.tsx'
-      );
-
-    if (this.isInFolder(parts, 'services') || this.isInFolder(parts, 'api'))
-      return `services/${this.cleanPath(parts, ['services', 'api'])}`.replace(
-        /\.jsx?$/i,
-        safeExtension
-      );
-
-    if (this.isInFolder(parts, 'utils') || this.isInFolder(parts, 'helpers'))
-      return `utils/${this.cleanPath(parts, ['utils', 'helpers'])}`.replace(
-        /\.jsx?$/i,
-        safeExtension
-      );
-    if (
-      this.isInFolder(parts, 'context') ||
-      this.isInFolder(parts, 'contexts') ||
-      this.isInFolder(parts, 'providers')
-    )
-      return `context/${this.cleanPath(parts, ['context', 'contexts', 'providers'])}`.replace(
-        /\.jsx?$/,
-        '.tsx'
-      );
-
-    // Assets and Resources
-    if (
-      this.isInFolder(parts, 'assets') ||
-      this.isInFolder(parts, 'images') ||
-      this.isInFolder(parts, 'icons')
-    ) {
-      return `assets/${this.cleanPath(parts, ['assets', 'images', 'icons'])}`;
-    }
-
-    // Final Fallback
-    return normalizedPath.replace(/\.(js|jsx)$/i, '.tsx');
-  }
-
-  static isInFolder(parts, folderName) {
-    const target = (folderName || '').toLowerCase();
-    return (parts || []).some((p) => (p || '').toLowerCase() === target);
-  }
-
-  static cleanPath(parts, folderNamesToRemove) {
-    const removeSet = new Set(
-      (folderNamesToRemove || []).map((f) => (f || '').toLowerCase())
-    );
-    const newParts = (parts || []).filter(
-      (p) => !removeSet.has((p || '').toLowerCase())
-    );
-    return newParts.join('/');
+    return normalizedPath;
   }
 }
