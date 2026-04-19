@@ -49,6 +49,13 @@ export class MemoryVectorStore {
     }
   }
 
+  // Remove old vector to prevent RAG pollution
+  deleteDocumentByFilePath(filePath) {
+    this.memoryVectors = this.memoryVectors.filter(
+      (vec) => vec.metadata?.filePath !== filePath
+    );
+  }
+
   // Very basic cosine similarity stub for RAG context
   async similaritySearch(query, k = 3) {
     if (this.memoryVectors.length === 0) return [];

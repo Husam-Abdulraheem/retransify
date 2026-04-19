@@ -22,36 +22,62 @@ export function buildPrompt(fileContext) {
     isLayoutFile = false,
     navigationSchema = {},
     requiredData = [],
+    ragContext = '',
   } = fileContext;
 
   const isRootLayout = fileContext.targetPath === 'app/_layout.tsx';
 
-  const isHomeScreen =
-    fileContext.targetPath === 'app/(tabs)/index.tsx' ||
-    fileContext.targetPath === 'app/index.tsx';
   const isGroupLayout = fileContext.targetPath?.match(
     /^app\/\((tabs|drawer)\)\/_layout\.tsx$/
   );
 
   const providers = globalContext.globalProviders || [];
   const hasProviders = providers.length > 0;
+  const globalHeader = globalContext.globalHeader || null;
+  const isGlobalHeaderSource =
+    !!globalHeader &&
+    (globalHeader.source === filePath ||
+      globalHeader.source === (fileContext.filePath || filePath));
 
   let providerWrapperText = '';
   if (isRootLayout && hasProviders) {
     const providerRules = providers
       .map((p) => {
         if (p.source) {
+          const mappedProviderPath = pathMap[p.source] || p.source;
           const exactPath = PathMapper.calculateExactRelativePath(
-            fileContext.targetPath,
-            p.source
+            fileContext.targetPath || 'app/_layout.tsx',
+            mappedProviderPath
           );
-          return `     - [CRITICAL ARCHITECTURE RULE]: You MUST wrap your <Stack> (or <Slot>) inside <${p.name}>. You MUST import it exactly like this: import { ${p.name} } from "${exactPath}";`;
+          const importStatement = p.isDefault
+            ? `import ${p.name} from "${exactPath}";`
+            : `import { ${p.name} } from "${exactPath}";`;
+          return `     - [CRITICAL ARCHITECTURE RULE]: You MUST wrap your <Stack> (or <Slot>) inside <${p.name}>. You MUST import it exactly like this: ${importStatement}`;
         }
         return `     - [CRITICAL ARCHITECTURE RULE]: You MUST wrap your <Stack> inside <${p.name}>.`;
       })
       .join('\n');
 
     providerWrapperText = `\n${providerRules}`;
+  }
+
+  // Centralized Header Logic for Native Mobile Architecture
+  let headerWrapperText = '';
+  if (isRootLayout && globalHeader) {
+    const mappedHeaderPath =
+      pathMap[globalHeader.source] || globalHeader.source;
+    const exactHeaderPath = PathMapper.calculateExactRelativePath(
+      fileContext.targetPath || 'app/_layout.tsx',
+      mappedHeaderPath
+    );
+    const importStatement = globalHeader.isDefault
+      ? `import ${globalHeader.name} from "${exactHeaderPath}";`
+      : `import { ${globalHeader.name} } from "${exactHeaderPath}";`;
+
+    headerWrapperText = `     - [CRITICAL HEADER RULE]: A global web header was detected. You MUST use it as a Native Custom Header.
+     - You MUST import it exactly like this: ${importStatement}
+     - You MUST inject it into the Root Stack Navigator (and NOT Tabs/Drawer): <Stack screenOptions={{ header: () => <${globalHeader.name} />, headerShown: true }} />
+     - STRICT PROHIBITION: You are FORBIDDEN from setting headerShown:false on the Root Stack when a global header exists.`;
   }
 
   const facts = globalContext.facts || {};
@@ -122,22 +148,33 @@ ${
     ? `     - You MUST render the Expo Router <${navigationSchema.type === 'tabs' ? 'Tabs' : 'Drawer'}> component.
      - [NAVIGATION ARCHITECTURE]: Configure these screens as items: ${(navigationSchema.type === 'tabs' ? navigationSchema.tabs : navigationSchema.drawerScreens || []).join(', ')}`
     : `     - You MUST wrap the application and render the Expo Router ${navigationSchema.type === 'tabs' || navigationSchema.type === 'drawer' ? '<Stack>' : '<Stack> or <Slot>'} component.
-${providerWrapperText}`
+${providerWrapperText}
+${headerWrapperText}`
 }
 ${navigationSchema.modals && navigationSchema.modals.length > 0 && isRootLayout ? `     - [MODALS CONFIGURATION]: The following paths MUST be configured as modals (e.g. options={{ presentation: 'modal' }}): ${navigationSchema.modals.join(', ')}` : ''}
-${isRootLayout ? `     - [CRITICAL SETUP]: You MUST add "import '${PathMapper.calculateExactRelativePath(fileContext.targetPath || 'app/_layout.tsx', 'global.css')}';" at the very top of the file if NativeWind is used.` : ''}
-     - [WEB TO MOBILE LAYOUT PATTERN (CRITICAL)]: Web apps often use a global <Layout> component that wraps the children in a container alongside a <Header> and <Footer>.
-     - 🚨 PROBLEM: In React Native, wrapping the main Navigator (<Stack> or <Tabs>) inside a custom UI container or <ScrollView> breaks the gesture system and crashes the app.
-     - ✅ THE ARCHITECTURAL SOLUTION:
-        1. DO NOT wrap the <Stack> or <Tabs> in any UI container. The Navigator MUST be the root visual element (only wrapped by Context Providers).
-        2. If you find a <Header> or <Navbar> in the web layout, EXTRACT it, ensure it has an 'export' keyword so it can be imported globally, and integrate it natively using \`<Stack screenOptions={{ header: () => <Header /> }} />\`.
-        3. If you find a global <Footer>, completely DELETE it from this root file. (Footers belong on the Home screen, not the root layout).
-        4. [DOUBLE HEADER PREVENTION]: If the navigation is tabs or drawer, add ONE <Stack.Screen name="(${navigationSchema.type})" options={{ headerShown: false }} /> inside <Stack>.`
+${
+  isRootLayout
+    ? `     - [CRITICAL SETUP]: You MUST add "import '${PathMapper.calculateExactRelativePath(fileContext.targetPath || 'app/_layout.tsx', 'global.css')}';" at the very top of the file if NativeWind is used.
+     - [NATIVEWIND & EXPO-IMAGE INTEROP]: If NativeWind is used, you MUST register 'expo-image' globally in this file to support className by adding:
+       import { cssInterop } from 'nativewind';
+       import { Image } from 'expo-image';
+       cssInterop(Image, { className: 'style' });`
+    : ''
+}
+     - [WEB TO MOBILE LAYOUT PATTERN (CRITICAL)]: In React Native, the Navigator MUST be the root visual element. DO NOT wrap the Navigator inside any UI container or ScrollView.`
     : `   - [CRITICAL SCREEN RULE]: This file is a STANDARD UI SCREEN ('${fileContext.targetPath}').
-     - STRICT PROHIBITION: You are FORBIDDEN from using the <Slot /> component.
-     - DO NOT abstract the UI away into a Context Provider that returns a <Slot />.
-     - You MUST directly render the actual visual React Native components (Views, Text, FlatList, Input) inside the main export.
-${isHomeScreen ? `     - [MOBILE FOOTER RECOVERY EXTREMELY CRITICAL]: In mobile apps, global footers belong at the bottom of the Home screen, NOT in the root layout. If the original web project had a global <Footer> component, you MUST import it into THIS file and place it at the very bottom of your main <ScrollView>. Calculate the exact relative path to the Footer component if necessary.` : ''}`
+     - DO NOT import or use <Header> or <Footer>. The Header is handled centrally by the root _layout.tsx file.
+     - The Footer MUST BE COMPLETELY IGNORED and removed from this mobile version.
+     - SCROLLING: Wrap the main body of this screen in a <ScrollView className="flex-1"> or <View className="flex-1"> depending on content length to prevent clipping.`
+}
+
+${
+  isGlobalHeaderSource
+    ? `
+   - [HEADER EXPORT RULE (CRITICAL)]: This file declares the global header component "${globalHeader?.name}".
+     - You MUST ensure "${globalHeader?.name}" is exported (add \`export\` to its declaration or \`export { ${globalHeader?.name} }\`).
+     - The Root Layout will import this header from this file, so missing export will break the app.`
+    : ''
 }
 
 4. DEPENDENCIES & LIBRARIES MAP:
@@ -152,11 +189,18 @@ ${isHomeScreen ? `     - [MOBILE FOOTER RECOVERY EXTREMELY CRITICAL]: In mobile 
    - ICONS ABSTRACTION: Standardize ALL third-party icon libraries to use '@expo/vector-icons' exclusively.
 
 5. MOBILE UI/UX & LAYOUT ADAPTATION (CRITICAL - FIXES OVERLAPPING & OVERFLOW):
+   - [IMAGES & DIMENSION COLLAPSE (CRITICAL)]: Convert all HTML <img> tags to the <Image> component imported EXCLUSIVELY from 'expo-image' (import { Image } from 'expo-image';). 
+   - 🚨 [CRITICAL DIMENSION RULE]: In React Native, images WITHOUT explicit dimensions will collapse to 0x0 pixels and become INVISIBLE. You MUST always assign explicit width and height via className (e.g., className="w-24 h-24", "w-full aspect-square", or "w-[100px] h-[50px]"). NEVER leave an <Image> without dimensions!
+   - You MUST use the '@/' prefix before the mapped path inside a require() call. Example: <Image source={require("@/assets/logo.png")} className="w-16 h-16 content-cover" />.
+   - [DYNAMIC LOCAL IMAGES (FATAL ERROR)]: Metro Bundler CANNOT load local images from dynamic string variables. If an image path comes from JSON or a prop (e.g., <img src={item.image} />), replacing it with <Image source={item.image} /> will FAIL SILENTLY. You MUST create a Static Asset Map dictionary inside the file. Example: const assetMap = { "/assets/product1.jpg": require("@/assets/product1.jpg"), "/assets/product2.jpg": require("@/assets/product2.jpg") }; Then use: <Image source={assetMap[item.image]} className="..." />
+   - 🚨 METRO STATIC REQUIRE RULE (CRITICAL — WILL CRASH THE APP IF VIOLATED): Metro Bundler is a STATIC bundler. It resolves ALL require() calls at BUILD TIME, NOT at runtime. Therefore, you are STRICTLY FORBIDDEN from placing any dynamic expression inside require(). This includes: variables, function calls, ternary expressions, template literals with variables, or any non-literal value. ILLEGAL examples: require(getImagePath(name)), require(\`@/assets/\${product}.jpg\`), require(condition ? a : b). If the original web code uses a dynamic image-loading function (e.g., getImagePath(type)), you MUST refactor it into a STATIC lookup map where every require() contains a hard-coded string literal. LEGAL pattern: const imageMap = { tablet: require('@/assets/images/product-tablet.jpg'), mobile: require('@/assets/images/product-mobile.jpg') }; then access it as: imageMap[type]. 🚨 To build this map, you MUST extract the actual specific image names from the 'AVAILABLE ASSETS IN REPOSITORY' list at the bottom of the prompt! DO NOT guess or hallucinate names.
+   - [NON-CODE ASSETS & DATA IMPORTS (CRITICAL)]: If the original code imports ANY non-code file (e.g., .json, .csv, .mp4, .yaml, .png) using 'import' or 'require()', you MUST understand that the asset migrator has moved it to the 'assets' directory. You MUST strictly use the exact mapped string provided in the 'EXACT IMPORTS REMAPPING' section below, OR use the absolute alias (e.g., require('@/assets/data.json')). DO NOT guess, hardcode, or manually calculate relative paths for non-code files. If you use an absolute alias, verify the exact file name from the 'AVAILABLE ASSETS IN REPOSITORY' list.
    - SCROLLING IS NOT AUTOMATIC: Unlike Web, React Native Views do NOT scroll. You MUST wrap the main body of standard screens in a <ScrollView> or use <FlatList> for lists to prevent overlapping and clipped content.
    - RESPONSIVENESS & WIDTHS: NEVER use fixed large desktop widths (e.g., width: 1000px or w-[1000px]). You MUST convert them to 'w-full', 'flex: 1', or use percentages ('100%') to fit mobile screens.
    - NO CSS GRID: React Native uses Flexbox exclusively. Convert all grid layouts to semantic Flexbox structures (e.g., using 'flexWrap: wrap' and width percentages).
    - FLEX DIRECTION: React Native 'flexDirection' defaults to 'column'. Explicitly handle horizontal alignments.
    - SAFE AREAS: Prevent content overlap with device notches using <SafeAreaView> or 'useSafeAreaInsets'.
+   - 🚨 [EXPO ROUTER LINK TYPING (CRITICAL)]: Expo Router uses strictly typed routes. When converting web <Link to="..."> to Expo <Link href="...">, if the path is dynamic, a variable, or involves string interpolation, you MUST cast it to any to prevent TypeScript crashes. Example: <Link href={\`/product/\${id}\` as any} asChild>.
 
 6. TYPESCRIPT STRICTNESS (CRITICAL):
    - The output MUST be valid TypeScript (.tsx).
@@ -164,14 +208,19 @@ ${isHomeScreen ? `     - [MOBILE FOOTER RECOVERY EXTREMELY CRITICAL]: In mobile 
    - NO implicit 'any'. Infer types intelligently from the original code structure.
    - EXTENSION BAN: Ensure all relative local imports point to the correct file without extensions or with .tsx/.ts.
 
-7. CODE FORMATTING & LEGIBILITY (CRITICAL FOR PARSERS):
+7. ENVIRONMENT VARIABLES (CRITICAL):
+   - The original project's environment variables (e.g. REACT_APP_*, VITE_*, NEXT_PUBLIC_*) have been migrated to the Expo standard prefix: 'EXPO_PUBLIC_'.
+   - You MUST replace any usage of 'process.env.REACT_APP_XYZ' or 'import.meta.env.VITE_XYZ' with 'process.env.EXPO_PUBLIC_XYZ'.
+   - NEVER use 'import.meta.env' in React Native, it will crash the app. Always use 'process.env.EXPO_PUBLIC_*'.
+
+8. CODE FORMATTING & LEGIBILITY (CRITICAL FOR PARSERS):
    - You MUST format the output code legibly with proper newlines and indentation.
    - DO NOT minify the code under any circumstances, even for short files.
    - You MUST ensure quotes and string templates are perfectly valid to prevent JSON parsing failures.
 
 ${
   requiredData.length > 0
-    ? `8. DATA DEPENDENCY & PROP INJECTION (CRITICAL):
+    ? `9. DATA DEPENDENCY & PROP INJECTION (CRITICAL):
 ${requiredData
   .map((data) => {
     const newTargetPath = pathMap[data.originalSource] || data.originalSource;
@@ -185,6 +234,31 @@ ${requiredData
     : ''
 }
 `;
+
+  // Extract all assets for fuzzy matching
+  const assetExtensions = [
+    '.png',
+    '.jpg',
+    '.jpeg',
+    '.gif',
+    '.svg',
+    '.webp',
+    '.json',
+    '.csv',
+    '.mp4',
+    '.pdf',
+    '.yaml',
+    '.txt',
+  ];
+  const availableAssets = [
+    ...new Set(
+      Object.values(pathMap).filter(
+        (p) =>
+          typeof p === 'string' &&
+          assetExtensions.some((ext) => p.toLowerCase().endsWith(ext))
+      )
+    ),
+  ];
 
   // 4. Context & Input Code
   const contextBlock = `
@@ -201,6 +275,16 @@ ${
 EXACT IMPORTS REMAPPING (CRITICAL):
 You MUST replace the following old relative imports with EXACTLY these new strings. DO NOT calculate distances yourself:
 ${JSON.stringify(exactImportsMap, null, 2)}
+`
+    : ''
+}
+
+${
+  availableAssets.length > 0
+    ? `
+AVAILABLE ASSETS IN REPOSITORY (CRITICAL FOR DYNAMIC MAPPING):
+When creating static lookup maps for dynamic images or importing data files, you MUST pick the exact file path exclusively from this list. DO NOT hallucinate or guess file names (e.g., missing suffixes like '-headphones'):
+${JSON.stringify(availableAssets, null, 2)}
 `
     : ''
 }
@@ -226,6 +310,21 @@ ${fileContent}
   return `
 ${roleDefinition}
 ${strictRulesBlock}
+
+// 🚨 التعديل الجذري: حقن سياق المشروع المفقود 🚨
+${
+  ragContext
+    ? `
+### PROJECT CONTEXT (RAG DATABASE) ###
+The following are interfaces, types, and hooks from other files in the project. 
+Use this context to understand how to call external functions and pass correct props:
+${ragContext}
+
+[TYPESCRIPT INTERFACES]: DO NOT redefine global interfaces (like CartItem, Product, User, etc.) if they already exist above in this PROJECT CONTEXT. Assume they are available globally or import them from a shared types file (e.g., '../types'). Avoid duplicate interface declarations at all costs.
+######################################
+`
+    : ''
+}
 ${contextBlock}
 ${inputCodeBlock}
 `.trim();
@@ -235,10 +334,16 @@ export function buildFixPrompt(
   code,
   errors,
   installedPackages = [],
-  state = {}
+  state = {},
+  exactImportsMap = {}
 ) {
   const facts = state.facts || {};
   const tech = facts.tech || {};
+
+  const filePath =
+    state.currentFile?.relativeToProject || state.currentFile?.filePath || '';
+  const targetPath = state.pathMap?.[filePath] || filePath;
+  const isLayoutFile = targetPath.endsWith('_layout.tsx');
 
   const isNativeWind =
     tech.styling === 'NativeWind' ||
@@ -247,24 +352,35 @@ export function buildFixPrompt(
     /className\s*=/.test(code) ||
     /from ['"]nativewind['"]/.test(code);
 
+  const importsBlock =
+    exactImportsMap && Object.keys(exactImportsMap).length > 0
+      ? `\n[EXACT IMPORTS REMAPPING]:\nYou MUST use these exact paths for your imports:\n${Object.entries(
+          exactImportsMap
+        )
+          .map(
+            ([oldImport, newPath]) =>
+              `- Replace import from '${oldImport}' WITH '${newPath}'`
+          )
+          .join('\n')}\n`
+      : '';
+
   return `
 You are a Senior React Native Developer & TypeScript Expert.
-The TypeScript compiler has detected logic or type issues in the following code.
+The Verifier tool (AST Analyzer & Typescript) has detected structural, architectural, or logic errors in the following Expo React Native code.
 
+${importsBlock}
 -----------------------------------
 STRICT HEALING PRINCIPLES & CONSTRAINTS
 -----------------------------------
 1. SCOPE ISOLATION (CRITICAL): You can ONLY modify the code provided in this file. You CANNOT modify external files, imported components, or global interfaces.
-2. COMPONENT ADAPTATION: If the error involves a mismatch between passed props and an imported component's signature (e.g., TS2322, TS2769, TS2339), you MUST modify the JSX in THIS file to conform to the component. Strip out unrecognized props, rename them, or coerce the types locally.
-3. WEB DOM LEAKAGE: If the error complains about missing web types (e.g., 'window', 'HTMLInputElement', 'div', 'onClick'${!isNativeWind ? ", 'className'" : ''}), you MUST completely remove them or replace them with their React Native/Expo equivalents.
-${isNativeWind ? "4. STYLING: This project uses NativeWind. Do NOT remove 'className' properties. If there are type errors regarding 'className', ignore them or fix them without removing the property. DO NOT use StyleSheet.create." : "4. STYLING: This project uses standard StyleSheet. Do NOT use 'className'."}
-5. DEPENDENCY RESTRICTION: You are FORBIDDEN to use any external library outside this compiled list: [${installedPackages.join(', ')}]. If a fix requires a missing package, implement it using standard React Native APIs.
-6. NO SUPPRESSION: Do NOT use @ts-ignore or 'any' assertions to bypass errors. You must structurally fix the logic.
-7. CODE FORMATTING & LEGIBILITY:
-   - You MUST format the output code legibly with proper newlines and indentation.
-   - DO NOT minify the code under any circumstances, even for short files.
-   - You MUST ensure quotes and string templates are perfectly valid.
-8. OUTPUT FORMAT: Output MUST be the corrected code only.
+2. COMPONENT ADAPTATION: If the error involves a mismatch between passed props and an imported component's signature, you MUST modify the JSX in THIS file to conform to the component by stripping out unrecognized props.
+3. WEB DOM LEAKAGE & EXPO COMPLIANCE (CRITICAL): If the error complains about unsupported Web DOM elements (e.g., 'div', 'span', 'img') or React Router dead links, you MUST replace them with React Native/Expo Router equivalents. This project uses Expo Router v3+, so ALWAYS use 'expo-router' components (<Link href="/...">, <Stack>, <Tabs>) and hooks ('useLocalSearchParams', 'useRouter').
+${isNativeWind ? "4. STYLING: This project uses NativeWind. Do NOT remove 'className' properties. DO NOT use StyleSheet.create." : "4. STYLING: This project uses standard StyleSheet. Do NOT use 'className'."}
+${isLayoutFile ? '5. LAYOUT ARCHITECTURE (CRITICAL): This is an Expo Router layout file. The Navigator (<Stack> or <Tabs> or <Slot>) MUST be the root visual component. Do NOT wrap Navigation elements in <View> or <ScrollView>.' : '5. SCREEN COMPLIANCE: Direct rendering constraint applies. Ensure you use standard native scrolling elements like <ScrollView> where appropriate.'}
+6. DEPENDENCY RESTRICTION: You are FORBIDDEN to use any external library outside this compiled list: [${installedPackages.join(', ')}]. If a fix requires a missing package, implement it using standard React Native APIs.
+7. NO SUPPRESSION: Do NOT use @ts-ignore or 'any' assertions to bypass errors. You must structurally fix the logic.
+8. CODE FORMATTING: You MUST format output code legibly with proper newlines. DO NOT minify.
+9. OUTPUT FORMAT: Output MUST be the completely corrected code only. DO NOT output partial code snippets.
 
 -----------------------------------
 CODE CONTEXT

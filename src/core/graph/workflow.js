@@ -16,6 +16,8 @@ import { createModelPair } from '../ai/aiFactory.js';
 import { DependencyManager } from '../helpers/dependencyManager.js';
 import { RouteAnalyzer } from '../scanners/RouteAnalyzer.js';
 import { ensureNativeProject } from '../services/ProjectInitializer.js';
+import { FrameworkDetector } from '../detectors/FrameworkDetector.js';
+import { getRealEntryPoint, inferSourceRoot } from './nodes/analyzerNode.js';
 import { Verifier } from '../utils/verifier.js';
 import {
   startSpinner,
@@ -236,7 +238,8 @@ export async function runMigrationWorkflow(
   //  ⚠️  stopSpinner BEFORE ensureNativeProject because it runs npm/npx internally
   printStep('Setting up React Native base project');
   stopSpinner();
-  const rnProjectPath = await ensureNativeProject(
+  const { projectPath: rnProjectPath, assetMap } = await ensureNativeProject(
+    projectPath,
     options.sdkVersion,
     dependencyManager
   );
@@ -249,11 +252,14 @@ export async function runMigrationWorkflow(
   await dependencyManager.scanAndResolve(filesQueue, models.fastModel);
   await dependencyManager.installAll(rnProjectPath);
 
+  // ── 3.5.5. Auto-detect Source Root ─────────────────────────────
+  const { type: buildTool } = await FrameworkDetector.detect(projectPath);
+  const entryFilePath = await getRealEntryPoint(projectPath, buildTool);
+  const sourceRoot = inferSourceRoot(projectPath, entryFilePath);
+
   // ── 3.6. Route Extraction & Projection ──────────────────────────
-  const { routeMap, routeMetadata, providers } = await RouteAnalyzer.analyze(
-    projectPath,
-    filesQueue
-  );
+  const { routeMap, routeMetadata, providers, globalHeader } =
+    await RouteAnalyzer.analyze(projectPath, filesQueue, sourceRoot);
   let navigationSchema = { type: 'stack' };
 
   if (Object.keys(routeMap).length > 0) {
@@ -306,8 +312,9 @@ export async function runMigrationWorkflow(
     routeMap,
     routeMetadata: routeMetadata || {},
     globalProviders: providers || [],
+    globalHeader: globalHeader || null, // 👈 التمرير للحالة
     navigationSchema,
-    facts: {},
+    facts: { sourceRoot },
     vectorStore: null,
     vectorIdMap: {},
     currentFile: null,
@@ -321,6 +328,7 @@ export async function runMigrationWorkflow(
     dependencyManager,
     installedPackages,
     options,
+    assetMap,
   };
 
   // ── 6. Build and Run Graph ──────────────────────────────────

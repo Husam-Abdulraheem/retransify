@@ -38,6 +38,7 @@ export async function executorNode(state, models = {}) {
     navigationSchema = { type: 'stack' },
     routeMetadata = {},
     globalProviders = [],
+    globalHeader = null,
   } = state;
 
   if (!currentFile) {
@@ -52,7 +53,7 @@ export async function executorNode(state, models = {}) {
   if (!currentFile.isVirtual) {
     const absolutePath = path.isAbsolute(filePath)
       ? filePath
-      : path.join(state.facts?.projectPath || process.cwd(), filePath);
+      : path.join(state.projectPath || process.cwd(), filePath);
 
     try {
       currentFile.content = await fs.readFile(absolutePath, 'utf-8');
@@ -104,8 +105,13 @@ export async function executorNode(state, models = {}) {
   const exactImportsMap = PathMapper.calculateExactImports(
     filePath,
     currentFile.content,
-    pathMap
+    pathMap,
+    facts.pathAliases || {}
   );
+
+  const metadataKey = currentFile.relativeToProject || currentFile.filePath; // original key
+  const currentRouteMeta = (metadataKey && routeMetadata[metadataKey]) || {};
+
   const fileContext = buildFileContext(
     currentFile,
     pathMap,
@@ -114,8 +120,9 @@ export async function executorNode(state, models = {}) {
     ragContext,
     exactImportsMap,
     navigationSchema,
-    routeMetadata[filePath] || {},
-    globalProviders
+    currentRouteMeta,
+    globalProviders,
+    globalHeader
   );
 
   // ── 3. Build Prompt ───────────────────────────────────────────
@@ -195,7 +202,8 @@ function buildFileContext(
   exactImportsMap,
   navigationSchema,
   fileMetadata = {},
-  globalProviders = []
+  globalProviders = [],
+  globalHeader = null
 ) {
   const filePath = currentFile.relativeToProject || currentFile.filePath;
   const baseName = path.basename(filePath);
@@ -228,6 +236,7 @@ function buildFileContext(
       facts: facts,
       decisions: { pathMap },
       globalProviders: globalProviders || [],
+      globalHeader: globalHeader,
     },
     pathMap,
     exactImportsMap,

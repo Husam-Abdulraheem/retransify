@@ -32,9 +32,12 @@ export async function contextUpdaterNode(state) {
       metadata: { filePath, type: 'converted_file' },
     });
 
+    // CRITICAL: Delete the old web context before injecting the native one
+    if (typeof vectorStore.deleteDocumentByFilePath === 'function') {
+      vectorStore.deleteDocumentByFilePath(filePath);
+    }
+
     // Add new vector to VectorStore
-    // MemoryVectorStore doesn't support direct deletion, so we just add
-    // (similarity search will find the newest one more relevant)
     await vectorStore.addDocuments([newDoc]);
 
     // Update Map with new ID
