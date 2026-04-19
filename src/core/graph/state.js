@@ -71,18 +71,12 @@ export const GraphState = Annotation.Root({
     default: () => null,
   }),
 
-  // ── RAG / VectorStore ────────────────────────────────────────
-  // MemoryVectorStore instance (populated in AnalyzerNode)
+  // ── Context Store ────────────────────────────────────────────
+  // ContextStore instance (populated in AnalyzerNode) — pure KV store,
+  // holds pre-indexed file summaries for Deterministic JIT retrieval.
   vectorStore: Annotation({
     reducer: (_, x) => x,
     default: () => null,
-  }),
-
-  // Map: filename -> Document ID in VectorStore
-  // Used in ContextUpdaterNode to delete old vector and insert new one
-  vectorIdMap: Annotation({
-    reducer: (prev, x) => ({ ...prev, ...x }),
-    default: () => ({}),
   }),
 
   // ── State Management ─────────────────────────────────────────
