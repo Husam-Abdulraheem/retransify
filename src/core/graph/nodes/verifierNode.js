@@ -13,10 +13,11 @@ import { printStep, printSubStep, printWarning } from '../../utils/ui.js';
 export async function verifierNode(state) {
   printStep('Verifier — inspecting generated code');
 
-  const { filesQueue, targetProjectPath } = state;
+  const { filesQueue, targetProjectPath, installedPackages = [] } = state;
   const projectDir = targetProjectPath;
 
   let allFilesPassed = true;
+  const missingDependencies = new Set();
 
   // Web concepts that break Native performance or layouts
   const prohibitedTailwindClasses = [
@@ -33,7 +34,6 @@ export async function verifierNode(state) {
   for (const fileObj of filesQueue) {
     // Only verify files that were actually modified or transpilied
     if (fileObj.isVirtual || fileObj.isAsset || !fileObj.content) continue;
-    // Note: Checking a flag like isTranspiled if available, otherwise check if path changed or context updated
 
     const errors = [];
 
@@ -50,14 +50,40 @@ export async function verifierNode(state) {
       const message = diagnostic.getMessageText();
       const line = diagnostic.getLineNumber();
       const code = diagnostic.getCode();
+      const msgText =
+        typeof message === 'string' ? message : message.getMessageText();
 
-      // Skip missing modules error (handled by AutoInstaller separately)
-      if (code === 2307) continue;
+      // [FIX] Catch missing modules (TS2307) and queue for AutoInstaller
+      if (code === 2307) {
+        const match = msgText.match(/Cannot find module '(.+?)'/);
+        if (match) {
+          const moduleName = match[1];
+
+          // Filter out local files and common aliases
+          if (
+            !moduleName.startsWith('.') &&
+            !moduleName.startsWith('/') &&
+            !moduleName.startsWith('@/')
+          ) {
+            // Extract base package name (e.g. @scope/pkg/sub -> @scope/pkg)
+            let basePkg = moduleName;
+            if (moduleName.startsWith('@')) {
+              const parts = moduleName.split('/');
+              if (parts.length >= 2) basePkg = parts[0] + '/' + parts[1];
+            } else {
+              basePkg = moduleName.split('/')[0];
+            }
+
+            if (!installedPackages.includes(basePkg)) {
+              missingDependencies.add(basePkg);
+            }
+          }
+        }
+        continue;
+      }
 
       if (diagnostic.getCategory() === 1 /* Error */) {
-        errors.push(
-          `[TS${code} L${line || '?'}]: ${typeof message === 'string' ? message : message.getMessageText()}`
-        );
+        errors.push(`[TS${code} L${line || '?'}]: ${msgText}`);
       }
     }
 
@@ -99,9 +125,15 @@ export async function verifierNode(state) {
     }
   }
 
-  if (allFilesPassed) {
+  if (allFilesPassed && missingDependencies.size === 0) {
     printSubStep(
       'All transpiled files passed structural verification.',
+      1,
+      true
+    );
+  } else if (missingDependencies.size > 0) {
+    printSubStep(
+      `Detected ${missingDependencies.size} missing libraries. Routing to AutoInstaller...`,
       1,
       true
     );
@@ -109,5 +141,8 @@ export async function verifierNode(state) {
     printSubStep('Routing failed files to Healer Node...', 1, true);
   }
 
-  return { filesQueue };
+  return {
+    filesQueue,
+    missingDependencies: Array.from(missingDependencies),
+  };
 }
