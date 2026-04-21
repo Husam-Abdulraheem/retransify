@@ -56,11 +56,7 @@ export async function ensureNativeProject(
 
   try {
     const templateName = `sdk-${sdkVersion || 54}`;
-    const templatePath = path.join(
-      __dirname,
-      '../../../templates',
-      templateName
-    );
+    const templatePath = path.join(__dirname, '../../templates', templateName);
 
     if (!(await fs.pathExists(templatePath))) {
       throw new Error(`Template not found at: ${templatePath}`);
