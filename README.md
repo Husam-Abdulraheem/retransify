@@ -60,6 +60,8 @@ Our latest architectural overhaul introduces cutting-edge capabilities:
   - **Deterministic RAG**: Fetches full signatures for explicitly defined local imports to ensure type safety.
 - **🎨 NativeWind v4 Integration**:
   - Complete support for modern styling. Detects Tailwind setups, configures `global.css`, and handles responsive class mappings.
+- **⚙️ Dynamic Expo Configuration**:
+  - Automatically syncs `app.json` metadata (name, slug, scheme) with the source project's `package.json` to ensure professional branding and valid deep-linking out of the box.
 - **🩺 Retransify Doctor**:
   - A built-in diagnostic tool to verify the health of the migrated project and fix broken dependencies.
 
@@ -161,6 +163,7 @@ retransify/
     │   ├── detectors/    # Framework & Stack Detection
     │   ├── helpers/      # Dependency Map & Path Mapping
     │   └── utils/        # UI formatting & Verifier helpers
+    ├── templates/        # SDK Base Templates (SDK 54+)
     └── config/           # Library rules & Mobile mappings
 ```
 
