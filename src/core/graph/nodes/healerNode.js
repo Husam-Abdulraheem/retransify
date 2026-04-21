@@ -9,6 +9,7 @@ import {
   stopSpinner,
 } from '../../utils/ui.js';
 import { MAX_HEAL_ATTEMPTS } from '../state.js';
+import { executeModel } from '../../ai/modelExecutor.js';
 
 const outputSchema = z.object({
   code: z
@@ -67,26 +68,23 @@ export async function healerNode(state, models = {}) {
   );
 
   try {
-    startSubSpinner(`AI Healing: Fixing ${filePath}...`);
+    const response = await executeModel(fixPrompt, models, outputSchema, {
+      spinnerMessage: `AI Healing: Fixing ${filePath}...`,
+      filePath,
+    });
 
-    const fallbackModel = models.fastModel.withStructuredOutput(outputSchema);
-    const primaryModel = models.smartModel.withStructuredOutput(outputSchema);
-    const model = primaryModel.withFallbacks({ fallbacks: [fallbackModel] });
-
-    const parsed = await model.invoke(fixPrompt);
-
-    stopSpinner();
-
-    if (parsed.code && parsed.code.length > 50) {
+    if (response && response.code && response.code.length > 50) {
       printSubStep(`✨ Fix generated. Re-verifying...`, 1);
       return {
-        generatedCode: parsed.code,
+        generatedCode: response.code,
         healAttempts: newAttemptCount,
         errors: [],
       };
     }
   } catch (err) {
-    stopSpinner();
+    if (err.message?.startsWith('TRANSIENT:')) {
+      return { healAttempts: newAttemptCount, errors: [err.message] };
+    }
     printError(`HealerNode failed during invocation: ${err.message}`);
   }
 

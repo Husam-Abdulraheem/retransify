@@ -11,7 +11,8 @@ import {
   startSubSpinner,
   stopSpinner,
 } from '../../utils/ui.js';
-import { normalizePath } from '../../utils/pathUtils.js';
+import { normalizePath, resolveAbsolutePath } from '../../utils/pathUtils.js';
+import { executeModel } from '../../ai/modelExecutor.js';
 
 // Define the expected output structure
 const outputSchema = z.object({
@@ -52,9 +53,7 @@ export async function executorNode(state, models = {}) {
 
   // 🚨 SHORT-CIRCUIT: Virtual files have pre-set content — skip disk I/O
   if (!currentFile.isVirtual) {
-    const absolutePath = path.isAbsolute(filePath)
-      ? filePath
-      : path.join(state.projectPath || process.cwd(), filePath);
+    const absolutePath = resolveAbsolutePath(currentFile, state.projectPath);
 
     try {
       currentFile.content = await fs.readFile(absolutePath, 'utf-8');
@@ -132,30 +131,19 @@ export async function executorNode(state, models = {}) {
   // ── 3. Build Prompt ───────────────────────────────────────────
   const prompt = buildPrompt(fileContext);
 
-  if (!models.smartModel) {
-    printError('No smartModel found in ExecutorNode');
-    return { generatedCode: null };
-  }
-
   // ── Robust AI Invocation ───────────────────────────────────────────
   try {
-    startSubSpinner('AI: Generating native code...');
+    const response = await executeModel(prompt, models, outputSchema, {
+      spinnerMessage: 'AI: Generating native code...',
+      filePath,
+    });
 
-    const fallbackModel = models.fastModel.withStructuredOutput(outputSchema);
-    const primaryModel = models.smartModel.withStructuredOutput(outputSchema);
-    const model = primaryModel.withFallbacks({ fallbacks: [fallbackModel] });
-
-    const response = await model.invoke(prompt);
-
-    stopSpinner();
-    let generatedCode = response.code;
-
-    if (!generatedCode) {
+    if (!response || !response.code) {
       throw new Error('AI returned empty code block');
     }
 
     // Defensive regex to strip markdown blocks leaked into the JSON string value
-    generatedCode = generatedCode
+    let generatedCode = response.code
       .replace(/^```[a-z]*\n?/im, '')
       .replace(/```$/im, '')
       .trim();
@@ -167,23 +155,10 @@ export async function executorNode(state, models = {}) {
       errors: [],
     };
   } catch (err) {
-    stopSpinner();
-
-    const isTransient =
-      err.message?.includes('503') ||
-      err.message?.includes('529') ||
-      err.message?.includes('429') ||
-      err.message?.includes('Too Many Requests') ||
-      err.message?.includes('Service Unavailable') ||
-      err.message?.includes('overloaded');
-
-    if (isTransient) {
-      printWarning(
-        `Transient API error for ${filePath}, will retry: ${err.message}`
-      );
+    if (err.message?.startsWith('TRANSIENT:')) {
       return {
         generatedCode: null,
-        errors: [`TRANSIENT:${err.message}`],
+        errors: [err.message],
       };
     }
 
