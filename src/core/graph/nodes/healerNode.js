@@ -8,6 +8,7 @@ import {
   startSubSpinner,
   stopSpinner,
 } from '../../utils/ui.js';
+import { MAX_HEAL_ATTEMPTS } from '../state.js';
 
 const outputSchema = z.object({
   code: z
@@ -31,13 +32,16 @@ export async function healerNode(state, models = {}) {
     healAttempts,
     currentFile,
     installedPackages = [],
+    unresolvedErrors = [],
   } = state;
 
   const filePath =
     currentFile?.relativeToProject || currentFile?.filePath || 'unknown';
   const newAttemptCount = (healAttempts || 0) + 1;
 
-  printSubStep(`🚑 AI Healing attempt ${newAttemptCount}/3...`);
+  printSubStep(
+    `🚑 AI Healing attempt ${newAttemptCount}/${MAX_HEAL_ATTEMPTS}...`
+  );
 
   if (!models.smartModel) {
     printError('HealerNode: no smartModel');
@@ -83,9 +87,28 @@ export async function healerNode(state, models = {}) {
     }
   } catch (err) {
     stopSpinner();
-    printError(`HealerNode failed after all attempts: ${err.message}`);
+    printError(`HealerNode failed during invocation: ${err.message}`);
   }
 
-  printWarning('HealerNode: failed to generate fix');
+  printWarning(`HealerNode: failed to generate fix for ${filePath}`);
+
+  // If this was the last attempt, record as unresolved
+  if (newAttemptCount >= MAX_HEAL_ATTEMPTS) {
+    const errorRecord = {
+      filePath: currentFile?.relativeToProject || filePath,
+      reason:
+        'Failed to resolve complex DOM references or unsupported UI library after max retries.',
+      codeSnippet:
+        (generatedCode || '').substring(0, 500) + '...\n// (Code truncated)',
+      suggestedAction:
+        'Manually convert this component to React Native primitives (View, Text).',
+    };
+    printWarning(`Marked ${errorRecord.filePath} for manual intervention.`);
+    return {
+      healAttempts: newAttemptCount,
+      unresolvedErrors: [errorRecord],
+    };
+  }
+
   return { healAttempts: newAttemptCount };
 }
