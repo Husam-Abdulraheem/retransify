@@ -92,13 +92,13 @@ export async function analyzerNode(state) {
     facts.tech.styling === 'NativeWind'
   ) {
     printSubStep('Configuring NativeWind automatically...');
-    // إنشاء ملفات tailwind.config.js و babel.config.js
-    await setupNativeWind(state.rnProjectPath);
+    // Ensure the correct target project path is used
+    const targetProject = state.targetProjectPath || state.rnProjectPath;
+    await setupNativeWind(targetProject);
 
-    // إجبار التثبيت
     if (state.dependencyManager) {
       state.dependencyManager.add(['nativewind', 'tailwindcss']);
-      await state.dependencyManager.installAll(state.rnProjectPath);
+      await state.dependencyManager.installAll(targetProject);
     }
   }
 
