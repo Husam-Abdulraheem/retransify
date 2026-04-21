@@ -3,6 +3,7 @@ import fs from 'fs-extra';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
 import { COMMON_DEPENDENCIES } from '../config/libraryRules.js';
+import { AppConfigService } from './AppConfigService.js';
 import {
   printSubStep,
   printSubStepLast,
@@ -65,23 +66,17 @@ export async function ensureNativeProject(
     await fs.copy(templatePath, projectPath);
     printSubStep('Template copied');
 
-    const projectName = path.basename(process.cwd()) + '-app';
+    // Dynamically update app.json and package.json name using AppConfigService
+    const metadata = await AppConfigService.updateMetadata(
+      sourceProjectPath,
+      projectPath
+    );
 
     const pkgJsonPath = path.join(projectPath, 'package.json');
     if (await fs.pathExists(pkgJsonPath)) {
       const pkgJson = await fs.readJson(pkgJsonPath);
-      pkgJson.name = projectName;
+      pkgJson.name = metadata.slug; // Sync package name with slug
       await fs.writeJson(pkgJsonPath, pkgJson, { spaces: 2 });
-    }
-
-    const appJsonPath = path.join(projectPath, 'app.json');
-    if (await fs.pathExists(appJsonPath)) {
-      const appJson = await fs.readJson(appJsonPath);
-      if (appJson.expo) {
-        appJson.expo.name = projectName;
-        appJson.expo.slug = projectName;
-      }
-      await fs.writeJson(appJsonPath, appJson, { spaces: 2 });
     }
 
     startSubSpinner('Hydrating base template (npm install)...');
@@ -117,12 +112,11 @@ export async function ensureNativeProject(
  * Core file configurations (Pure File Ops)
  */
 async function setupExpoConfig(projectPath) {
-  // 1. Setup app.json
+  // 1. Setup app.json web bundler (Metadata updated by AppConfigService)
   const appJsonPath = path.join(projectPath, 'app.json');
   if (await fs.pathExists(appJsonPath)) {
     const appJson = await fs.readJson(appJsonPath);
-    if (appJson.expo && !appJson.expo.scheme) {
-      appJson.expo.scheme = 'retransify-app';
+    if (appJson.expo) {
       appJson.expo.web = appJson.expo.web || {};
       appJson.expo.web.bundler = 'metro';
       await fs.writeJson(appJsonPath, appJson, { spaces: 2 });
