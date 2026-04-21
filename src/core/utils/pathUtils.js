@@ -34,3 +34,30 @@ export function joinPaths(...parts) {
   const joined = path.join(...parts);
   return normalizePath(joined);
 }
+
+/**
+ * Resolves a file object to an absolute path.
+ * Handles both virtual files (which might only have relativeToProject)
+ * and physical files (which usually have absolutePath).
+ *
+ * @param {Object} fileObj - The file object to resolve
+ * @param {string} projectRoot - The fallback project root directory
+ * @returns {string} - The normalized absolute path
+ */
+export function resolveAbsolutePath(fileObj, projectRoot) {
+  if (!fileObj) return '';
+
+  // 1. If it already has an absolute path, use it
+  if (fileObj.absolutePath && path.isAbsolute(fileObj.absolutePath)) {
+    return normalizePath(fileObj.absolutePath);
+  }
+
+  // 2. Otherwise, construct it from relative paths
+  const relative = fileObj.relativeToProject || fileObj.filePath || '';
+  if (path.isAbsolute(relative)) {
+    return normalizePath(relative);
+  }
+
+  const base = projectRoot || process.cwd();
+  return joinPaths(base, relative);
+}

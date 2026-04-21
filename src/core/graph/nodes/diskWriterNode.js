@@ -1,7 +1,7 @@
 // src/core/graph/nodes/diskWriterNode.js
 import path from 'path';
 import fs from 'fs-extra';
-import { normalizePath } from '../../utils/pathUtils.js';
+import { normalizePath, resolveAbsolutePath } from '../../utils/pathUtils.js';
 import { CONFLICT_MAP, WEB_ONLY_BLOCKLIST } from '../../config/libraryRules.js';
 import {
   printSubStep,
@@ -44,9 +44,9 @@ export async function diskWriterNode(state) {
 
   // ── 3. Write to disk directly using state.targetProjectPath ──────────
   try {
-    const absoluteDestPath = path.join(
-      state.targetProjectPath || process.cwd(),
-      destPath
+    const absoluteDestPath = resolveAbsolutePath(
+      { relativeToProject: destPath },
+      state.targetProjectPath
     );
 
     await fs.ensureDir(path.dirname(absoluteDestPath));

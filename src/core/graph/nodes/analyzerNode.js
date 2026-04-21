@@ -13,6 +13,7 @@ import {
   startSubSpinner,
   stopSpinner,
 } from '../../utils/ui.js';
+import { resolveAbsolutePath, normalizePath } from '../../utils/pathUtils.js';
 
 // ── Main Node Function ────────────────────────────────────────────────────────
 
@@ -303,13 +304,10 @@ async function buildContextStore(filesQueue, projectPath, tsProject) {
   const enrichedFiles = [];
 
   for (const fileObj of filesQueue) {
-    const filePath = (fileObj.filePath || fileObj.relativeToProject).replace(
-      /\\/g,
-      '/'
+    const filePath = normalizePath(
+      fileObj.filePath || fileObj.relativeToProject
     );
-    const absolutePath = path.isAbsolute(filePath)
-      ? filePath
-      : path.join(projectPath, filePath);
+    const absolutePath = resolveAbsolutePath(fileObj, projectPath);
 
     try {
       const { summary, hasJSX } = await extractFileSummary(
