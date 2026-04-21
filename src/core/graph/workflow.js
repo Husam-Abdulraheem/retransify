@@ -20,7 +20,6 @@ import { RouteAnalyzer } from '../scanners/RouteAnalyzer.js';
 import { ensureNativeProject } from '../services/ProjectInitializer.js';
 import { FrameworkDetector } from '../detectors/FrameworkDetector.js';
 import { getRealEntryPoint, inferSourceRoot } from './nodes/analyzerNode.js';
-import { Verifier } from '../utils/verifier.js';
 import {
   startSpinner,
   stopSpinner,
@@ -354,12 +353,6 @@ export async function runMigrationWorkflow(
       // Avoid timeout on large projects
       recursionLimit: Math.max(filesQueue.length * 10, 100),
     });
-
-    // ── 7. Final Project Verification with TypeScript ──────────────────
-    startSpinner('Running final TypeScript verification...');
-    const verifier = new Verifier();
-    await verifier.verifyProject(targetProjectPath);
-    succeedSpinner('Final verification passed');
 
     // ── 8. Completion Report ─────────────────────────────────────
     const completed = finalState.completedFiles?.length || 0;
