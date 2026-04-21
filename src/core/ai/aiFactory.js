@@ -15,7 +15,7 @@ export function createFastModel() {
     });
   }
   return new ChatGoogleGenerativeAI({
-    model: process.env.AI_FAST_MODEL || 'gemini-2.0-flash',
+    model: process.env.AI_FAST_MODEL || 'gemini-2.5-flash-lite',
     temperature: 0.1,
     maxRetries: 3,
   });

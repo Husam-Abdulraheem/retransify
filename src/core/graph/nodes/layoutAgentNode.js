@@ -5,6 +5,7 @@ import {
   startSpinner,
   succeedSpinner,
   failSpinner,
+  printWarning,
 } from '../../utils/ui.js';
 import { buildLayoutAgentPrompt } from '../../prompt/layoutPrompt.js';
 const layoutAgentSchema = z.object({
@@ -55,23 +56,45 @@ export async function runLayoutAgent(routeMap, routeMetadata, models) {
 
   const prompt = buildLayoutAgentPrompt(routeMap, routeMetadata);
 
-  try {
-    const model = models.fastModel.withStructuredOutput(layoutAgentSchema);
-    const result = await model.invoke(prompt);
+  const MAX_RETRIES = 3;
+  let lastError = null;
 
-    succeedSpinner(`Determined Architecture: ${result.type.toUpperCase()}`);
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      const model = models.fastModel.withStructuredOutput(layoutAgentSchema);
+      const result = await model.invoke(prompt);
 
-    if (result.modals.length > 0) {
-      printSubStep(`Identified Modals: ${result.modals.join(', ')}`);
+      succeedSpinner(`Determined Architecture: ${result.type.toUpperCase()}`);
+
+      if (result.modals.length > 0) {
+        printSubStep(`Identified Modals: ${result.modals.join(', ')}`);
+      }
+
+      return result;
+    } catch (error) {
+      lastError = error;
+
+      // Handle 429 Too Many Requests (Rate Limit)
+      if (error.message.includes('429') && attempt < MAX_RETRIES - 1) {
+        const waitTime = (attempt + 1) * 2000;
+        printWarning(
+          `[Rate Limit] Gemini is busy. Retrying in ${waitTime / 1000}s... (Attempt ${
+            attempt + 1
+          }/${MAX_RETRIES})`
+        );
+        await new Promise((r) => setTimeout(r, waitTime));
+        continue;
+      }
+
+      // Break on other errors or max retries
+      break;
     }
-
-    return result;
-  } catch (error) {
-    failSpinner(
-      'Layout Agent encountered an error. Defaulting to stack navigation.'
-    );
-    console.error(`[Layout Agent Error]: ${error.message}`);
-
-    return fallbackSchema;
   }
+
+  failSpinner(
+    'Layout Agent encountered an error after retries. Defaulting to stack navigation.'
+  );
+  console.error(`[Layout Agent Error]: ${lastError.message}`);
+
+  return fallbackSchema;
 }
