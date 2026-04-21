@@ -11,6 +11,7 @@ import {
   startSubSpinner,
   stopSpinner,
 } from '../../utils/ui.js';
+import { normalizePath } from '../../utils/pathUtils.js';
 
 // Define the expected output structure
 const outputSchema = z.object({
@@ -217,9 +218,7 @@ function buildFileContext(
   } else if (facts.mainEntryPoint) {
     const mainBaseName = path.basename(facts.mainEntryPoint);
     const mainRelative = facts.projectPath
-      ? path
-          .relative(facts.projectPath, facts.mainEntryPoint)
-          .replace(/\\/g, '/')
+      ? normalizePath(path.relative(facts.projectPath, facts.mainEntryPoint))
       : null;
 
     if (filePath === mainRelative || baseName === mainBaseName) {

@@ -15,7 +15,7 @@ describe('autoInstallerNode', () => {
     const state = {
       missingDependencies: ['lucide-react-native', '@react-navigation/native'],
       installAttempts: 0,
-      rnProjectPath: '/mock/path',
+      targetProjectPath: '/mock/path',
       errors: [],
     };
 
@@ -37,7 +37,7 @@ describe('autoInstallerNode', () => {
     const state = {
       missingDependencies: ['fake-pkg'],
       installAttempts: 2,
-      rnProjectPath: '/mock/path',
+      targetProjectPath: '/mock/path',
       errors: ['Previous error'],
     };
 

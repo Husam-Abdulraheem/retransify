@@ -12,6 +12,8 @@ import { contextUpdaterNode } from './nodes/contextUpdaterNode.js';
 import { diskWriterNode } from './nodes/diskWriterNode.js';
 import { filePickerNode } from './nodes/filePickerNode.js';
 import { runLayoutAgent } from './nodes/layoutAgentNode.js';
+import { globalAuditNode } from './nodes/globalAuditNode.js';
+import { reporterNode } from './nodes/reporterNode.js';
 import { createModelPair } from '../ai/aiFactory.js';
 import { DependencyManager } from '../helpers/dependencyManager.js';
 import { RouteAnalyzer } from '../scanners/RouteAnalyzer.js';
@@ -74,6 +76,10 @@ function buildWorkflow(models) {
 
   workflow.addNode(NODE_NAMES.DISK_WRITER, (state) => diskWriterNode(state));
 
+  workflow.addNode(NODE_NAMES.GLOBAL_AUDIT, (state) => globalAuditNode(state));
+
+  workflow.addNode(NODE_NAMES.REPORTER, (state) => reporterNode(state));
+
   // ── Define Static Edges ────────────────────────────
   workflow.setEntryPoint(NODE_NAMES.ANALYZER);
 
@@ -84,8 +90,11 @@ function buildWorkflow(models) {
   workflow.addConditionalEdges(NODE_NAMES.FILE_PICKER, shouldProcessFile, {
     process: NODE_NAMES.EXECUTOR,
     skip: NODE_NAMES.FILE_PICKER, // Skipped file -> fetch next file
-    done: END, // Empty list -> done
+    done: NODE_NAMES.GLOBAL_AUDIT, // Empty list -> final checks
   });
+
+  workflow.addEdge(NODE_NAMES.GLOBAL_AUDIT, NODE_NAMES.REPORTER);
+  workflow.addEdge(NODE_NAMES.REPORTER, END);
 
   // After Executor -> check if generation succeeded
   workflow.addConditionalEdges(NODE_NAMES.EXECUTOR, didExecutorSucceed, {
@@ -238,19 +247,20 @@ export async function runMigrationWorkflow(
   //  ⚠️  stopSpinner BEFORE ensureNativeProject because it runs npm/npx internally
   printStep('Setting up React Native base project');
   stopSpinner();
-  const { projectPath: rnProjectPath, assetMap } = await ensureNativeProject(
-    projectPath,
-    options.sdkVersion,
-    dependencyManager
-  );
-  printInfo(`Output path: ${rnProjectPath}`);
+  const { projectPath: targetProjectPath, assetMap } =
+    await ensureNativeProject(
+      projectPath,
+      options.sdkVersion,
+      dependencyManager
+    );
+  printInfo(`Output path: ${targetProjectPath}`);
 
   // ── 3.5. Phase 1: Pre-flight Dependency Resolution & Route Extraction ────────────────
   printStep('Resolving project-wide dependencies');
   //  ⚠️  stopSpinner again before installAll (npm output must reach the terminal)
   stopSpinner();
   await dependencyManager.scanAndResolve(filesQueue, models.fastModel);
-  await dependencyManager.installAll(rnProjectPath);
+  await dependencyManager.installAll(targetProjectPath);
 
   // ── 3.5.5. Auto-detect Source Root ─────────────────────────────
   const { type: buildTool } = await FrameworkDetector.detect(projectPath);
@@ -264,7 +274,7 @@ export async function runMigrationWorkflow(
 
   if (Object.keys(routeMap).length > 0) {
     updateSpinner(`Projecting ${Object.keys(routeMap).length} routes...`);
-    await RouteAnalyzer.projectRoutes(rnProjectPath, routeMap);
+    await RouteAnalyzer.projectRoutes(targetProjectPath, routeMap);
 
     // ── 3.7. Determine Navigation Layout ──────────────────────────
     navigationSchema = await runLayoutAgent(routeMap, routeMetadata, models);
@@ -278,7 +288,7 @@ export async function runMigrationWorkflow(
         );
         execSync(
           'npx expo install react-native-gesture-handler react-native-reanimated',
-          { cwd: rnProjectPath, stdio: 'ignore' }
+          { cwd: targetProjectPath, stdio: 'ignore' }
         );
         succeedSpinner('Drawer dependencies installed successfully.');
       } catch (e) {
@@ -291,7 +301,7 @@ export async function runMigrationWorkflow(
   // ── 4. Read Installed Packages ───────────────────────────────────
   let installedPackages = [];
   try {
-    const pkgJsonPath = path.join(rnProjectPath, 'package.json');
+    const pkgJsonPath = path.join(targetProjectPath, 'package.json');
     if (await fs.pathExists(pkgJsonPath)) {
       const pkg = await fs.readJson(pkgJsonPath);
       installedPackages = Object.keys({
@@ -306,7 +316,7 @@ export async function runMigrationWorkflow(
   // ── 5. Initial State ──────────────────────────────────────
   const initialState = {
     projectPath,
-    rnProjectPath,
+    targetProjectPath,
     filesQueue,
     pathMap: {},
     routeMap,
@@ -325,6 +335,7 @@ export async function runMigrationWorkflow(
     completedFiles: [],
     errors: [],
     errorLog: [],
+    unresolvedErrors: [],
     dependencyManager,
     installedPackages,
     options,
@@ -347,7 +358,7 @@ export async function runMigrationWorkflow(
     // ── 7. Final Project Verification with TypeScript ──────────────────
     startSpinner('Running final TypeScript verification...');
     const verifier = new Verifier();
-    await verifier.verifyProject(rnProjectPath);
+    await verifier.verifyProject(targetProjectPath);
     succeedSpinner('Final verification passed');
 
     // ── 8. Completion Report ─────────────────────────────────────
@@ -357,7 +368,7 @@ export async function runMigrationWorkflow(
     printSummaryBox({
       completed,
       failed,
-      outputPath: rnProjectPath,
+      outputPath: targetProjectPath,
       elapsedMs: Date.now() - startTime,
     });
 

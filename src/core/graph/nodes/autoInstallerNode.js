@@ -5,7 +5,7 @@ export async function autoInstallerNode(state) {
   const {
     missingDependencies = [],
     installAttempts = 0,
-    rnProjectPath,
+    targetProjectPath,
     currentFile,
     errors = [],
     installedPackages = [],
@@ -46,7 +46,7 @@ export async function autoInstallerNode(state) {
   try {
     // 🔙 Strict fallback to expo tool to ensure version compatibility
     execSync(`npx expo install ${packagesToInstall}`, {
-      cwd: rnProjectPath || process.cwd(),
+      cwd: targetProjectPath || process.cwd(),
       stdio: 'ignore', // silence expo/npm output
       env: cleanEnv,
     });

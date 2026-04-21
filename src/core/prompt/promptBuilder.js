@@ -84,19 +84,19 @@ export function buildPrompt(fileContext) {
   const facts = globalContext.facts || {};
   const tech = facts.tech || {};
 
-  // 1. Infer Tech Stack
-  const isTailwindDetected =
-    /className\s*=\s*["'`]/.test(fileContent) ||
-    /['"]tailwindcss['"]/.test(fileContent);
-
   // 🔥 Fix: Map Web 'Tailwind' to Mobile 'NativeWind'
   let targetStyleSystem = 'StyleSheet'; // Default fallback
 
-  if (
-    tech.styling === 'Tailwind' ||
-    tech.styling === 'NativeWind' ||
-    isTailwindDetected
-  ) {
+  const isTailwindInFile =
+    /className\s*=\s*["'`]/.test(fileContent) &&
+    (/tailwind/i.test(fileContent) || /['"]tailwindcss['"]/.test(fileContent));
+
+  if (tech.styling === 'Tailwind' || tech.styling === 'NativeWind') {
+    targetStyleSystem = 'NativeWind';
+  } else if (tech.styling === 'StyleSheet') {
+    targetStyleSystem = 'StyleSheet';
+  } else if (isTailwindInFile) {
+    // Only fallback to NativeWind if we are unsure about styling AND we see strong tailwind signals
     targetStyleSystem = 'NativeWind';
   }
 

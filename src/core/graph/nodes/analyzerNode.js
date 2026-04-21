@@ -75,12 +75,11 @@ export async function analyzerNode(state) {
   ) {
     printSubStep('Configuring NativeWind automatically...');
     // Ensure the correct target project path is used
-    const targetProject = state.targetProjectPath || state.rnProjectPath;
-    await setupNativeWind(targetProject);
+    await setupNativeWind(state.targetProjectPath);
 
     if (state.dependencyManager) {
       state.dependencyManager.add(['nativewind', 'tailwindcss']);
-      await state.dependencyManager.installAll(targetProject);
+      await state.dependencyManager.installAll(state.targetProjectPath);
     }
   }
 
@@ -258,13 +257,23 @@ function detectLanguage(projectPath, deps) {
 }
 
 function detectStyling(projectPath, deps) {
-  if (
-    fs.existsSync(path.join(projectPath, 'tailwind.config.js')) ||
-    fs.existsSync(path.join(projectPath, 'postcss.config.js'))
-  )
-    return 'Tailwind';
-  if (deps['nativewind']) return 'NativeWind';
-  if (deps['tailwindcss']) return 'Tailwind';
+  const tailwindConfigs = [
+    'tailwind.config.js',
+    'tailwind.config.ts',
+    'tailwind.config.cjs',
+    'tailwind.config.mjs',
+  ];
+
+  const hasTailwindConfig = tailwindConfigs.some((config) =>
+    fs.existsSync(path.join(projectPath, config))
+  );
+
+  const hasTailwindDep = !!(deps['tailwindcss'] || deps['nativewind']);
+
+  if (hasTailwindConfig || hasTailwindDep) {
+    return deps['nativewind'] ? 'NativeWind' : 'Tailwind';
+  }
+
   return 'StyleSheet';
 }
 

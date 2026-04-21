@@ -13,8 +13,8 @@ import { printStep, printSubStep, printWarning } from '../../utils/ui.js';
 export async function verifierNode(state) {
   printStep('Verifier — inspecting generated code');
 
-  const { filesQueue, targetProjectPath, rnProjectPath } = state;
-  const projectDir = targetProjectPath || rnProjectPath;
+  const { filesQueue, targetProjectPath } = state;
+  const projectDir = targetProjectPath;
 
   let allFilesPassed = true;
 

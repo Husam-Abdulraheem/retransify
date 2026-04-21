@@ -16,7 +16,7 @@ export const GraphState = Annotation.Root({
   }),
 
   // Destination React Native project path (populated after ensureNativeProject)
-  rnProjectPath: Annotation({
+  targetProjectPath: Annotation({
     reducer: (_, x) => x,
     default: () => '',
   }),
@@ -175,6 +175,10 @@ export const GraphState = Annotation.Root({
     reducer: (_, x) => x,
     default: () => ({}),
   }),
+  unresolvedErrors: Annotation({
+    reducer: (prev, x) => [...prev, ...(Array.isArray(x) ? x : [x])],
+    default: () => [],
+  }),
 });
 
 /**
@@ -191,6 +195,8 @@ export const NODE_NAMES = {
   DISK_WRITER: 'diskWriterNode',
   FILE_PICKER: 'filePickerNode', // Helper node: pulls next file from filesQueue
   RETRY_HANDLER: 'retryNode', // Handles transient 503/429 with exponential backoff
+  GLOBAL_AUDIT: 'globalAuditNode',
+  REPORTER: 'reporterNode',
 };
 
 export const MAX_HEAL_ATTEMPTS = 3;

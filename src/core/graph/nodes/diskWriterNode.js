@@ -1,6 +1,7 @@
 // src/core/graph/nodes/diskWriterNode.js
 import path from 'path';
 import fs from 'fs-extra';
+import { normalizePath } from '../../utils/pathUtils.js';
 import { CONFLICT_MAP, WEB_ONLY_BLOCKLIST } from '../../config/libraryRules.js';
 import {
   printSubStep,
@@ -41,10 +42,10 @@ export async function diskWriterNode(state) {
     }
   }
 
-  // ── 3. Write to disk directly using state.rnProjectPath ──────────
+  // ── 3. Write to disk directly using state.targetProjectPath ──────────
   try {
     const absoluteDestPath = path.join(
-      state.rnProjectPath || process.cwd(),
+      state.targetProjectPath || process.cwd(),
       destPath
     );
 
@@ -75,7 +76,7 @@ export async function diskWriterNode(state) {
 // 🚨 التعديل المعماري: الثقة المطلقة في PathMapper 🚨
 function resolveDestPath(filePath, pathMap) {
   let targetPath = pathMap?.[filePath] || filePath;
-  return targetPath.replace(/\\/g, '/');
+  return normalizePath(targetPath);
 }
 
 function filterDependencies(newDeps, installedDeps) {
