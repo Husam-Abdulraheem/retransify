@@ -105,10 +105,54 @@ export async function plannerNode(state) {
   }
   printSubStep(`Path map generated for ${Object.keys(pathMap).length} files`);
 
-  // ── 1.5. Ensure Root Index (app/index.tsx) ─────────────────────────────
-  // 1. Check if there is a target file for app/index.tsx
+  // ── 1.1. Semantic Grouping Router (Tabs / Drawer) ─────────────
+  if (navigationSchema.type === 'tabs' || navigationSchema.type === 'drawer') {
+    const groupName = navigationSchema.type; // 'tabs' أو 'drawer'
+    const explicitScreens = navigationSchema.screens || []; // شاشات محددة مسبقاً (إن وجدت)
+    let groupedCount = 0;
+
+    Object.keys(pathMap).forEach((sourcePath) => {
+      const expoPath = pathMap[sourcePath];
+
+      // القاعدة 1: يُمنع منعاً باتاً وضع المسارات الديناميكية داخل التبويبات
+      if (expoPath.includes('[')) return;
+
+      // القاعدة 2: تحديد ما إذا كان الملف شاشة رئيسية تستحق أن تكون Tab/Drawer
+      const isIndex = expoPath === 'app/index.tsx';
+      const isExplicit = explicitScreens.includes(expoPath);
+      // التقاط الشاشات المسطحة ذات المستوى الأول (مثل app/profile.tsx) وتجاهل المتعمقة (مثل app/ui/alert.tsx)
+      const isTopLevelStatic =
+        expoPath.split('/').length === 2 && !expoPath.includes('_layout');
+
+      // إذا حقق الشروط، ولم نتجاوز الحد الأقصى للتبويبات (5 كحد أقصى لمنع التشوه البصري)
+      if (
+        (isIndex ||
+          isExplicit ||
+          (explicitScreens.length === 0 && isTopLevelStatic)) &&
+        groupedCount < 5
+      ) {
+        // نقل الملف من الجذر إلى مجلد المجموعة: app/dashboard.tsx -> app/(tabs)/dashboard.tsx
+        pathMap[sourcePath] = expoPath.replace('app/', `app/(${groupName})/`);
+        groupedCount++;
+      }
+    });
+    printSubStep(
+      `Smart Routing: Moved ${groupedCount} screens into /(${groupName}) layout.`
+    );
+  }
+
+  // ── 1.5. Ensure Root Index (Smart Mapping) ─────────────────────────────
+  // Determine the target index based on navigation schema
+  const isGroupNav =
+    navigationSchema.type === 'tabs' || navigationSchema.type === 'drawer';
+  const groupName = navigationSchema.type === 'tabs' ? 'tabs' : 'drawer';
+  const targetIndexPath = isGroupNav
+    ? `${appRoot}/(${groupName})/index.tsx`
+    : `${appRoot}/index.tsx`;
+
+  // 1. Check if the target index is already mapped
   const hasRootIndex = Object.values(pathMap).some(
-    (p) => p === 'app/index.tsx'
+    (p) => p === targetIndexPath
   );
 
   if (!hasRootIndex) {
@@ -118,16 +162,15 @@ export async function plannerNode(state) {
     );
 
     if (appComponentFile) {
-      // Map App component to be the Expo starting screen
-      pathMap[appComponentFile.relativeToProject] = 'app/index.tsx';
-      printSubStep(`Mapped main App component to app/index.tsx`);
+      // Map App component to be the correct starting screen (Root or Tab)
+      pathMap[appComponentFile.relativeToProject] = targetIndexPath;
+      printSubStep(`Mapped main App component to ${targetIndexPath}`);
     } else {
       // 3. Safe Fallback: Inject a virtual index file to prevent app crash
-      const virtualIndexPath = 'app/index.tsx';
       filesQueue.push({
-        filePath: virtualIndexPath,
-        relativeToProject: virtualIndexPath,
-        absolutePath: `__virtual/${virtualIndexPath}`,
+        filePath: targetIndexPath,
+        relativeToProject: targetIndexPath,
+        absolutePath: `__virtual/${targetIndexPath}`,
         isVirtual: true,
         hasJSX: true,
         content: [
@@ -136,15 +179,15 @@ export async function plannerNode(state) {
           `export default function Index() {`,
           `  return (`,
           `    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>`,
-          `      <Text>No explicit root route or App component found.</Text>`,
+          `      <Text>No explicit route or App component found.</Text>`,
           `    </View>`,
           `  );`,
           `}`,
         ].join('\n'),
       });
-      pathMap[virtualIndexPath] = virtualIndexPath;
+      pathMap[targetIndexPath] = targetIndexPath;
       printWarning(
-        `No root index found. Injected virtual fallback: ${virtualIndexPath}`
+        `No root index found. Injected virtual fallback: ${targetIndexPath}`
       );
     }
   }
