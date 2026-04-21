@@ -3,7 +3,7 @@
 <div align="center">
 
 ![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)
-![Node](https://img.shields.io/badge/node-v20%2B-green.svg)
+![Node](https://img.shields.io/badge/node-v22-green.svg)
 ![Platform](https://img.shields.io/badge/platform-React%20Native%20%7C%20Expo-blueviolet.svg)
 ![AI Powered](https://img.shields.io/badge/AI-LangGraph%20powered-FF9900.svg)
 ![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)
@@ -36,65 +36,70 @@ Rebuilt on the latest **LangGraph** framework, Retransify acts as an intelligent
 
 Transitioning from web to mobile has traditionally been a highly tedious, manual process. Retransify automates these painful tasks by:
 
-- **Replacing brute-force translation with AST precision:** Understands the actual _intent_ and design of your code by parsing the Abstract Syntax Tree.
+- **Replacing brute-force translation with AST precision:** Understands the actual _intent_ and design of your code by parsing the Abstract Syntax Tree using `ts-morph`.
 - **Advanced Agentic Graph:** Uses an intelligent feedback loop (Write ➡️ Verify ➡️ Heal) mirroring human pair programming.
-- **Expo & NativeWind Modern Standards:** Output code is clean, TypeScript-ready, compatible with the newest Expo Router paradigms, and seamlessly manages NativeWind / Tailwind integrations.
+- **Expo & NativeWind Modern Standards:** Output code is clean, TypeScript-ready, compatible with the newest Expo Router paradigms (SDK 54+), and seamlessly manages NativeWind v4 integrations.
 
 ## ✨ Key Features
 
 Our latest architectural overhaul introduces cutting-edge capabilities:
 
 - **🧠 Cyclical AI Workflow (Powered by LangGraph)**:
-  - **Layout Agent Node**: A specialized agent dedicated to synthesizing complex `expo-router` structures (Tabs, Drawers, Modals) with perfect preservation of global providers and wrappers.
-  - **Converter Node**: Transforms standard components with high fidelity while injecting deterministic dependency mappings.
-  - **Verifier Node**: Actively analyzes the AI-generated code’s AST structure to mathematically flag leftover web DOM elements, standard unhandled syntax errors, and faulty routing structures.
-  - **Healer Node**: Takes rejected verifier metrics and dynamically corrects the AI-generated code without user intervention.
-- **🛤️ Deterministic Path Mapping**:
-  - Moves beyond AI "guessing" to precise AST-based resolution for imports and navigation.
-  - Ensures accurate relative paths for global assets like `global.css` across nested directories.
+  - **Analyzer Node**: Uses `ts-morph` to extract the full tech stack, entry points, and source roots without guessing.
+  - **Planner Node**: Generates a deterministic conversion map and file priority queue.
+  - **Layout Agent Node**: Synthesizes complex `expo-router` structures (Tabs, Drawers, Modals) with perfect preservation of global providers.
+  - **Executor Node**: Transforms components with high fidelity, injecting JIT context (RAG) for localized imports.
+  - **Verifier Node**: Actively analyzes AST structure to mathematically flag leftover DOM elements, syntax errors, and faulty routing.
+  - **Healer Node**: Dynamically corrects AI-generated code based on verifier feedback without user intervention.
+  - **Auto-Installer Node**: Maps and installs React Native-compatible alternatives for web packages.
+- **🛤️ Intelligent Route Projection**:
+  - Automatically maps React Router / Next.js routes to the Expo `app/` directory structure.
+  - Supports dynamic segments, groups, and complex layout nesting.
 - **🛡️ Resilience & Reliability**:
-  - **Gemini Flash Fallback**: Automatically switches to lighter models if the primary provider is overloaded (503), ensuring zero downtime for large migrations.
-- **🎨 Deep NativeWind Integration**:
-  - Complete support for NativeWind v4. It detects existing Tailwind setups, builds `.css` configurations, and correctly formats modern JSX `className` elements with TypeScript safety.
-- **📦 Auto Installer Node**:
-  - Dynamically discovers React Native-compatible alternatives for web packages and manages installations automatically during the graph execution.
-- **✨ Professional Interactive CLI**:
-  - Real-time tree-structured terminal interactions mapped seamlessly via a bespoke UI engine allowing clear insights without console clutter.
+  - **Multi-Model Fallback**: Automatically retries transient API errors (503/429) and switches providers if necessary.
+  - **Deterministic RAG**: Fetches full signatures for explicitly defined local imports to ensure type safety.
+- **🎨 NativeWind v4 Integration**:
+  - Complete support for modern styling. Detects Tailwind setups, configures `global.css`, and handles responsive class mappings.
+- **🩺 Retransify Doctor**:
+  - A built-in diagnostic tool to verify the health of the migrated project and fix broken dependencies.
 
 ---
 
 ## 🛠️ Architecture & Workflow
 
-Security and code integrity are prioritized via localized generation. Retransify utilizes a rigorous agentic graph logic to ensure maximum output reliability:
+Retransify utilizes a rigorous agentic graph logic to ensure maximum output reliability:
 
 ```mermaid
 graph TD;
-    A[React Web Codebase] -->|ts-morph / babel| B[Tech Stack & AST Integrations Analysis];
-    B --> C[Project Initializer / Route Mappers];
-    C --> D[LangGraph Processing Engine];
+    A[React Web Codebase] --> B[Analyzer Node];
+    B --> C[Planner Node];
+    C --> D[File Picker];
 
     subgraph Iterative AI Graph Loop
-    D --> E{File Type?};
-    E -- "Layout" --> L((Layout Agent));
-    E -- "Screen/Component" --> C1((Converter Node));
-    L --> F{Verifier Node};
-    C1 --> F;
-    F -- "Rejected (Syntax/DOM)" --> G((Healer Node));
+    D --> E[Executor Node];
+    E -- "Transient Error" --> R[Retry Handler];
+    R --> E;
+    E -- "Success" --> F[Verifier Node];
+    F -- "Missing Deps" --> G[Auto-Installer];
     G --> F;
-    F -- "Approved" --> H((Auto-Installer Node));
+    F -- "Syntax/DOM Error" --> H[Healer Node];
+    H --> F;
+    F -- "Approved" --> I[Context Updater];
+    I --> J[Disk Writer];
+    J --> D;
     end
 
-    H -- "Unresolved Imports" --> I[Expo / NPM Install Queue];
-    H -- "Ready" --> J[Final React Native Expo File];
+    D -- "Queue Empty" --> K[Final TS Verification];
+    K --> L[Ready Expo Project];
 ```
 
 ## 🚀 Getting Started
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) (v20+ recommended)
+- [Node.js](https://nodejs.org/) (v22 recommended)
 - [npm](https://www.npmjs.com/) or [yarn](https://yarnpkg.com/)
-- Developer API Key for **Gemini** (recommended) or **Groq**
+- Developer API Key for **Gemini** (Primary) or **Groq** (Secondary)
 
 ### Installation
 
@@ -126,8 +131,16 @@ SECONDARY_MODEL=gemini-1.5-flash
 
 ## 📱 Usage
 
+### 🏎️ Convert a Project
+Migrate your React web project to Expo:
 ```bash
-retransify convert ./path-to-your-react-web-app
+retransify convert ./path-to-react-app --sdk 54
+```
+
+### 🩺 Health Check
+Verify and fix dependencies in a migrated project:
+```bash
+retransify doctor ./path-to-expo-app
 ```
 
 ---
@@ -136,25 +149,26 @@ retransify convert ./path-to-your-react-web-app
 
 ```text
 retransify/
-├── cli.js                # Command Line Tool Initializer
+├── cli.js                # Entry point
 └── src/
-    ├── cli/              # UI workflows & interactive components
+    ├── cli/              # CLI logic & Interactive UI
     ├── core/
-    │   ├── ai/           # Agent Wrappers & Fallback Logic
-    │   ├── graph/        # Core LangGraph execution & Nodes
-    │   ├── parsers/      # Babel/AST execution layers
-    │   ├── prompt/       # Instruction synthesis
-    │   ├── scanners/     # RouteAnalyzers & file scanners
-    │   ├── services/     # ProjectInitializer, StyleConfigurator
-    │   └── utils/        # UI helpers & pure functions
-    └── types.js          # Definitions core
+    │   ├── ai/           # AI Multi-Provider Factory
+    │   ├── graph/        # LangGraph Workflow & Node definitions
+    │   ├── scanners/     # AST Route Analyzers & File Scanners
+    │   ├── services/     # Project Init & Style Config
+    │   ├── prompt/       # Smart Prompt Synthesis (RAG)
+    │   ├── detectors/    # Framework & Stack Detection
+    │   ├── helpers/      # Dependency Map & Path Mapping
+    │   └── utils/        # UI formatting & Verifier helpers
+    └── config/           # Library rules & Mobile mappings
 ```
 
 ---
 
 ## 🤝 Contributing
 
-**Retransify is fully open source**, and we deeply welcome contributions from the advanced React / AI developer community! Whether you want to refine our AST logic, introduce new Agent nodes to the LangGraph core, or support new AI frameworks logic, your help is incredibly valued.
+**Retransify is fully open source**, and we deeply welcome contributions! Whether you want to refine our AST logic, introduce new Agent nodes, or support new AI models, your help is valued.
 
 ---
 
