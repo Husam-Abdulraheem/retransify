@@ -1,6 +1,7 @@
 // src/core/graph/nodes/contextUpdaterNode.js
 import path from 'path';
-import { Project, SyntaxKind } from 'ts-morph';
+import { SyntaxKind } from 'ts-morph';
+import { AstManager } from '../../services/AstManager.js';
 import { printSubStep, printWarning } from '../../utils/ui.js';
 
 /**
@@ -52,15 +53,7 @@ export async function contextUpdaterNode(state) {
 
 function extractSummaryFromCode(code, filePath) {
   try {
-    const tsProject = new Project({
-      useInMemoryFileSystem: true,
-      compilerOptions: {
-        allowJs: true,
-        jsx: 2,
-        strict: false,
-        noResolve: true,
-      },
-    });
+    const tsProject = AstManager.getExpoProject();
 
     const sourceFile = tsProject.createSourceFile(
       `temp_${path.basename(filePath)}`,

@@ -1,6 +1,6 @@
 import path from 'path';
 import fs from 'fs-extra';
-import { Project } from 'ts-morph';
+import { AstManager } from '../services/AstManager.js';
 import { runSilentCommand } from './shell.js';
 import {
   CONFLICT_MAP,
@@ -115,7 +115,7 @@ export class DependencyManager {
     if (!filesQueue || filesQueue.length === 0) return;
     printSubStep(`Scanning ${filesQueue.length} files for dependencies...`);
 
-    const project = new Project({ useInMemoryFileSystem: true });
+    const project = AstManager.getWebProject();
 
     for (const file of filesQueue) {
       if (!file.content) {

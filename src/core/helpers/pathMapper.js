@@ -1,5 +1,5 @@
 import path from 'path';
-import { Project } from 'ts-morph';
+import { AstManager } from '../services/AstManager.js';
 
 export class PathMapper {
   /**
@@ -249,10 +249,7 @@ export class PathMapper {
 
     let sourceFile;
     try {
-      const tempProject = new Project({
-        useInMemoryFileSystem: true,
-        compilerOptions: { allowJs: true, jsx: 2, noResolve: true },
-      });
+      const tempProject = AstManager.getWebProject();
       sourceFile = tempProject.createSourceFile('__temp__.tsx', fileContent);
     } catch {
       return [];

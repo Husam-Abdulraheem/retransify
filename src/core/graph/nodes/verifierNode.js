@@ -1,291 +1,113 @@
-import crypto from 'crypto';
-import { Project, SyntaxKind } from 'ts-morph';
-import { printSubStep, printWarning } from '../../utils/ui.js';
-
-export async function verifierNode(state) {
-  const { generatedCode, currentFile, installedPackages = [] } = state;
-
-  if (!generatedCode) {
-    printWarning('VerifierNode: no code to verify');
-    return { errors: ['No code generated'] };
-  }
-
-  const filePath =
-    currentFile?.relativeToProject || currentFile?.filePath || 'unknown.tsx';
-  printSubStep('Verifying Structural AST Constraints ...');
-
-  const errors = [];
-
-  // Initializing a simple environment for structural analysis only (AST Parsing)
-  const project = new Project({
-    compilerOptions: { allowJs: true, jsx: 4 }, // JSX React
-    skipAddingFilesFromTsConfig: true,
-  });
-
-  const sourceFile = project.createSourceFile('temp.tsx', generatedCode, {
-    overwrite: true,
-  });
-
-  // Detect missing third-party dependencies AND illegal Node.js imports
-  const { missingDeps, illegalImportErrors } = detectMissingDependencies(
-    sourceFile,
-    installedPackages
-  );
-
-  // Illegal Node.js imports → structural errors (routed to Healer, not AutoInstaller)
-  if (illegalImportErrors.length > 0) {
-    errors.push(...illegalImportErrors);
-  }
-
-  try {
-    // Deep structural analysis (AST Linter) - here is the real power without any compiler stupidity
-    const astErrors = analyzeASTForErrors(sourceFile, filePath, state.pathMap);
-    errors.push(...astErrors);
-  } catch (error) {
-    printWarning(`ts-morph AST crashed: ${error.message}`);
-    errors.push(`Critical Syntax Error: Could not parse file.`);
-  }
-
-  // TypeScript diagnostics for catching parameter mismatches and type errors
-  // that the AI hallucinated (e.g., calling renderItem(cart[0]) without the 2nd arg)
-  try {
-    const diagnostics = sourceFile.getPreEmitDiagnostics();
-    for (const diag of diagnostics) {
-      const rawMessage = diag.getMessageText();
-      const message =
-        typeof rawMessage === 'string'
-          ? rawMessage
-          : rawMessage.getMessageText?.() || String(rawMessage);
-
-      // Only capture diagnostics about parameters, arguments, types, and assignments.
-      // Skip module resolution errors (TS2307) — those are false positives since we
-      // don't have real node_modules in the in-memory project.
-      const code = diag.getCode?.();
-      if (code === 2307) continue; // Cannot find module — handled by detectMissingDependencies
-
-      const isRelevant =
-        message.includes('Expected') ||
-        message.includes('argument') ||
-        message.includes('not assignable') ||
-        message.includes('does not exist on type') ||
-        message.includes('Property') ||
-        message.includes('parameter');
-
-      if (isRelevant) {
-        const line = diag.getLineNumber?.() || '?';
-        errors.push(`[TS${code || ''} L${line}]: ${message}`);
-      }
-    }
-  } catch {
-    // Diagnostics engine failure is non-fatal — structural checks above still apply
-  }
-
-  if (missingDeps.length > 0) {
-    printSubStep(`📦 Missing dependencies detected: ${missingDeps.join(', ')}`);
-  }
-
-  if (errors.length === 0 && missingDeps.length === 0) {
-    printSubStep('Structural Verification Passed ✔');
-  } else if (errors.length > 0) {
-    printSubStep(
-      `Verification failed: ${errors.length} structural error(s) detected`
-    );
-  }
-
-  const errorHash =
-    errors.length > 0
-      ? crypto
-          .createHash('md5')
-          .update(errors.join(''))
-          .digest('hex')
-          .slice(0, 16)
-      : null;
-
-  return {
-    errors,
-    missingDependencies: missingDeps, // Populated from import analysis (TS2307 equivalent)
-    lastErrorHash: errorHash,
-  };
-}
+// src/core/graph/nodes/verifierNode.js
+import { SyntaxKind } from 'ts-morph';
+import { AstManager } from '../../services/AstManager.js';
+import { printStep, printSubStep, printWarning } from '../../utils/ui.js';
 
 /**
- * Scans all import declarations in the generated code.
- * - Detects missing third-party packages (→ AutoInstaller)
- * - Detects illegal Node.js built-in imports (→ Healer as structural errors)
+ * VerifierNode - Audits the generated React Native code using AST structural checks
+ * and compiler diagnostics.
+ *
+ * @param {import('../state.js').GraphState} state
+ * @returns {Partial<import('../state.js').GraphState>}
  */
-function detectMissingDependencies(sourceFile, installedPackages = []) {
-  const missing = [];
-  const illegalImports = [];
-  const installedSet = new Set(installedPackages);
+export async function verifierNode(state) {
+  printStep('Verifier — inspecting generated code');
 
-  // Node.js built-ins that are NOT available in React Native / Expo
-  const nodeBuiltIns = new Set([
-    'fs',
-    'path',
-    'crypto',
-    'http',
-    'https',
-    'os',
-    'stream',
-    'events',
-    'util',
-    'child_process',
-    'net',
-    'tls',
-    'dns',
-    'readline',
-    'zlib',
-    'buffer',
-    'assert',
-    'vm',
-    'cluster',
-  ]);
+  const { filesQueue, targetProjectPath, rnProjectPath } = state;
+  const projectDir = targetProjectPath || rnProjectPath;
 
-  const importDecls = sourceFile.getImportDeclarations();
-  for (const decl of importDecls) {
-    const moduleSpecifier = decl.getModuleSpecifierValue();
+  let allFilesPassed = true;
 
-    // Skip relative imports and path aliases
-    if (
-      moduleSpecifier.startsWith('.') ||
-      moduleSpecifier.startsWith('/') ||
-      moduleSpecifier.startsWith('@/')
-    ) {
-      continue;
-    }
+  // Web concepts that break Native performance or layouts
+  const prohibitedTailwindClasses = [
+    'h-screen',
+    'w-screen',
+    'fixed',
+    'grid',
+    'hover:',
+    'focus:',
+    'cursor-',
+    'active:',
+  ];
 
-    // Normalize scoped packages: '@scope/pkg/sub' -> '@scope/pkg'
-    // and plain packages: 'pkg/sub' -> 'pkg'
-    const parts = moduleSpecifier.split('/');
-    const packageName = moduleSpecifier.startsWith('@')
-      ? parts.slice(0, 2).join('/')
-      : parts[0];
+  for (const fileObj of filesQueue) {
+    // Only verify files that were actually modified or transpilied
+    if (fileObj.isVirtual || fileObj.isAsset || !fileObj.content) continue;
+    // Note: Checking a flag like isTranspiled if available, otherwise check if path changed or context updated
 
-    // 🚨 1. Illegal Node.js built-in → structural error for Healer
-    if (nodeBuiltIns.has(packageName)) {
-      illegalImports.push(
-        `Line ${decl.getStartLineNumber()}: Illegal import '${packageName}'. Node.js built-in modules are NOT supported in React Native. You MUST remove this import and use Expo/React Native alternatives.`
-      );
-      continue;
-    }
+    const errors = [];
 
-    // 🚨 2. Missing third-party package → AutoInstaller
-    if (!installedSet.has(packageName)) {
-      // Never flag react / react-native themselves as missing
-      if (packageName !== 'react' && packageName !== 'react-native') {
-        missing.push(packageName);
-      }
-    }
-  }
-
-  return {
-    missingDeps: [...new Set(missing)],
-    illegalImportErrors: illegalImports,
-  };
-}
-
-// The helper function analyzeASTForErrors remains exactly the same because it is written with genius
-function analyzeASTForErrors(sourceFile, filePath, pathMap = {}) {
-  const errors = [];
-  const isComponent =
-    /\.(tsx|jsx)$/i.test(filePath) || sourceFile.getText().includes('react');
-
-  if (isComponent) {
-    // 🚨 Metro static require rule: require() must be called with a string literal only.
-    // Dynamic require breaks bundling and usually fails silently at runtime.
-    const callExpressions = sourceFile.getDescendantsOfKind(
-      SyntaxKind.CallExpression
+    // 1. Live Memory Update (No Disk I/O, No Memory Leak)
+    const sourceFile = AstManager.upsertExpoFile(
+      fileObj.absolutePath,
+      fileObj.content,
+      projectDir
     );
-    for (const callExpr of callExpressions) {
-      const callee = callExpr.getExpression()?.getText?.();
-      if (callee !== 'require') continue;
-      const args = callExpr.getArguments();
-      const firstArg = args?.[0];
-      if (!firstArg) continue;
-      if (firstArg.getKind() !== SyntaxKind.StringLiteral) {
+
+    // 2. Structural & Syntax Verification (Compiler Diagnostics)
+    const diagnostics = sourceFile.getPreEmitDiagnostics();
+    for (const diagnostic of diagnostics) {
+      const message = diagnostic.getMessageText();
+      const line = diagnostic.getLineNumber();
+      const code = diagnostic.getCode();
+
+      // Skip missing modules error (handled by AutoInstaller separately)
+      if (code === 2307) continue;
+
+      if (diagnostic.getCategory() === 1 /* Error */) {
         errors.push(
-          `Line ${callExpr.getStartLineNumber()}: CRITICAL ASSET ERROR. Dynamic require() detected. Metro Bundler requires a static string literal, e.g. require("@/assets/logo.png"). Use a static lookup map instead.`
+          `[TS${code} L${line || '?'}]: ${typeof message === 'string' ? message : message.getMessageText()}`
         );
       }
     }
 
-    const jsxElements = sourceFile.getDescendantsOfKind(SyntaxKind.JsxElement);
-    const jsxSelfClosing = sourceFile.getDescendantsOfKind(
-      SyntaxKind.JsxSelfClosingElement
+    // 3. Prohibited Web Elements & Classes (NativeWind Guard)
+    const jsxAttributes = sourceFile.getDescendantsOfKind(
+      SyntaxKind.JsxAttribute
     );
-
-    // 1. Prevent web elements
-    const checkDynamicTagName = (tagName, line) => {
-      if (/^[a-z]/.test(tagName)) {
-        errors.push(
-          `Line ${line}: Unsupported Web DOM element <${tagName}> detected. Use React Native components.`
-        );
-      }
-    };
-
-    // 2. Building a list of valid routes
-    const validRoutes = new Set(
-      Object.values(pathMap)
-        .filter((p) => /^app\//i.test(p))
-        .map((p) => {
-          let route =
-            '/' + p.replace(/^app\//i, '').replace(/\.(tsx|jsx|ts|js)$/i, '');
-          // Fix: Remove Expo Route Groups e.g., /(tabs) or /(drawer)
-          route = route.replace(/\/\([^)]+\)/g, '');
-          if (route.endsWith('/index')) route = route.replace('/index', '');
-          if (route.endsWith('/_layout')) route = route.replace('/_layout', '');
-          return route === '' ? '/' : route.toLowerCase();
-        })
-    );
-
-    // 3. Checking for dead links
-    const checkHrefForDeadLinks = (element, line) => {
-      const tagName = element.getTagNameNode().getText();
-      if (tagName === 'Link' || tagName === 'Redirect') {
-        const hrefAttr = element.getAttribute('href');
-        if (hrefAttr && hrefAttr.getKind() === SyntaxKind.JsxAttribute) {
-          const val = hrefAttr
-            .getInitializer()
-            ?.getText()
-            ?.replace(/['"]/g, '');
-          if (
-            val &&
-            !val.startsWith('http') &&
-            !val.includes('{') &&
-            !val.includes('$')
-          ) {
-            const targetUrl = val.toLowerCase();
-            const isMatch = Array.from(validRoutes).some((validRoute) => {
-              const regexStr =
-                '^' + validRoute.replace(/\[.*?\]/g, '[^/]+') + '$';
-              return new RegExp(regexStr).test(targetUrl);
-            });
-            if (!isMatch) {
-              const available = Array.from(validRoutes).join(', ');
+    jsxAttributes.forEach((attr) => {
+      const attrName = attr.getName();
+      if (attrName === 'className' || attrName === 'style') {
+        const initializer = attr.getInitializer();
+        if (initializer && initializer.getKind() === SyntaxKind.StringLiteral) {
+          const classString = initializer.getLiteralText();
+          prohibitedTailwindClasses.forEach((badClass) => {
+            if (classString.includes(badClass)) {
               errors.push(
-                `Line ${line}: CRITICAL ROUTING ERROR. Dead link "${val}". Valid routes are: [${available}].`
+                `Line ${attr.getStartLineNumber()}: Unsupported web concept '${badClass}'. You MUST use Flexbox or RN-equivalent equivalents.`
               );
             }
-          }
+          });
         }
       }
-    };
+    });
 
-    jsxElements.forEach((element) => {
-      const openingElement = element.getOpeningElement();
-      const tagName = openingElement.getTagNameNode().getText().split('.')[0];
-      checkDynamicTagName(tagName, openingElement.getStartLineNumber());
-      checkHrefForDeadLinks(
-        openingElement,
-        openingElement.getStartLineNumber()
+    // 4. Update file metadata for Healer or Executor
+    if (errors.length > 0) {
+      fileObj.needsHealing = true;
+      fileObj.verificationErrors = errors;
+      allFilesPassed = false;
+      const displayPath = fileObj.relativeToProject || fileObj.filePath;
+      printWarning(
+        `Verification failed for ${displayPath} (${errors.length} errors)`
       );
-    });
-
-    jsxSelfClosing.forEach((element) => {
-      const tagName = element.getTagNameNode().getText().split('.')[0];
-      checkDynamicTagName(tagName, element.getStartLineNumber());
-      checkHrefForDeadLinks(element, element.getStartLineNumber());
-    });
+    } else {
+      fileObj.needsHealing = false;
+      fileObj.verificationErrors = [];
+      const displayPath = fileObj.relativeToProject || fileObj.filePath;
+      printSubStep(`Verified: ${displayPath}`, 1);
+    }
   }
-  return [...new Set(errors)];
+
+  if (allFilesPassed) {
+    printSubStep(
+      'All transpiled files passed structural verification.',
+      1,
+      true
+    );
+  } else {
+    printSubStep('Routing failed files to Healer Node...', 1, true);
+  }
+
+  return { filesQueue };
 }

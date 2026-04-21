@@ -1,6 +1,7 @@
 import path from 'path';
 import fs from 'fs-extra';
-import { Project, SyntaxKind } from 'ts-morph';
+import { SyntaxKind } from 'ts-morph';
+import { AstManager } from '../../services/AstManager.js';
 import { FrameworkDetector } from '../../detectors/FrameworkDetector.js';
 import { setupNativeWind } from '../../services/StyleConfigurator.js';
 import { ContextStore } from '../helpers/ContextStore.js';
@@ -47,26 +48,7 @@ export async function analyzerNode(state) {
     await FrameworkDetector.detect(projectPath);
 
   // Setup ts-morph Project early for analysis
-  const tsConfigPath = path.join(projectPath, 'tsconfig.json');
-  const jsConfigPath = path.join(projectPath, 'jsconfig.json');
-  const configPath = (await fs.pathExists(tsConfigPath))
-    ? tsConfigPath
-    : (await fs.pathExists(jsConfigPath))
-      ? jsConfigPath
-      : undefined;
-
-  const tsProject = new Project({
-    tsConfigFilePath: configPath,
-    skipAddingFilesFromTsConfig: true,
-    skipFileDependencyResolution: true,
-    compilerOptions: {
-      allowJs: true,
-      jsx: 2, // React JSX
-      strict: false,
-      noResolve: true,
-      isolatedModules: true,
-    },
-  });
+  const tsProject = AstManager.getWebProject();
 
   // Extract Path Aliases for dynamic mapping
   const pathAliases = tsProject.getCompilerOptions().paths || {};

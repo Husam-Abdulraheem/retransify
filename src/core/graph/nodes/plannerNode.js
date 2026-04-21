@@ -1,5 +1,5 @@
 // src/core/graph/nodes/plannerNode.js
-import { Project } from 'ts-morph';
+import { AstManager } from '../../services/AstManager.js';
 import path from 'path';
 import { PathMapper } from '../../helpers/pathMapper.js';
 import { printStep, printSubStep, printWarning } from '../../utils/ui.js';
@@ -224,12 +224,7 @@ function buildDependencyGraph(filesQueue) {
   const graph = {};
   const filePathSet = new Set(filesQueue.map((f) => f.relativeToProject));
 
-  // 1. Initialize a very lightweight ts-morph project in memory
-  const project = new Project({
-    skipAddingFilesFromTsConfig: true,
-    // No need for deep dependency resolution here, just a quick structural (AST) scan
-    skipFileDependencyResolution: true,
-  });
+  const project = AstManager.getWebProject();
 
   // 2. Add files to the project and initialize the graph tree
   for (const fileObj of filesQueue) {

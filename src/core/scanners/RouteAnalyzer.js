@@ -1,4 +1,5 @@
-import { Project, SyntaxKind } from 'ts-morph';
+import { SyntaxKind } from 'ts-morph';
+import { AstManager } from '../services/AstManager.js';
 import path from 'path';
 import fs from 'fs-extra';
 import { ui } from '../utils/ui.js';
@@ -21,15 +22,7 @@ export class RouteAnalyzer {
     const allProvidersMap = new Map();
     let globalHeader = null;
 
-    // 1. Safe Isolated ts-morph Project Setup
-    const project = new Project({
-      skipAddingFilesFromTsConfig: true,
-      skipFileDependencyResolution: true,
-      compilerOptions: {
-        allowJs: true,
-        jsx: 2, // React JSX
-      },
-    });
+    const project = AstManager.getWebProject();
 
     // 2. Safe File Loading & AST Injection
     for (const fileObj of filesQueue) {
