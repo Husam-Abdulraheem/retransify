@@ -1,4 +1,5 @@
 // src/core/graph/helpers/ContextStore.js
+import { normalizePath } from '../../utils/pathUtils.js';
 /**
  * ContextStore — Pure In-Memory Key-Value store for file summaries.
  *
@@ -53,8 +54,7 @@ export class ContextStore {
     const results = [];
     for (const filePath of paths) {
       // Normalize to forward slashes for consistent lookup
-      const normalized = filePath.replace(/\\/g, '/');
-      const entry = this._store.get(normalized);
+      const entry = this._store.get(normalizePath(filePath));
       if (entry) {
         results.push({
           pageContent: entry.summary,

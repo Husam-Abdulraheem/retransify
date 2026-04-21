@@ -1,4 +1,9 @@
 import path from 'path';
+import {
+  normalizePath,
+  joinPaths,
+  getRelativePath,
+} from '../utils/pathUtils.js';
 import { AstManager } from '../services/AstManager.js';
 
 export class PathMapper {
@@ -25,7 +30,7 @@ export class PathMapper {
     const importRegex = /(?:from|import|require\()\s*['"]([^'"]+)['"]/g;
     let match;
 
-    const currentDir = path.dirname(currentFilePath).replace(/\\/g, '/');
+    const currentDir = normalizePath(path.dirname(currentFilePath));
     const newCurrentPath = pathMap[currentFilePath] || currentFilePath;
 
     while ((match = importRegex.exec(currentFileContent)) !== null) {
@@ -53,9 +58,7 @@ export class PathMapper {
 
       let importedProjectRelative;
       if (normalizedImportString.startsWith('.')) {
-        importedProjectRelative = path.posix
-          .join(currentDir, normalizedImportString)
-          .replace(/\\/g, '/');
+        importedProjectRelative = joinPaths(currentDir, normalizedImportString);
       } else {
         importedProjectRelative = normalizedImportString;
       }
@@ -105,11 +108,10 @@ export class PathMapper {
    * Handles trimming of '/index' for cleaner imports.
    */
   static calculateExactRelativePath(newSourcePath, newTargetPath) {
-    const sourceDir = path.dirname(newSourcePath);
-    let relativePath = path.relative(sourceDir, newTargetPath);
-
-    // Enforce POSIX slashes (Windows fix)
-    relativePath = relativePath.split(path.sep).join('/');
+    let relativePath = getRelativePath(
+      path.dirname(newSourcePath),
+      newTargetPath
+    );
 
     if (!relativePath.startsWith('.')) {
       relativePath = './' + relativePath;
@@ -216,7 +218,7 @@ export class PathMapper {
    * Preserves original domain architecture and prefix (src/).
    */
   static determineNewPath(file) {
-    let normalizedPath = file.relativeToProject.replace(/\\/g, '/');
+    let normalizedPath = normalizePath(file.relativeToProject);
 
     const ext = path.extname(normalizedPath);
     if (['.js', '.jsx', '.ts', '.tsx'].includes(ext)) {
@@ -255,7 +257,7 @@ export class PathMapper {
       return [];
     }
 
-    const currentDir = path.dirname(currentFilePath).replace(/\\/g, '/');
+    const currentDir = normalizePath(path.dirname(currentFilePath));
     const resolved = [];
 
     for (const imp of sourceFile.getImportDeclarations()) {
@@ -275,7 +277,7 @@ export class PathMapper {
       if (!spec.startsWith('.') && !spec.startsWith('/')) continue;
 
       // Resolve to project-relative path using posix
-      const joined = path.posix.join(currentDir, spec).replace(/\\/g, '/');
+      const joined = joinPaths(currentDir, spec);
 
       // Attempt all common extensions (ts-morph won't resolve without file system)
       const candidates = [

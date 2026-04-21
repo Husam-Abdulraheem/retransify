@@ -13,6 +13,7 @@ import {
   startSubSpinner,
   stopSpinner,
 } from '../utils/ui.js';
+import { getRelativePath } from '../utils/pathUtils.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -241,9 +242,7 @@ export async function migrateAssets(sourceDir, targetDir) {
       } else {
         const ext = path.extname(file).toLowerCase();
         if (EXTS.includes(ext) && !IGNORED_JSONS.includes(file)) {
-          const relPath = path
-            .relative(sourceDir, fullPath)
-            .replace(/\\/g, '/');
+          const relPath = getRelativePath(sourceDir, fullPath);
 
           // Preserve directory structure instead of flattening.
           // We strip common prefixes (src/assets, public, assets, src) to keep the target folder clean.

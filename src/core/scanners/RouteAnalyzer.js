@@ -2,6 +2,11 @@ import { SyntaxKind } from 'ts-morph';
 import { AstManager } from '../services/AstManager.js';
 import path from 'path';
 import fs from 'fs-extra';
+import {
+  normalizePath,
+  joinPaths,
+  getRelativePath,
+} from '../utils/pathUtils.js';
 import { ui } from '../utils/ui.js';
 
 export class RouteAnalyzer {
@@ -221,9 +226,10 @@ export class RouteAnalyzer {
             .some((v) => v.getName() === tagName);
 
         if (hasLocalHeaderDeclaration) {
-          const selfPath = path
-            .relative(projectRoot, sourceFile.getFilePath())
-            .replace(/\\/g, '/');
+          const selfPath = getRelativePath(
+            projectRoot,
+            sourceFile.getFilePath()
+          );
           return {
             name: tagName,
             source: selfPath,
@@ -667,7 +673,7 @@ export class RouteAnalyzer {
       ];
       for (const candidate of candidates) {
         if (fs.existsSync(candidate)) {
-          return path.relative(projectRoot, candidate).replace(/\\/g, '/');
+          return getRelativePath(projectRoot, candidate);
         }
       }
     }
@@ -703,7 +709,7 @@ export class RouteAnalyzer {
       : `${basePath}/${modifiedPath}.tsx`;
   }
 
-  static async projectRoutes(rnProjectPath, routeMap) {
+  static async projectRoutes(targetProjectPath, routeMap) {
     ui.step('RouteAnalyzer', 'Validating route map for File System...');
 
     // Only display routes, do not write empty scaffolding files to prevent Metro crashes

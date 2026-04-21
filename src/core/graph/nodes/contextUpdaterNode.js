@@ -3,6 +3,7 @@ import path from 'path';
 import { SyntaxKind } from 'ts-morph';
 import { AstManager } from '../../services/AstManager.js';
 import { printSubStep, printWarning } from '../../utils/ui.js';
+import { normalizePath } from '../../utils/pathUtils.js';
 
 /**
  * ContextUpdaterNode - Updates ContextStore after a file is converted.
@@ -18,11 +19,9 @@ export async function contextUpdaterNode(state) {
 
   if (!generatedCode || !vectorStore) return {};
 
-  const filePath = (
-    currentFile?.relativeToProject ||
-    currentFile?.filePath ||
-    ''
-  ).replace(/\\/g, '/');
+  const filePath = normalizePath(
+    currentFile?.relativeToProject || currentFile?.filePath || ''
+  );
   if (!filePath) return {};
 
   try {

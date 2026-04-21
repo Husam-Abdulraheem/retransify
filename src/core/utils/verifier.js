@@ -1,4 +1,5 @@
 import { exec } from 'child_process';
+import { normalizePath } from './pathUtils.js';
 
 export class Verifier {
   /**
@@ -66,11 +67,11 @@ export class Verifier {
 
     // Normalized target path for comparison (e.g., src/components/Button.tsx)
     // tsc output usually looks like: src/components/Button.tsx(10,5): error TS2304: Cannot find name 'View'.
-    const normalizedTarget = targetFile.replace(/\\/g, '/');
+    const normalizedTarget = normalizePath(targetFile);
 
     for (const line of lines) {
       // 1. Check if line refers to our file
-      if (!line.replace(/\\/g, '/').includes(normalizedTarget)) {
+      if (!normalizePath(line).includes(normalizedTarget)) {
         continue;
       }
 
