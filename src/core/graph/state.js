@@ -116,6 +116,13 @@ export const GraphState = Annotation.Root({
     default: () => null,
   }),
 
+  // True home screen discovered by HomeScreenResolver via 4-step AST chain.
+  // Shape: { homeFilePath: string, homeComponentName: string, appFilePath: string|null } | null
+  homeResolution: Annotation({
+    reducer: (_, x) => x,
+    default: () => null,
+  }),
+
   // ── Errors ───────────────────────────────────────────────────
   // Current file errors (populated from VerifierNode)
   errors: Annotation({

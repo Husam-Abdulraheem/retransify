@@ -21,6 +21,7 @@ import { RouteAnalyzer } from '../scanners/RouteAnalyzer.js';
 import { ensureNativeProject } from '../services/ProjectInitializer.js';
 import { FrameworkDetector } from '../detectors/FrameworkDetector.js';
 import { getRealEntryPoint, inferSourceRoot } from './nodes/analyzerNode.js';
+import { HomeScreenResolver } from '../scanners/HomeScreenResolver.js';
 import {
   startSpinner,
   stopSpinner,
@@ -91,12 +92,12 @@ function buildWorkflow(models) {
   workflow.addConditionalEdges(NODE_NAMES.FILE_PICKER, shouldProcessFile, {
     process: NODE_NAMES.EXECUTOR,
     skip: NODE_NAMES.FILE_PICKER, // Skipped file -> fetch next file
-    done: NODE_NAMES.AUTO_HEALER, // Empty list -> final polish
+    done: NODE_NAMES.GLOBAL_AUDIT, // 👈 البدء بالفحص النهائي أولاً
   });
 
-  workflow.addEdge(NODE_NAMES.AUTO_HEALER, NODE_NAMES.GLOBAL_AUDIT);
+  workflow.addEdge(NODE_NAMES.GLOBAL_AUDIT, NODE_NAMES.AUTO_HEALER); // 👈 ثم تشغيل المعالج التلقائي
 
-  workflow.addEdge(NODE_NAMES.GLOBAL_AUDIT, NODE_NAMES.REPORTER);
+  workflow.addEdge(NODE_NAMES.AUTO_HEALER, NODE_NAMES.REPORTER); // 👈 وأخيراً التقرير
   workflow.addEdge(NODE_NAMES.REPORTER, END);
 
   // After Executor -> check if generation succeeded
@@ -270,6 +271,19 @@ export async function runMigrationWorkflow(
   const entryFilePath = await getRealEntryPoint(projectPath, buildTool);
   const sourceRoot = inferSourceRoot(projectPath, entryFilePath);
 
+  // ── 3.55. Resolve True Home Screen (AST 4-Step Chain) ─────────────────
+  // Discovers the real home screen by tracing: Bootstrap → Root Component
+  // → App file → Route path="/" using ts-morph, NOT by filename guessing.
+  const homeResolution = await HomeScreenResolver.resolve(
+    projectPath,
+    filesQueue
+  );
+  if (homeResolution) {
+    printInfo(
+      `[HomeResolver] Home screen resolved: <${homeResolution.homeComponentName} /> in ${homeResolution.homeFilePath}`
+    );
+  }
+
   // ── 3.6. Route Extraction & Projection ──────────────────────────
   const { routeMap, routeMetadata, providers, globalHeader } =
     await RouteAnalyzer.analyze(projectPath, filesQueue, sourceRoot);
@@ -325,7 +339,8 @@ export async function runMigrationWorkflow(
     routeMap,
     routeMetadata: routeMetadata || {},
     globalProviders: providers || [],
-    globalHeader: globalHeader || null, // 👈 التمرير للحالة
+    globalHeader: globalHeader || null,
+    homeResolution: homeResolution || null,
     navigationSchema,
     facts: { sourceRoot },
     vectorStore: null,
