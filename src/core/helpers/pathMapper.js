@@ -164,22 +164,18 @@ export class PathMapper {
           );
           const normalizedPath = refinedPath.toLowerCase();
 
+          // Determine groupBase dynamically.
+          // If the target path is in app/ (root) or src/app/ (nested), we must find where it starts.
           const groupBase = refinedPath.startsWith('src/app/')
             ? 'src/app'
             : 'app';
 
           if (!refinedPath.includes(`${groupBase}/${routeGroup}/`)) {
             if (
-              navigationSchema.type === 'tabs' &&
-              normalizedTabs.includes(normalizedPath)
-            ) {
-              refinedPath = refinedPath.replace(
-                `${groupBase}/`,
-                `${groupBase}/${routeGroup}/`
-              );
-            } else if (
-              navigationSchema.type === 'drawer' &&
-              normalizedDrawer.includes(normalizedPath)
+              (navigationSchema.type === 'tabs' &&
+                normalizedTabs.includes(normalizedPath)) ||
+              (navigationSchema.type === 'drawer' &&
+                normalizedDrawer.includes(normalizedPath))
             ) {
               refinedPath = refinedPath.replace(
                 `${groupBase}/`,
@@ -208,6 +204,14 @@ export class PathMapper {
       }
 
       pathMap[oldPath] = refinedPath;
+      if (
+        oldPath.startsWith('src/') &&
+        !refinedPath.startsWith('src/') &&
+        !refinedPath.startsWith('app/')
+      ) {
+        // Warning: potential loss of src prefix for non-app file
+        // console.log(`[PathMapper] Mapping ${oldPath} -> ${refinedPath}`);
+      }
     }
 
     return pathMap;

@@ -10,13 +10,13 @@ export function createFastModel() {
   if (PROVIDER === 'groq') {
     return new ChatGroq({
       model: process.env.AI_FAST_MODEL || 'llama-3.1-8b-instant',
-      temperature: 0.1,
+      temperature: 0,
       maxRetries: 3,
     });
   }
   return new ChatGoogleGenerativeAI({
     model: process.env.AI_FAST_MODEL || 'gemini-2.5-flash-lite',
-    temperature: 0.1,
+    temperature: 0,
     maxRetries: 3,
   });
 }
@@ -25,13 +25,13 @@ export function createSmartModel() {
   if (PROVIDER === 'groq') {
     return new ChatGroq({
       model: process.env.AI_SMART_MODEL || 'llama-3.3-70b-versatile',
-      temperature: 0.2,
+      temperature: 0,
       maxRetries: 3,
     });
   }
   return new ChatGoogleGenerativeAI({
     model: process.env.AI_SMART_MODEL || 'gemini-2.5-pro',
-    temperature: 0.2,
+    temperature: 0,
     maxRetries: 6,
   });
 }

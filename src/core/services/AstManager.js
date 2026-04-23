@@ -21,6 +21,7 @@ export class AstManager {
           allowJs: true,
           jsx: 2, // React JSX
           strict: false,
+          skipLibCheck: true,
           noResolve: true,
           isolatedModules: true,
         },
@@ -40,8 +41,10 @@ export class AstManager {
         skipFileDependencyResolution: false, // Important for detecting broken imports
         compilerOptions: {
           allowJs: true,
-          jsx: 2, // React JSX
+          jsx: 4,
+          esModuleInterop: true,
           strict: true,
+          skipLibCheck: true,
           baseUrl: targetProjectPath || '.',
           paths: {
             '@/*': ['./*'], // Supports Expo absolute aliases
