@@ -19,11 +19,15 @@ export class AstManager {
         skipFileDependencyResolution: true, // Extreme speed, no deep tracking
         compilerOptions: {
           allowJs: true,
+          noEmit: true,
           jsx: 2, // React JSX
           strict: false,
           skipLibCheck: true,
           noResolve: true,
           isolatedModules: true,
+          resolveJsonModule: true,
+          moduleResolution: 2,
+          target: 99,
         },
       });
     }
@@ -41,10 +45,14 @@ export class AstManager {
         skipFileDependencyResolution: false, // Important for detecting broken imports
         compilerOptions: {
           allowJs: true,
+          noEmit: true,
           jsx: 4,
           esModuleInterop: true,
           strict: true,
           skipLibCheck: true,
+          resolveJsonModule: true,
+          moduleResolution: 2,
+          target: 99,
           baseUrl: targetProjectPath || '.',
           paths: {
             '@/*': ['./*'], // Supports Expo absolute aliases
