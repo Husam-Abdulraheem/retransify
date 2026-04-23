@@ -36,6 +36,17 @@ export function createSmartModel() {
   });
 }
 
+/**
+ * Returns the name of the active smart model for UI display.
+ * @returns {string}
+ */
+export function getActiveModelName() {
+  if (PROVIDER === 'groq') {
+    return process.env.AI_SMART_MODEL || 'llama-3.3-70b-versatile';
+  }
+  return process.env.AI_SMART_MODEL || 'gemini-2.5-pro';
+}
+
 export function createEmbeddings() {
   // Currently using Gemini Embeddings (available free with API Key)
   // If you want Groq: use OpenAIEmbeddings with Groq endpoint

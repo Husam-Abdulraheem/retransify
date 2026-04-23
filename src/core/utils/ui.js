@@ -31,8 +31,9 @@ if (process.stdout.isTTY) {
 /**
  * Prints the Retransify ASCII banner.
  * Call once at CLI startup.
+ * @param {string} [modelName] - The name of the AI model being used
  */
-export function printBanner() {
+export function printBanner(modelName) {
   const line1 = pc.cyan(
     '  ██████╗ ███████╗████████╗██████╗  █████╗ ███╗  ██╗███████╗██╗███████╗██╗   ██╗'
   );
@@ -64,6 +65,9 @@ export function printBanner() {
   console.log(line6);
   console.log('');
   console.log(tagline + '  ' + version);
+  if (modelName) {
+    console.log(pc.dim(`  Model: ${pc.cyan(modelName)}`));
+  }
   console.log(separator);
   console.log('');
 }

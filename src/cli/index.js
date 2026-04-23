@@ -8,9 +8,10 @@ import {
   printWarning,
   printStep,
 } from '../core/utils/ui.js';
+import { getActiveModelName } from '../core/ai/aiFactory.js';
 
 export async function runCLI() {
-  printBanner();
+  printBanner(getActiveModelName());
 
   const args = process.argv.slice(2);
 
