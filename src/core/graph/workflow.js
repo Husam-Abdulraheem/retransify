@@ -14,6 +14,7 @@ import { filePickerNode } from './nodes/filePickerNode.js';
 import { runLayoutAgent } from './nodes/layoutAgentNode.js';
 import { globalAuditNode } from './nodes/globalAuditNode.js';
 import { reporterNode } from './nodes/reporterNode.js';
+import { autoHealerNode } from './nodes/autoHealerNode.js';
 import { createModelPair } from '../ai/aiFactory.js';
 import { DependencyManager } from '../helpers/dependencyManager.js';
 import { RouteAnalyzer } from '../scanners/RouteAnalyzer.js';
@@ -78,6 +79,7 @@ function buildWorkflow(models) {
   workflow.addNode(NODE_NAMES.GLOBAL_AUDIT, (state) => globalAuditNode(state));
 
   workflow.addNode(NODE_NAMES.REPORTER, (state) => reporterNode(state));
+  workflow.addNode(NODE_NAMES.AUTO_HEALER, (state) => autoHealerNode(state));
 
   // ── Define Static Edges ────────────────────────────
   workflow.setEntryPoint(NODE_NAMES.ANALYZER);
@@ -89,8 +91,10 @@ function buildWorkflow(models) {
   workflow.addConditionalEdges(NODE_NAMES.FILE_PICKER, shouldProcessFile, {
     process: NODE_NAMES.EXECUTOR,
     skip: NODE_NAMES.FILE_PICKER, // Skipped file -> fetch next file
-    done: NODE_NAMES.GLOBAL_AUDIT, // Empty list -> final checks
+    done: NODE_NAMES.AUTO_HEALER, // Empty list -> final polish
   });
+
+  workflow.addEdge(NODE_NAMES.AUTO_HEALER, NODE_NAMES.GLOBAL_AUDIT);
 
   workflow.addEdge(NODE_NAMES.GLOBAL_AUDIT, NODE_NAMES.REPORTER);
   workflow.addEdge(NODE_NAMES.REPORTER, END);
