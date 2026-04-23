@@ -9,6 +9,23 @@ import ora from 'ora';
 // ── Internal spinner instance ──────────────────────────────────
 let _spinner = null;
 
+// Handle terminal resize to prevent "ghosting" or broken lines
+if (process.stdout.isTTY) {
+  let resizeTimeout;
+  process.stdout.on('resize', () => {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(() => {
+      if (_spinner && _spinner.isSpinning) {
+        const text = _spinner.text;
+        const prefixText = _spinner.prefixText;
+        const color = _spinner.color;
+        _spinner.stop();
+        _spinner = ora({ text, prefixText, color }).start();
+      }
+    }, 100);
+  });
+}
+
 // ── Banner ─────────────────────────────────────────────────────
 
 /**

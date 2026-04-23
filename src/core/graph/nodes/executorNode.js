@@ -4,13 +4,7 @@ import path from 'path';
 import { buildPrompt } from '../../prompt/promptBuilder.js';
 import { PathMapper } from '../../helpers/pathMapper.js';
 import { z } from 'zod';
-import {
-  printSubStep,
-  printWarning,
-  printError,
-  startSubSpinner,
-  stopSpinner,
-} from '../../utils/ui.js';
+import { printSubStep, printWarning, printError } from '../../utils/ui.js';
 import { normalizePath, resolveAbsolutePath } from '../../utils/pathUtils.js';
 import { executeModel } from '../../ai/modelExecutor.js';
 

@@ -1,13 +1,7 @@
 // src/core/graph/nodes/healerNode.js
 import { buildFixPrompt } from '../../prompt/promptBuilder.js';
 import { z } from 'zod';
-import {
-  printSubStep,
-  printWarning,
-  printError,
-  startSubSpinner,
-  stopSpinner,
-} from '../../utils/ui.js';
+import { printSubStep, printError } from '../../utils/ui.js';
 import { MAX_HEAL_ATTEMPTS } from '../state.js';
 import { executeModel } from '../../ai/modelExecutor.js';
 
@@ -33,7 +27,6 @@ export async function healerNode(state, models = {}) {
     healAttempts,
     currentFile,
     installedPackages = [],
-    unresolvedErrors = [],
   } = state;
 
   const filePath =
@@ -88,7 +81,7 @@ export async function healerNode(state, models = {}) {
     printError(`HealerNode failed during invocation: ${err.message}`);
   }
 
-  printWarning(`HealerNode: failed to generate fix for ${filePath}`);
+  printSubStep(`Failed to generate fix`, 1);
 
   // If this was the last attempt, record as unresolved
   if (newAttemptCount >= MAX_HEAL_ATTEMPTS) {
@@ -101,7 +94,7 @@ export async function healerNode(state, models = {}) {
       suggestedAction:
         'Manually convert this component to React Native primitives (View, Text).',
     };
-    printWarning(`Marked ${errorRecord.filePath} for manual intervention.`);
+    printSubStep(`Marked for manual intervention`, 1);
     return {
       healAttempts: newAttemptCount,
       unresolvedErrors: [errorRecord],
