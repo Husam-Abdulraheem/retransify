@@ -51,10 +51,10 @@ export async function contextUpdaterNode(state) {
 }
 
 function extractSummaryFromCode(code, filePath) {
+  let sourceFile = null;
+  const tsProject = AstManager.getExpoProject();
   try {
-    const tsProject = AstManager.getExpoProject();
-
-    const sourceFile = tsProject.createSourceFile(
+    sourceFile = tsProject.createSourceFile(
       `temp_${path.basename(filePath)}`,
       code,
       { overwrite: true }
@@ -104,5 +104,13 @@ function extractSummaryFromCode(code, filePath) {
     return parts.join('\n');
   } catch {
     return `FILE: ${filePath} (CONVERTED)\nCODE_PREVIEW: ${code.slice(0, 200)}`;
+  } finally {
+    if (sourceFile) {
+      try {
+        tsProject.removeSourceFile(sourceFile);
+      } catch (e) {
+        console.error('Failed to remove source file:', e);
+      }
+    }
   }
 }

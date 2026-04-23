@@ -142,6 +142,13 @@ export class DependencyManager {
         imp.getModuleSpecifierValue()
       );
 
+      // Clean up the memory immediately to prevent AST memory leaks
+      try {
+        project.removeSourceFile(sourceFile);
+      } catch (e) {
+        console.error('Failed to remove source file:', e);
+      }
+
       file.imports = importsList;
       file.resolvedDeps = {
         safe: [],
