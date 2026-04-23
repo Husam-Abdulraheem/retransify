@@ -48,7 +48,7 @@ export class AstManager {
           noEmit: true,
           jsx: 4,
           esModuleInterop: true,
-          strict: true,
+          strict: false,
           skipLibCheck: true,
           resolveJsonModule: true,
           moduleResolution: 2,

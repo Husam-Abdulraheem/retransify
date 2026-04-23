@@ -86,6 +86,7 @@ export async function fixBrokenImports(targetProjectPath) {
         '.ts',
         '.js',
         '.jsx',
+        '.css',
         '/index.tsx',
         '/index.ts',
         '/index.js',
