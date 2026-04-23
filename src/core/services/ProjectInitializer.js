@@ -1,7 +1,7 @@
 import path from 'path';
 import fs from 'fs-extra';
 import { fileURLToPath } from 'url';
-import { execSync } from 'child_process';
+import { runSilentCommand } from '../helpers/shell.js';
 import { COMMON_DEPENDENCIES } from '../config/libraryRules.js';
 import { AppConfigService } from './AppConfigService.js';
 import {
@@ -82,8 +82,7 @@ export async function ensureNativeProject(
 
     startSubSpinner('Hydrating base template (npm install)...');
     try {
-      // stdio: 'ignore' — npm output is noise, errors are caught below
-      execSync('npm install', { cwd: projectPath, stdio: 'ignore' });
+      await runSilentCommand('npm install', projectPath);
       stopSpinner();
     } catch {
       stopSpinner();

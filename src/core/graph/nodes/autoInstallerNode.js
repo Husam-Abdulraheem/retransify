@@ -1,5 +1,11 @@
-import { execSync } from 'child_process';
-import { printSubStep, printWarning, printError } from '../../utils/ui.js';
+import { runSilentCommand } from '../../helpers/shell.js';
+import {
+  printSubStep,
+  printWarning,
+  printError,
+  startSubSpinner,
+  stopSpinner,
+} from '../../utils/ui.js';
 
 export async function autoInstallerNode(state) {
   const {
@@ -32,27 +38,23 @@ export async function autoInstallerNode(state) {
   }
 
   const packagesToInstall = missingDependencies.join(' ');
-  printSubStep(`Installing: ${packagesToInstall}...`, 1);
 
-  // 🔥 Magic solution: clean environment variables from parent npm traces
-  const cleanEnv = { ...process.env };
-  Object.keys(cleanEnv).forEach((key) => {
-    if (key.toLowerCase().startsWith('npm_')) {
-      delete cleanEnv[key];
-    }
-  });
+  // ── 1. Start UI Feedback ───────────────────────────────────────────
+  startSubSpinner(`Installing: ${packagesToInstall}...`);
 
   let success = false;
   try {
     // 🔙 Strict fallback to expo tool to ensure version compatibility
-    execSync(`npx expo install ${packagesToInstall}`, {
-      cwd: targetProjectPath || process.cwd(),
-      stdio: 'ignore', // silence expo/npm output
-      env: cleanEnv,
-    });
+    await runSilentCommand(
+      `npx expo install ${packagesToInstall}`,
+      targetProjectPath || process.cwd()
+    );
+
+    stopSpinner();
     printSubStep(`Installed successfully ✔`, 1, true);
     success = true;
   } catch {
+    stopSpinner();
     printError('Auto-installer: expo install failed');
   }
 

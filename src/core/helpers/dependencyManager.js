@@ -324,7 +324,7 @@ If it works in RN already, use "keep".`;
 
 async function checkNpmPackage(packageName) {
   try {
-    runSilentCommand(`npm view ${packageName} name`, process.cwd(), null);
+    await runSilentCommand(`npm view ${packageName} name`, process.cwd(), null);
     return true;
   } catch {
     return false;

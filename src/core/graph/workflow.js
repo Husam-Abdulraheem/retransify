@@ -35,7 +35,7 @@ import {
 } from '../utils/ui.js';
 import path from 'path';
 import fs from 'fs-extra';
-import { execSync } from 'child_process';
+import { runSilentCommand } from '../helpers/shell.js';
 
 // ── Build Workflow ─────────────────────────────────────────────────────────
 
@@ -285,9 +285,9 @@ export async function runMigrationWorkflow(
         startSpinner(
           'Installing react-native-gesture-handler and react-native-reanimated...'
         );
-        execSync(
+        await runSilentCommand(
           'npx expo install react-native-gesture-handler react-native-reanimated',
-          { cwd: targetProjectPath, stdio: 'ignore' }
+          targetProjectPath
         );
         succeedSpinner('Drawer dependencies installed successfully.');
       } catch (e) {

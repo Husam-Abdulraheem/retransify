@@ -1,4 +1,7 @@
-import { execSync } from 'child_process';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 
 /**
  * Execute a shell command silently.
@@ -7,18 +10,27 @@ import { execSync } from 'child_process';
  * @param {string} command - Command to run
  * @param {string} cwd - Working directory
  * @param {string} description - Description for the user (e.g., "Installing...")
- * @returns {void}
+ * @returns {Promise<void>}
  */
-export function runSilentCommand(command, cwd, description) {
+export async function runSilentCommand(command, cwd, description) {
   if (description) {
     console.log(description);
   }
 
+  // 🔥 Magic solution: clean environment variables from parent npm traces
+  const cleanEnv = { ...process.env };
+  Object.keys(cleanEnv).forEach((key) => {
+    if (key.toLowerCase().startsWith('npm_')) {
+      delete cleanEnv[key];
+    }
+  });
+
   try {
-    execSync(command, {
+    await execAsync(command, {
       cwd,
-      stdio: 'pipe', // Completely silent
       encoding: 'utf-8',
+      env: cleanEnv,
+      maxBuffer: 1024 * 1024 * 10, // 10MB buffer for large outputs
     });
   } catch (error) {
     // Only print error details if it fails
