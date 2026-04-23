@@ -35,6 +35,7 @@ export async function executorNode(state, models = {}) {
     routeMetadata = {},
     globalProviders = [],
     globalHeader = null,
+    homeResolution = null,
   } = state;
 
   if (!currentFile) {
@@ -119,7 +120,8 @@ export async function executorNode(state, models = {}) {
     navigationSchema,
     currentRouteMeta,
     globalProviders,
-    globalHeader
+    globalHeader,
+    homeResolution
   );
 
   // ── 3. Build Prompt ───────────────────────────────────────────
@@ -176,7 +178,8 @@ function buildFileContext(
   navigationSchema,
   fileMetadata = {},
   globalProviders = [],
-  globalHeader = null
+  globalHeader = null,
+  homeResolution = null
 ) {
   const filePath = currentFile.relativeToProject || currentFile.filePath;
   const baseName = path.basename(filePath);
@@ -220,5 +223,6 @@ function buildFileContext(
       (pathMap[filePath] && pathMap[filePath].endsWith('_layout.tsx')) || false,
     navigationSchema,
     requiredData: fileMetadata.requiredData || [],
+    homeComponentName: homeResolution?.homeComponentName || null,
   };
 }

@@ -23,6 +23,7 @@ export function buildPrompt(fileContext) {
     navigationSchema = {},
     requiredData = [],
     ragContext = '',
+    homeComponentName = null,
   } = fileContext;
 
   const isRootLayout = fileContext.targetPath === 'app/_layout.tsx';
@@ -120,10 +121,10 @@ STRICT ARCHITECTURAL RULES
 2. STYLING SYSTEM: **${targetStyleSystem}**
 ${
   isNativeWind
-    ? `   - [CRITICAL STYLING RULE]: You MUST use the 'className' prop with Tailwind classes (NativeWind v4 is pre-configured).
+    ? `   - [CRITICAL STYLING RULE]: You MUST use the 'className' prop with Tailwind classes. This project uses **NativeWind v4** (Stable).
    - STRICT PROHIBITION: You are FORBIDDEN from using 'StyleSheet.create({...})'. Do NOT output any StyleSheet objects.
-   - Translate ALL standard CSS and inline styles to equivalent Tailwind utility classes.
-   - Example: Replace <View style={styles.container}> with <View className="flex-1 items-center justify-center bg-white">.`
+   - DARK MODE (CRITICAL): Handle Dark Mode exclusively using the 'dark:' prefix (e.g., className="bg-white dark:bg-slate-900").
+   - FORBIDDEN WEB APIs: Do NOT use Web CSS variables, 'window.matchMedia', or manually detect theme via React state.`
     : `   - You MUST use 'StyleSheet.create({...})'.
    - STRICT PROHIBITION: DO NOT use the 'className' prop. Translate any existing Tailwind classes to standard StyleSheet objects.`
 }
@@ -144,34 +145,33 @@ ${
 ${
   isLayoutFile
     ? `   - [CRITICAL LAYOUT RULE]: This file is a ROUTER LAYOUT ('${fileContext.targetPath}').
+     - PRESERVE PROVIDERS: You MUST keep all global Providers (e.g., Redux Provider, Context).
 ${
   isGroupLayout
-    ? `     - You MUST render the Expo Router <${navigationSchema.type === 'tabs' ? 'Tabs' : 'Drawer'}> component.
-     - [NAVIGATION ARCHITECTURE]: Configure these screens as items: ${(navigationSchema.type === 'tabs' ? navigationSchema.tabs : navigationSchema.drawerScreens || []).join(', ')}`
-    : `     - You MUST wrap the application and render the Expo Router ${navigationSchema.type === 'tabs' || navigationSchema.type === 'drawer' ? '<Stack>' : '<Stack> or <Slot>'} component.
+    ? `     - You MUST render the Expo Router <${navigationSchema.type === 'tabs' ? 'Tabs' : 'Drawer'}> component.`
+    : `     - You MUST replace web routers (<Routes>, <BrowserRouter>) with Expo Router's <Slot /> or <Stack />.
 ${providerWrapperText}
 ${headerWrapperText}`
 }
-${navigationSchema.modals && navigationSchema.modals.length > 0 && isRootLayout ? `     - [MODALS CONFIGURATION]: The following paths MUST be configured as modals (e.g. options={{ presentation: 'modal' }}): ${navigationSchema.modals.join(', ')}` : ''}
 ${
-  isRootLayout
-    ? `     - [CRITICAL SETUP]: You MUST add "import '${PathMapper.calculateExactRelativePath(fileContext.targetPath || 'app/_layout.tsx', 'global.css')}';" at the very top of the file if NativeWind is used.
-     - [NATIVEWIND & EXPO-IMAGE INTEROP]: If NativeWind is used, you MUST register 'expo-image' globally in this file to support className by adding:
-       import { cssInterop } from 'nativewind';
-       import { Image } from 'expo-image';
-       cssInterop(Image, { className: 'style' });`
+  isRootLayout && isNativeWind
+    ? `     - [DARK MODE INJECTION (CRITICAL)]: You MUST integrate NativeWind's theme provider:
+       - Import: \`import { ThemeProvider, DarkTheme, DefaultTheme } from '@react-navigation/native';\`
+       - Import: \`import { useColorScheme } from 'nativewind';\`
+       - Inside the component: \`const { colorScheme } = useColorScheme();\`
+       - Wrap the Navigator (<Slot> or <Stack>) with \`<ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>\`.`
     : ''
 }
-     - [WEB TO MOBILE LAYOUT PATTERN (CRITICAL)]: In React Native, the Navigator MUST be the root visual element. DO NOT wrap the Navigator inside any UI container or ScrollView.`
+     - [WEB TO MOBILE LAYOUT PATTERN]: The Navigator MUST be the root visual element. DO NOT wrap the Navigator inside any UI container.`
     : `   - [CRITICAL SCREEN RULE]: This file is a STANDARD UI SCREEN ('${fileContext.targetPath}').
 ${
   isIndexFile
-    ? `     - [INDEX FILE RULE]: If the source file is just a wrapper (e.g., App.tsx) that imports and renders a main component (like <Home />), DO NOT invent UI. Simply import that component and render it.`
+    ? `     - [INDEX FILE RULE]: The true home screen component for this project is **<${homeComponentName || 'the main component'}/>** (resolved via AST analysis of the project's entry point).
+     - You MUST import it and render it directly. DO NOT invent any new UI. DO NOT replace it with another component.
+     - 🚨 [STRICT PROHIBITION]: You are FORBIDDEN from using <Redirect> in this file. Doing so causes an infinite redirect loop.
+     - If the source file only re-exports or wraps <${homeComponentName || 'the main component'}>, preserve that pattern exactly.`
     : ''
-}
-     - DO NOT import or use <Header> or <Footer>. The Header is handled centrally by the root _layout.tsx file.
-     - The Footer MUST BE COMPLETELY IGNORED and removed from this mobile version.
-     - SCROLLING: Wrap the main body of this screen in a <ScrollView className="flex-1"> or <View className="flex-1"> depending on content length to prevent clipping.`
+}`
 }
 
 ${
