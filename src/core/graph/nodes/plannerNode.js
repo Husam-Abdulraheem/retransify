@@ -36,10 +36,27 @@ export async function plannerNode(state) {
       hasJSX: true,
       content: [
         '// [VIRTUAL FILE INJECTED BY RETRANSIFY]',
-        `import { Stack } from 'expo-router';`,
+        `import { Slot } from 'expo-router';`,
+        `import { ThemeProvider, DarkTheme, DefaultTheme } from '@react-navigation/native';`,
+        `import { useColorScheme } from 'nativewind';`,
+        `import { useEffect } from 'react';`,
+        `import { Appearance } from 'react-native';`,
+        ``,
         `export default function RootLayout() {`,
-        `  // AI will dynamically inject Providers and Custom Headers here based on AST Context.`,
-        `  return <Stack screenOptions={{ headerShown: true }} />;\n}`,
+        `  const { colorScheme, setColorScheme } = useColorScheme();`,
+        ``,
+        `  // مزامنة حالة النظام الأولية مع NativeWind`,
+        `  useEffect(() => {`,
+        `    const systemTheme = Appearance.getColorScheme();`,
+        `    if (systemTheme) setColorScheme(systemTheme);`,
+        `  }, []);`,
+        ``,
+        `  return (`,
+        `    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>`,
+        `      <Slot />`,
+        `    </ThemeProvider>`,
+        `  );`,
+        `}`,
       ].join('\n'),
     });
   }
@@ -117,6 +134,12 @@ export async function plannerNode(state) {
       // القاعدة 1: يُمنع منعاً باتاً وضع المسارات الديناميكية داخل التبويبات
       if (expoPath.includes('[')) return;
 
+      // GUARD: يمنع نقل الملف الوهمي الجذر (الذي وظيفته إعادة التوجيه) إلى داخل التابات
+      const fileObj = filesQueue.find(
+        (f) => f.relativeToProject === sourcePath
+      );
+      if (fileObj?.isVirtual && expoPath === 'app/index.tsx') return;
+
       // القاعدة 2: تحديد ما إذا كان الملف شاشة رئيسية تستحق أن تكون Tab/Drawer
       const isIndex = expoPath === 'app/index.tsx';
       const isExplicit = explicitScreens.includes(expoPath);
@@ -142,35 +165,63 @@ export async function plannerNode(state) {
   }
 
   // ── 1.5. Ensure Root Index (Smart Mapping) ─────────────────────────────
-  // Determine the target index based on navigation schema
+  // Determine the target index based on navigation schema.
+  // GUARD: Virtual fallback files MUST stay at the root app/index.tsx to act as
+  // global entry points/fallbacks. Only real discovered components should move into groups.
   const isGroupNav =
     navigationSchema.type === 'tabs' || navigationSchema.type === 'drawer';
   const groupName = navigationSchema.type === 'tabs' ? 'tabs' : 'drawer';
-  const targetIndexPath = isGroupNav
+
+  // We'll decide the final path later based on whether we are using a real file or a virtual one.
+  const groupIndexPath = isGroupNav
     ? `${appRoot}/(${groupName})/index.tsx`
     : `${appRoot}/index.tsx`;
+  const rootIndexPath = `${appRoot}/index.tsx`;
 
-  // 1. Check if the target index is already mapped
+  // Check if the target index is already mapped (by RouteAnalyzer or prior step)
   const hasRootIndex = Object.values(pathMap).some(
-    (p) => p === targetIndexPath
+    (p) => p === groupIndexPath || p === rootIndexPath
   );
 
-  if (!hasRootIndex) {
-    // 2. Search for the actual App component to use as entry point
+  // ── Priority 1: HomeScreenResolver AST-driven dual mapping ───────────
+  const homeResolution = state.homeResolution || null;
+
+  if (homeResolution?.homeFilePath) {
+    // ✅ Real component discovered -> Map to Group Index if applicable
+    pathMap[homeResolution.homeFilePath] = groupIndexPath;
+    printSubStep(`[HomeResolver] Mapped true home screen → ${groupIndexPath}`);
+
+    if (homeResolution.appFilePath) {
+      const layoutPath = `${appRoot}/_layout.tsx`;
+      pathMap[homeResolution.appFilePath] = layoutPath;
+      printSubStep(
+        `[HomeResolver] Mapped App container → ${layoutPath} (preserves Providers)`
+      );
+
+      const virtualLayoutIndex = filesQueue.findIndex(
+        (f) => f.isVirtual && f.relativeToProject === layoutPath
+      );
+      if (virtualLayoutIndex !== -1) {
+        filesQueue.splice(virtualLayoutIndex, 1);
+        delete pathMap[layoutPath];
+      }
+    }
+  } else if (!hasRootIndex) {
+    // ── Priority 2: Name-based fallback (App.jsx / App.tsx) ──────────
     const appComponentFile = filesQueue.find((f) =>
       f.relativeToProject.match(/App\.(jsx|tsx|js|ts)$/i)
     );
 
     if (appComponentFile) {
-      // Map App component to be the correct starting screen (Root or Tab)
-      pathMap[appComponentFile.relativeToProject] = targetIndexPath;
-      printSubStep(`Mapped main App component to ${targetIndexPath}`);
+      pathMap[appComponentFile.relativeToProject] = groupIndexPath;
+      printSubStep(`Mapped main App component to ${groupIndexPath}`);
     } else {
-      // 3. Safe Fallback: Inject a virtual index file to prevent app crash
+      // ── Priority 3: Virtual index file (STRICTLY AT ROOT) ──────────
+      // This file is a placeholder, it should never be inside (tabs)
       filesQueue.push({
-        filePath: targetIndexPath,
-        relativeToProject: targetIndexPath,
-        absolutePath: `__virtual/${targetIndexPath}`,
+        filePath: rootIndexPath,
+        relativeToProject: rootIndexPath,
+        absolutePath: `__virtual/${rootIndexPath}`,
         isVirtual: true,
         hasJSX: true,
         content: [
@@ -185,10 +236,27 @@ export async function plannerNode(state) {
           `}`,
         ].join('\n'),
       });
-      pathMap[targetIndexPath] = targetIndexPath;
+      pathMap[rootIndexPath] = rootIndexPath;
       printWarning(
-        `No root index found. Injected virtual fallback: ${targetIndexPath}`
+        `No root index found. Injected virtual fallback: ${rootIndexPath}`
       );
+    }
+  } else if (!homeResolution) {
+    const appComponentFile = filesQueue.find((f) =>
+      f.relativeToProject.match(/App\.(jsx|tsx|js|ts)$/i)
+    );
+    if (appComponentFile) {
+      const layoutPath = `${appRoot}/_layout.tsx`;
+      pathMap[appComponentFile.relativeToProject] = layoutPath;
+      printSubStep(`Mapped main App component to ${layoutPath} (wrapper)`);
+
+      const virtualLayoutIndex = filesQueue.findIndex(
+        (f) => f.isVirtual && f.relativeToProject === layoutPath
+      );
+      if (virtualLayoutIndex !== -1) {
+        filesQueue.splice(virtualLayoutIndex, 1);
+        delete pathMap[layoutPath];
+      }
     }
   }
 
