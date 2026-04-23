@@ -179,6 +179,10 @@ export const GraphState = Annotation.Root({
     reducer: (prev, x) => [...prev, ...(Array.isArray(x) ? x : [x])],
     default: () => [],
   }),
+  autoHealStats: Annotation({
+    reducer: (prev, x) => ({ ...prev, ...x }),
+    default: () => ({ healedImports: 0, healedAssets: 0 }),
+  }),
 });
 
 /**
@@ -197,6 +201,7 @@ export const NODE_NAMES = {
   RETRY_HANDLER: 'retryNode', // Handles transient 503/429 with exponential backoff
   GLOBAL_AUDIT: 'globalAuditNode',
   REPORTER: 'reporterNode',
+  AUTO_HEALER: 'autoHealerNode',
 };
 
 export const MAX_HEAL_ATTEMPTS = 3;
