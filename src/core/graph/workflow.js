@@ -199,13 +199,18 @@ function afterRetry(state) {
  * Should heal the code or continue, or install packages?
  */
 function shouldHealOrContinue(state) {
-  const { errors = [], missingDependencies = [], healAttempts = 0 } = state;
+  const {
+    errors = [],
+    missingDependencies = [],
+    healAttempts = 0,
+    installAttempts = 0,
+  } = state;
 
-  if (missingDependencies.length > 0) {
+  if (missingDependencies.length > 0 && installAttempts < 2) {
     return 'install';
   }
 
-  if (errors.length === 0) {
+  if (errors.length === 0 && missingDependencies.length === 0) {
     return 'continue'; // No errors -> continue
   }
 

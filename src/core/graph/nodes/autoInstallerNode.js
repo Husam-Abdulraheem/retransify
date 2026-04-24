@@ -22,14 +22,20 @@ export async function autoInstallerNode(state) {
 
   if (installAttempts >= 2) {
     printWarning(`Auto-installer circuit breaker activated for ${filePath}`);
-    const newErrors = missingDependencies.map(
-      (pkg) =>
-        `Failed to auto-install package: '${pkg}'. It either does not exist, lacks TypeScript definitions, or is a hallucination. YOU MUST REMOVE OR REPLACE THIS IMPORT.`
-    );
+
+    // سجل المكتبات الفاشلة للتقرير النهائي
+    const unresolvedErrors = missingDependencies.map((pkg) => ({
+      filePath,
+      reason: `Failed to auto-install package: '${pkg}'`,
+      codeSnippet: `import ... from '${pkg}';`,
+      suggestedAction: `This package name might be a hallucination or lacks native support. Please check the correct package name or find a React Native alternative (e.g., use @react-native-async-storage/async-storage instead of @react--native...).`,
+    }));
+
     return {
       missingDependencies: [],
+      failedDependencies: missingDependencies,
       installAttempts: installAttempts + 1,
-      errors: [...errors, ...newErrors],
+      unresolvedErrors,
     };
   }
 

@@ -186,9 +186,12 @@ export const GraphState = Annotation.Root({
     reducer: (prev, x) => [...prev, ...(Array.isArray(x) ? x : [x])],
     default: () => [],
   }),
-  autoHealStats: Annotation({
-    reducer: (prev, x) => ({ ...prev, ...x }),
-    default: () => ({ healedImports: 0, healedAssets: 0 }),
+  // Libraries that failed to auto-install (will be reported in final report)
+  failedDependencies: Annotation({
+    reducer: (prev, x) => [
+      ...new Set([...prev, ...(Array.isArray(x) ? x : [x])]),
+    ],
+    default: () => [],
   }),
 });
 
