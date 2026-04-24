@@ -30,7 +30,10 @@ export function optimizeFileContext(state, currentFile) {
   imports.forEach((imp) => {
     const importSource = typeof imp === 'string' ? imp : imp.source;
     if (!importSource) return;
-    const baseName = importSource.split('/').pop().replace(/\.[^/.]+$/, '');
+    const baseName = importSource
+      .split('/')
+      .pop()
+      .replace(/\.[^/.]+$/, '');
     if (baseName) importBaseNames.add(baseName);
   });
 
@@ -42,8 +45,18 @@ export function optimizeFileContext(state, currentFile) {
 
   // Asset file extensions — entries matching these are handled separately in relevantAssets
   const assetExtensions = [
-    '.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp',
-    '.json', '.csv', '.mp4', '.pdf', '.yaml', '.txt',
+    '.png',
+    '.jpg',
+    '.jpeg',
+    '.gif',
+    '.svg',
+    '.webp',
+    '.json',
+    '.csv',
+    '.mp4',
+    '.pdf',
+    '.yaml',
+    '.txt',
   ];
 
   const isAssetPath = (p) =>
@@ -51,7 +64,10 @@ export function optimizeFileContext(state, currentFile) {
     assetExtensions.some((ext) => p.toLowerCase().endsWith(ext));
 
   Object.keys(state.pathMap).forEach((key) => {
-    const keyBaseName = key.split('/').pop().replace(/\.[^/.]+$/, '');
+    const keyBaseName = key
+      .split('/')
+      .pop()
+      .replace(/\.[^/.]+$/, '');
     if (importBaseNames.has(keyBaseName)) {
       relevantPaths[key] = state.pathMap[key];
     }
@@ -67,9 +83,7 @@ export function optimizeFileContext(state, currentFile) {
   if (hasDynamicData) {
     // Dynamic data file: send ALL assets because it may need a full lookup map
     relevantAssets = [
-      ...new Set(
-        Object.values(state.pathMap).filter(isAssetPath)
-      ),
+      ...new Set(Object.values(state.pathMap).filter(isAssetPath)),
     ];
   } else {
     // Static file: send only assets whose filename (or stem) appears in the code
@@ -78,7 +92,7 @@ export function optimizeFileContext(state, currentFile) {
       if (!isAssetPath(mappedPath)) return;
 
       const fileName = mappedPath.split('/').pop(); // e.g. logo.svg
-      const stem = fileName.split('.')[0];          // e.g. logo
+      const stem = fileName.split('.')[0]; // e.g. logo
 
       if (content.includes(fileName) || content.includes(stem)) {
         assetSet.add(mappedPath);

@@ -101,7 +101,10 @@ export async function executorNode(state, models = {}) {
   }
 
   // ── 2. Context Optimization — Safe Filtering ─────────────────
-  const { relevantPaths, relevantAssets } = optimizeFileContext(state, currentFile);
+  const { relevantPaths, relevantAssets } = optimizeFileContext(
+    state,
+    currentFile
+  );
 
   // ── 3. Build file context for Prompt ──────────────────────────
   const exactImportsMap = PathMapper.calculateExactImports(
