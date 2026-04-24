@@ -105,21 +105,26 @@ export async function fixBrokenImports(targetProjectPath) {
           // Exactly ONE match found -> Safe to auto-heal
           const correctAbsolutePath = potentialMatches[0];
 
-          // Calculate the new relative path
-          let newRelativePath = getRelativePath(
-            currentDir,
-            correctAbsolutePath
-          );
-
-          // Strip extensions for clean ES6 imports
-          newRelativePath = newRelativePath.replace(/\.(tsx|ts|jsx|js)$/, '');
-
-          // Enforce relative syntax
-          if (!newRelativePath.startsWith('.')) {
-            newRelativePath = `./${newRelativePath}`;
+          // Calculate the new path
+          let newPath;
+          if (isAlias) {
+            // الحفاظ على الـ Alias عبر الحساب بالنسبة لجذر المشروع
+            const relToRoot = normalizePath(
+              path.relative(targetProjectPath, correctAbsolutePath)
+            );
+            newPath = `@/${relToRoot}`;
+          } else {
+            // المسار النسبي كالمعتاد
+            newPath = getRelativePath(currentDir, correctAbsolutePath);
+            if (!newPath.startsWith('.')) {
+              newPath = `./${newPath}`;
+            }
           }
 
-          importDecl.setModuleSpecifier(newRelativePath);
+          // Strip extensions for clean ES6 imports (only for code files, not assets if handled here)
+          newPath = newPath.replace(/\.(tsx|ts|jsx|js)$/, '');
+
+          importDecl.setModuleSpecifier(newPath);
           fileModified = true;
           healedCount++;
 
@@ -128,7 +133,7 @@ export async function fixBrokenImports(targetProjectPath) {
             ''
           );
           report.push(
-            `[✔] Healed: '${displayFilePath}' -> Updated to '${newRelativePath}'`
+            `[✔] Healed: '${displayFilePath}' -> Updated to '${newPath}'`
           );
         } else {
           // Zero matches OR Multiple matches -> Manual intervention required

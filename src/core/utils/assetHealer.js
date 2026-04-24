@@ -68,9 +68,21 @@ export async function fixBrokenAssets(targetProjectPath) {
     reportArray,
     updateFn
   ) {
-    if (!moduleSpecifier.startsWith('.')) return false;
+    const isRelative = moduleSpecifier.startsWith('.');
+    const isAlias = moduleSpecifier.startsWith('@/');
 
-    const targetPath = normalizePath(path.resolve(currentDir, moduleSpecifier));
+    if (!isRelative && !isAlias) return false;
+
+    let targetPath;
+    if (isAlias) {
+      // Resolve Alias (assuming @/ maps to project root)
+      targetPath = normalizePath(
+        path.resolve(projectPath, moduleSpecifier.replace('@/', './'))
+      );
+    } else {
+      targetPath = normalizePath(path.resolve(currentDir, moduleSpecifier));
+    }
+
     if (fs.existsSync(targetPath)) return false; // المسار سليم
 
     const fileName = path.basename(moduleSpecifier);
@@ -78,15 +90,25 @@ export async function fixBrokenAssets(targetProjectPath) {
 
     if (potentialMatches && potentialMatches.length === 1) {
       const correctAbsolutePath = potentialMatches[0];
-      let newRelativePath = getRelativePath(currentDir, correctAbsolutePath);
-      if (!newRelativePath.startsWith('.'))
-        newRelativePath = `./${newRelativePath}`;
+      let newPath;
 
-      updateFn(newRelativePath);
+      if (isAlias) {
+        // الحفاظ على استخدام @ عبر حساب المسار بالنسبة لجذر المشروع
+        const relToRoot = normalizePath(
+          path.relative(projectPath, correctAbsolutePath)
+        );
+        newPath = `@/${relToRoot}`;
+      } else {
+        // استخدام المسار النسبي كالمعتاد
+        newPath = getRelativePath(currentDir, correctAbsolutePath);
+        if (!newPath.startsWith('.')) newPath = `./${newPath}`;
+      }
+
+      updateFn(newPath);
       healedCount++;
       const displayPath = filePath.replace(normalizePath(projectPath), '');
       reportArray.push(
-        `[✔] Asset Healed: '${displayPath}' -> Updated to '${newRelativePath}'`
+        `[✔] Asset Healed: '${displayPath}' -> Updated to '${newPath}'`
       );
       return true;
     } else {
