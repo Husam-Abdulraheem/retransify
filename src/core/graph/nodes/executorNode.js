@@ -3,6 +3,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import { buildPrompt } from '../../prompt/promptBuilder.js';
 import { PathMapper } from '../../helpers/pathMapper.js';
+import { optimizeFileContext } from '../../helpers/contextOptimizer.js';
 import { z } from 'zod';
 import { printSubStep, printWarning, printError } from '../../utils/ui.js';
 import { normalizePath, resolveAbsolutePath } from '../../utils/pathUtils.js';
@@ -99,7 +100,10 @@ export async function executorNode(state, models = {}) {
     }
   }
 
-  // ── 2. Build file context for Prompt ──────────────────────────
+  // ── 2. Context Optimization — Safe Filtering ─────────────────
+  const { relevantPaths, relevantAssets } = optimizeFileContext(state, currentFile);
+
+  // ── 3. Build file context for Prompt ──────────────────────────
   const exactImportsMap = PathMapper.calculateExactImports(
     filePath,
     currentFile.content,
@@ -112,7 +116,7 @@ export async function executorNode(state, models = {}) {
 
   const fileContext = buildFileContext(
     currentFile,
-    pathMap,
+    relevantPaths,
     facts,
     installedPackages,
     ragContext,
@@ -121,10 +125,11 @@ export async function executorNode(state, models = {}) {
     currentRouteMeta,
     globalProviders,
     globalHeader,
-    homeResolution
+    homeResolution,
+    relevantAssets
   );
 
-  // ── 3. Build Prompt ───────────────────────────────────────────
+  // ── 4. Build Prompt ───────────────────────────────────────────
   const prompt = buildPrompt(fileContext);
 
   // ── Robust AI Invocation ───────────────────────────────────────────
@@ -179,7 +184,8 @@ function buildFileContext(
   fileMetadata = {},
   globalProviders = [],
   globalHeader = null,
-  homeResolution = null
+  homeResolution = null,
+  availableAssets = []
 ) {
   const filePath = currentFile.relativeToProject || currentFile.filePath;
   const baseName = path.basename(filePath);
@@ -213,6 +219,7 @@ function buildFileContext(
       globalHeader: globalHeader,
     },
     pathMap,
+    availableAssets,
     exactImportsMap,
     installedPackages,
     ragContext,

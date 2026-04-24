@@ -16,6 +16,7 @@ export function buildPrompt(fileContext) {
     imports: fileImports = [],
     exports: fileExports = [],
     pathMap = {},
+    availableAssets = [],
     exactImportsMap = {},
     globalContext = {},
     installedPackages = [],
@@ -241,30 +242,6 @@ ${requiredData
 }
 `;
 
-  // Extract all assets for fuzzy matching
-  const assetExtensions = [
-    '.png',
-    '.jpg',
-    '.jpeg',
-    '.gif',
-    '.svg',
-    '.webp',
-    '.json',
-    '.csv',
-    '.mp4',
-    '.pdf',
-    '.yaml',
-    '.txt',
-  ];
-  const availableAssets = [
-    ...new Set(
-      Object.values(pathMap).filter(
-        (p) =>
-          typeof p === 'string' &&
-          assetExtensions.some((ext) => p.toLowerCase().endsWith(ext))
-      )
-    ),
-  ];
 
   // 4. Context & Input Code
   const contextBlock = `
