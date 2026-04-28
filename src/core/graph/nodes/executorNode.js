@@ -29,6 +29,7 @@ export async function executorNode(state, models = {}) {
   const {
     currentFile,
     vectorStore,
+    contractRegistry,
     pathMap,
     facts,
     installedPackages = [],
@@ -67,12 +68,14 @@ export async function executorNode(state, models = {}) {
     }
   }
 
-  // ── 1. Deterministic JIT Context from ContextStore ────────────────
-  // Uses ts-morph to extract local imports from the current file, then fetches
-  // their pre-indexed summaries from ContextStore by exact file path.
-  // No semantic search, no guessing — only what is actually imported.
+  // ── 1. Deterministic JIT Context from ContextStore + ContractRegistry ──────
+  // Uses ts-morph to extract local imports from the current file, then fetches:
+  //   a) Lossy text summaries from ContextStore (narrative context for the LLM)
+  //   b) Precise structured signatures from ContractRegistry (exact call contracts)
+  // Both resolve from the same localPaths set in a single parse pass.
   let ragContext = '';
-  if (vectorStore && currentFile.content) {
+  let contractContext = '';
+  if (currentFile.content) {
     try {
       const localPaths = await PathMapper.resolveLocalImports(
         currentFile.content,
@@ -81,16 +84,29 @@ export async function executorNode(state, models = {}) {
       );
 
       if (localPaths.length > 0) {
-        const contextDocs = vectorStore.getDocumentsByPaths(localPaths);
+        // a) Text summaries from ContextStore
+        if (vectorStore) {
+          const contextDocs = vectorStore.getDocumentsByPaths(localPaths);
+          ragContext = contextDocs
+            .map(
+              (doc) => `--- ${doc.metadata.filePath} ---\n${doc.pageContent}`
+            )
+            .join('\n\n');
+          if (ragContext) {
+            printSubStep(
+              `RAG: ${contextDocs.length} imported files retrieved (deterministic)`
+            );
+          }
+        }
 
-        ragContext = contextDocs
-          .map((doc) => `--- ${doc.metadata.filePath} ---\n${doc.pageContent}`)
-          .join('\n\n');
-
-        if (ragContext) {
-          printSubStep(
-            `RAG: ${contextDocs.length} imported files retrieved (deterministic)`
-          );
+        // b) Structured signatures from ContractRegistry
+        if (contractRegistry) {
+          contractContext = contractRegistry.toPromptContext(localPaths);
+          if (contractContext) {
+            printSubStep(
+              `Contracts: injecting exact signatures for imported functions`
+            );
+          }
         }
       }
     } catch (err) {
@@ -121,6 +137,7 @@ export async function executorNode(state, models = {}) {
     facts,
     installedPackages,
     ragContext,
+    contractContext,
     exactImportsMap,
     navigationSchema,
     currentRouteMeta,
@@ -149,22 +166,6 @@ export async function executorNode(state, models = {}) {
       .replace(/^```[a-z]*\n?/im, '')
       .replace(/```$/im, '')
       .trim();
-
-    // 🚨 Deterministic Injection Interceptor
-    const isRootLayout = fileContext.targetPath === 'app/_layout.tsx';
-    const usesNativeWind =
-      facts?.tech?.styling === 'NativeWind' ||
-      facts?.tech?.styling === 'Tailwind';
-
-    if (isRootLayout && usesNativeWind) {
-      if (
-        !generatedCode.includes('import "../nativewind"') &&
-        !generatedCode.includes("import '../nativewind'")
-      ) {
-        printSubStep('Interceptor: Injecting mandatory nativewind import');
-        generatedCode = `import "../nativewind";\n` + generatedCode;
-      }
-    }
 
     printSubStep(`AI Generated: ${generatedCode.length} chars ✔`);
 
@@ -196,6 +197,7 @@ function buildFileContext(
   facts,
   installedPackages,
   ragContext,
+  contractContext,
   exactImportsMap,
   navigationSchema,
   fileMetadata = {},
@@ -240,6 +242,7 @@ function buildFileContext(
     exactImportsMap,
     installedPackages,
     ragContext,
+    contractContext,
     resolvedDeps: currentFile.resolvedDeps || {},
     isMainEntry,
     targetPath: pathMap[filePath] || filePath,
