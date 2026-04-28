@@ -98,7 +98,7 @@ graph TD;
     K --> E;
     end
 
-    E -- "Queue Empty" --> L[Global Audit (tsc)];
+    E -- "Queue Empty" --> L["Global Audit (tsc)"];
     L --> M[Auto-Healer];
     M --> N[AI Reporter];
     N --> O[Ready Expo Project];
