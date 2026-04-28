@@ -55,9 +55,23 @@ export async function diskWriterNode(state) {
     printFileWritten(destPath);
     printSubStepLast(`Saved: ${destPath} ✔`);
 
+    const unresolvedErrors = [];
+    if (state.errors && state.errors.length > 0 && state.healAttempts >= 3) {
+      const aiSuggestion = state.lastHealAnalysis?.suggestedManualAction;
+      unresolvedErrors.push({
+        filePath,
+        reason: `Exceeded max heal attempts (3). Remaining errors: ${state.errors.length}. First error: ${state.errors[0]}`,
+        codeSnippet: (generatedCode || '').substring(0, 800) + '...',
+        suggestedAction: aiSuggestion
+          ? `AI Recommendation: ${aiSuggestion}`
+          : 'Manual intervention required: resolve the remaining TypeScript or semantic errors in this file.',
+      });
+    }
+
     return {
       completedFiles: filePath,
       errorLog: [],
+      unresolvedErrors,
     };
   } catch (err) {
     printError(`Write failed: ${err.message}`);

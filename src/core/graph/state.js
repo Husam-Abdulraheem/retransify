@@ -130,6 +130,12 @@ export const GraphState = Annotation.Root({
     default: () => [],
   }),
 
+  // AI-generated analysis of the last healing attempt (analysis + suggestedManualAction)
+  lastHealAnalysis: Annotation({
+    reducer: (_, x) => x,
+    default: () => null,
+  }),
+
   // Complete error log across all files
   errorLog: Annotation({
     reducer: (prev, x) => [...prev, ...x],

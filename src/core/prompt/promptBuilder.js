@@ -362,7 +362,10 @@ ${isLayoutFile ? '5. LAYOUT ARCHITECTURE (CRITICAL): This is an Expo Router layo
 6. DEPENDENCY RESTRICTION: You are FORBIDDEN to use any external library outside this compiled list: [${installedPackages.join(', ')}]. If a fix requires a missing package, implement it using standard React Native APIs.
 7. NO SUPPRESSION: Do NOT use @ts-ignore or 'any' assertions to bypass errors. You must structurally fix the logic.
 8. CODE FORMATTING: You MUST format output code legibly with proper newlines. DO NOT minify.
-9. OUTPUT FORMAT: Output MUST be the completely corrected code only. DO NOT output partial code snippets.
+9. FAILURE ANALYSIS (CRITICAL): In addition to the code, you MUST fill the 'analysis' and 'suggestedManualAction' fields:
+    - 'analysis': Briefly explain the root cause of the current errors and what you did to fix them.
+    - 'suggestedManualAction': If you find this file is extremely complex (e.g. contains unsupported web-only libraries like framer-motion, grid layouts, or heavy DOM manipulation) that might not work perfectly in React Native, give specific, actionable steps for a human developer to complete the conversion.
+10. OUTPUT FORMAT: Output MUST be a JSON object matching the provided schema.
 
 -----------------------------------
 CODE CONTEXT

@@ -4,12 +4,23 @@ import { z } from 'zod';
 import { printSubStep, printError } from '../../utils/ui.js';
 import { MAX_HEAL_ATTEMPTS } from '../state.js';
 import { executeModel } from '../../ai/modelExecutor.js';
+import { optimizeFileContext } from '../../helpers/contextOptimizer.js';
 
 const outputSchema = z.object({
   code: z
     .string()
     .describe(
       'The complete corrected React Native code. You MUST format this code legibly with proper newlines and indentation. DO NOT minify.'
+    ),
+  analysis: z
+    .string()
+    .describe(
+      'Technical analysis of the errors fixed and what might still be difficult.'
+    ),
+  suggestedManualAction: z
+    .string()
+    .describe(
+      'Specific instructions for the developer if this automated fix fails (e.g., manual library replacement).'
     ),
 });
 
@@ -52,12 +63,26 @@ export async function healerNode(state, models = {}) {
     );
   }
 
+  const { relevantPaths } = optimizeFileContext(state, currentFile);
+
+  const healerPayload = {
+    code: generatedCode || currentFile.content,
+    errors: displayedErrors,
+    installedPackages: installedPackages,
+    exactImportsMap: relevantPaths,
+    state: {
+      facts: state.facts,
+      currentFile: state.currentFile,
+      pathMap: state.pathMap,
+    },
+  };
+
   const fixPrompt = buildFixPrompt(
-    generatedCode,
-    displayedErrors,
-    installedPackages,
-    state,
-    state.exactImportsMap
+    healerPayload.code,
+    healerPayload.errors,
+    healerPayload.installedPackages,
+    healerPayload.state,
+    healerPayload.exactImportsMap
   );
 
   try {
@@ -72,6 +97,10 @@ export async function healerNode(state, models = {}) {
         generatedCode: response.code,
         healAttempts: newAttemptCount,
         errors: [],
+        lastHealAnalysis: {
+          analysis: response.analysis,
+          suggestedManualAction: response.suggestedManualAction,
+        },
       };
     }
   } catch (err) {
@@ -87,8 +116,7 @@ export async function healerNode(state, models = {}) {
   if (newAttemptCount >= MAX_HEAL_ATTEMPTS) {
     const errorRecord = {
       filePath: currentFile?.relativeToProject || filePath,
-      reason:
-        'Failed to resolve complex DOM references or unsupported UI library after max retries.',
+      reason: `Failed to generate a valid AI fix after max attempts (${MAX_HEAL_ATTEMPTS}). Remaining errors: ${errors.length}.`,
       codeSnippet:
         (generatedCode || '').substring(0, 500) + '...\n// (Code truncated)',
       suggestedAction:
