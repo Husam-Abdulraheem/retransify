@@ -1,12 +1,12 @@
 // src/core/graph/nodes/diskWriterNode.js
 import path from 'path';
 import fs from 'fs-extra';
+import pc from 'picocolors';
 import { normalizePath, resolveAbsolutePath } from '../../utils/pathUtils.js';
 import { CONFLICT_MAP, WEB_ONLY_BLOCKLIST } from '../../config/libraryRules.js';
 import {
   printSubStep,
   printSubStepLast,
-  printFileWritten,
   printWarning,
   printError,
 } from '../../utils/ui.js';
@@ -72,8 +72,7 @@ export async function diskWriterNode(state) {
 
     await fs.writeFile(absoluteDestPath, finalCode, 'utf-8');
 
-    printFileWritten(destPath);
-    printSubStepLast(`Saved: ${destPath} ✔`);
+    printSubStepLast(`Saved as ${pc.white(pc.bold(destPath))} ✨`);
 
     const unresolvedErrors = [];
     if (state.errors && state.errors.length > 0 && state.healAttempts >= 3) {
