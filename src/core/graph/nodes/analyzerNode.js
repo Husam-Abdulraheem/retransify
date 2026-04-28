@@ -69,7 +69,19 @@ export async function analyzerNode(state) {
     filesQueue
   );
   facts.pathAliases = pathAliases;
-  printSubStep(`Tech Stack: ${JSON.stringify(facts.tech)}`);
+
+  const { tech } = facts;
+  const techDisplay = [
+    tech.language,
+    tech.styling,
+    tech.stateManagement !== 'None' ? tech.stateManagement : null,
+    tech.routing !== 'None' ? tech.routing : null,
+    `(${tech.buildTool})`,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  printSubStep(`Tech Stack: ${techDisplay}`);
 
   if (
     facts.tech.styling === 'Tailwind' ||
@@ -89,8 +101,8 @@ export async function analyzerNode(state) {
   const { contextStore, contractRegistry, enrichedFiles } =
     await buildContextStore(filesQueue, projectPath, tsProject);
 
-  printSubStep(`Indexed ${contextStore.size} files in ContextStore`);
-  printSubStep(`Registered contracts for ${contractRegistry.size} files`);
+  printSubStep(`Indexed ${contextStore.size} files for JIT context`);
+  printSubStep(`Registered ${contractRegistry.size} function contracts`);
 
   return {
     facts,
