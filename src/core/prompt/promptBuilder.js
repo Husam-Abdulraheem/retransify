@@ -24,6 +24,7 @@ export function buildPrompt(fileContext) {
     navigationSchema = {},
     requiredData = [],
     ragContext = '',
+    contractContext = '',
     homeComponentName = null,
   } = fileContext;
 
@@ -220,7 +221,7 @@ ${
    - You MUST replace any usage of 'process.env.REACT_APP_XYZ' or 'import.meta.env.VITE_XYZ' with 'process.env.EXPO_PUBLIC_XYZ'.
    - NEVER use 'import.meta.env' in React Native, it will crash the app. Always use 'process.env.EXPO_PUBLIC_*'.
 
-8. CODE FORMATTING & LEGIBILITY (CRITICAL FOR PARSERS):
+9. CODE FORMATTING & LEGIBILITY (CRITICAL FOR PARSERS):
    - You MUST format the output code legibly with proper newlines and indentation.
    - DO NOT minify the code under any circumstances, even for short files.
    - You MUST ensure quotes and string templates are perfectly valid to prevent JSON parsing failures.
@@ -293,12 +294,25 @@ ${fileContent}
 ${roleDefinition}
 ${strictRulesBlock}
 
-// 🚨 التعديل الجذري: حقن سياق المشروع المفقود 🚨
+${
+  contractContext
+    ? `
+### IMPORTED FUNCTION CONTRACTS (AUTHORITATIVE — DO NOT DEVIATE) ###
+The following are the EXACT, AST-extracted signatures of every function and hook
+this file imports from local project files. These are ground truth — not summaries.
+You MUST call each function with EXACTLY the parameters shown below.
+Pay specific attention to destructured parameters: if a function expects
+{ key1, key2 } you MUST pass an object with those keys, NOT a single positional value.
+${contractContext}
+#####################################################################
+`
+    : ''
+}
 ${
   ragContext
     ? `
 ### PROJECT CONTEXT (RAG DATABASE) ###
-The following are interfaces, types, and hooks from other files in the project. 
+The following are interfaces, types, and hooks from other files in the project.
 Use this context to understand how to call external functions and pass correct props:
 ${ragContext}
 
@@ -317,7 +331,8 @@ export function buildFixPrompt(
   errors,
   installedPackages = [],
   state = {},
-  exactImportsMap = {}
+  exactImportsMap = {},
+  contractContext = ''
 ) {
   const facts = state.facts || {};
   const tech = facts.tech || {};
@@ -346,26 +361,39 @@ export function buildFixPrompt(
           .join('\n')}\n`
       : '';
 
+  const contractBlock = contractContext
+    ? `
+### IMPORTED FUNCTION CONTRACTS (AUTHORITATIVE) ###
+The following are the EXACT, AST-extracted signatures of every function and hook
+this file imports from other local files. When fixing call-sites, you MUST conform
+to these signatures. If a parameter is destructured ({ key1, key2 }), do NOT
+collapse it into a single positional object argument - pass the keys separately.
+${contractContext}
+####################################################
+`
+    : '';
+
   return `
 You are a Senior React Native Developer & TypeScript Expert.
 The Verifier tool (AST Analyzer & Typescript) has detected structural, architectural, or logic errors in the following Expo React Native code.
 
-${importsBlock}
+${importsBlock}${contractBlock}
 -----------------------------------
 STRICT HEALING PRINCIPLES & CONSTRAINTS
 -----------------------------------
 1. SCOPE ISOLATION (CRITICAL): You can ONLY modify the code provided in this file. You CANNOT modify external files, imported components, or global interfaces.
 2. COMPONENT ADAPTATION: If the error involves a mismatch between passed props and an imported component's signature, you MUST modify the JSX in THIS file to conform to the component by stripping out unrecognized props.
-3. WEB DOM LEAKAGE & EXPO COMPLIANCE (CRITICAL): If the error complains about unsupported Web DOM elements (e.g., 'div', 'span', 'img') or React Router dead links, you MUST replace them with React Native/Expo Router equivalents. This project uses Expo Router v3+, so ALWAYS use 'expo-router' components (<Link href="/...">, <Stack>, <Tabs>) and hooks ('useLocalSearchParams', 'useRouter').
-${isNativeWind ? "4. STYLING: This project uses NativeWind. Do NOT remove 'className' properties. DO NOT use StyleSheet.create." : "4. STYLING: This project uses standard StyleSheet. Do NOT use 'className'."}
-${isLayoutFile ? '5. LAYOUT ARCHITECTURE (CRITICAL): This is an Expo Router layout file. The Navigator (<Stack> or <Tabs> or <Slot>) MUST be the root visual component. Do NOT wrap Navigation elements in <View> or <ScrollView>.' : '5. SCREEN COMPLIANCE: Direct rendering constraint applies. Ensure you use standard native scrolling elements like <ScrollView> where appropriate.'}
-6. DEPENDENCY RESTRICTION: You are FORBIDDEN to use any external library outside this compiled list: [${installedPackages.join(', ')}]. If a fix requires a missing package, implement it using standard React Native APIs.
-7. NO SUPPRESSION: Do NOT use @ts-ignore or 'any' assertions to bypass errors. You must structurally fix the logic.
-8. CODE FORMATTING: You MUST format output code legibly with proper newlines. DO NOT minify.
-9. FAILURE ANALYSIS (CRITICAL): In addition to the code, you MUST fill the 'analysis' and 'suggestedManualAction' fields:
+3. CROSS-FILE CONTRACT ENFORCEMENT (CRITICAL): If the errors indicate a function is being called with wrong arguments, consult the IMPORTED FUNCTION CONTRACTS block above. Fix the call-site in THIS file to exactly match the defined signature - do not guess or invent parameters.
+4. WEB DOM LEAKAGE & EXPO COMPLIANCE (CRITICAL): If the error complains about unsupported Web DOM elements (e.g., 'div', 'span', 'img') or React Router dead links, you MUST replace them with React Native/Expo Router equivalents. This project uses Expo Router v3+, so ALWAYS use 'expo-router' components (<Link href="/...">, <Stack>, <Tabs>) and hooks ('useLocalSearchParams', 'useRouter').
+${isNativeWind ? "5. STYLING: This project uses NativeWind. Do NOT remove 'className' properties. DO NOT use StyleSheet.create." : "5. STYLING: This project uses standard StyleSheet. Do NOT use 'className'."}
+${isLayoutFile ? '6. LAYOUT ARCHITECTURE (CRITICAL): This is an Expo Router layout file. The Navigator (<Stack> or <Tabs> or <Slot>) MUST be the root visual component. Do NOT wrap Navigation elements in <View> or <ScrollView>.' : '6. SCREEN COMPLIANCE: Direct rendering constraint applies. Ensure you use standard native scrolling elements like <ScrollView> where appropriate.'}
+7. DEPENDENCY RESTRICTION: You are FORBIDDEN to use any external library outside this compiled list: [${installedPackages.join(', ')}]. If a fix requires a missing package, implement it using standard React Native APIs.
+8. NO SUPPRESSION: Do NOT use @ts-ignore or 'any' assertions to bypass errors. You must structurally fix the logic.
+9. CODE FORMATTING: You MUST format output code legibly with proper newlines. DO NOT minify.
+10. FAILURE ANALYSIS (CRITICAL): In addition to the code, you MUST fill the 'analysis' and 'suggestedManualAction' fields:
     - 'analysis': Briefly explain the root cause of the current errors and what you did to fix them.
     - 'suggestedManualAction': If you find this file is extremely complex (e.g. contains unsupported web-only libraries like framer-motion, grid layouts, or heavy DOM manipulation) that might not work perfectly in React Native, give specific, actionable steps for a human developer to complete the conversion.
-10. OUTPUT FORMAT: Output MUST be a JSON object matching the provided schema.
+11. OUTPUT FORMAT: Output MUST be a JSON object matching the provided schema.
 
 -----------------------------------
 CODE CONTEXT
