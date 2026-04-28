@@ -1,10 +1,11 @@
 // src/core/graph/nodes/healerNode.js
 import { buildFixPrompt } from '../../prompt/promptBuilder.js';
 import { z } from 'zod';
-import { printSubStep, printError } from '../../utils/ui.js';
+import { printSubStep, printError, printWarning } from '../../utils/ui.js';
 import { MAX_HEAL_ATTEMPTS } from '../state.js';
 import { executeModel } from '../../ai/modelExecutor.js';
 import { optimizeFileContext } from '../../helpers/contextOptimizer.js';
+import { PathMapper } from '../../helpers/pathMapper.js';
 
 const outputSchema = z.object({
   code: z
@@ -38,6 +39,8 @@ export async function healerNode(state, models = {}) {
     healAttempts,
     currentFile,
     installedPackages = [],
+    contractRegistry,
+    facts,
   } = state;
 
   const filePath =
@@ -77,12 +80,36 @@ export async function healerNode(state, models = {}) {
     },
   };
 
+  // ── Resolve cross-file contract context for informed healing ─────────────
+  // Give the Healer the exact function signatures of every local import so it
+  // can fix call-site argument mismatches without hallucinating the signature.
+  let contractContext = '';
+  if (contractRegistry) {
+    try {
+      const codeToAnalyze = healerPayload.code || '';
+      const localPaths = await PathMapper.resolveLocalImports(
+        codeToAnalyze,
+        filePath,
+        facts?.pathAliases || {}
+      );
+      if (localPaths.length > 0) {
+        contractContext = contractRegistry.toPromptContext(localPaths);
+      }
+    } catch (contractErr) {
+      // Non-fatal — healer continues without contract context.
+      printWarning(
+        `Healer: contract context resolution failed — ${contractErr.message}`
+      );
+    }
+  }
+
   const fixPrompt = buildFixPrompt(
     healerPayload.code,
     healerPayload.errors,
     healerPayload.installedPackages,
     healerPayload.state,
-    healerPayload.exactImportsMap
+    healerPayload.exactImportsMap,
+    contractContext
   );
 
   try {
