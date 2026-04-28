@@ -1,92 +1,79 @@
-// src/core/graph/nodes/reporterNode.js
 import fs from 'fs-extra';
 import path from 'path';
-import { printStep, succeedSpinner } from '../../utils/ui.js';
+import { z } from 'zod';
+import { printStep, succeedSpinner, printError } from '../../utils/ui.js';
+import { executeModel } from '../../ai/modelExecutor.js';
+import { buildReportPrompt } from '../../prompt/reportPrompt.js';
 
-export async function reporterNode(state) {
-  printStep('Reporter — generating migration summary');
+const outputSchema = z.object({
+  report: z.string().describe('The complete Markdown report content.'),
+});
+
+/**
+ * ReporterNode — Generates an AI-powered handoff report
+ *
+ * @param {import('../state.js').GraphState} state
+ * @param {{ smartModel: Session, fastModel: Session }} models
+ * @returns {Promise<import('../state.js').GraphState>}
+ */
+export async function reporterNode(state, models = {}) {
+  printStep('Reporter — generating AI handoff report');
 
   const {
     targetProjectPath,
+    telemetry = [],
+    pathMap = {},
     unresolvedErrors = [],
-    filesQueue,
-    completedFiles,
     failedDependencies = [],
-    autoHealStats = { healedImports: 0, healedAssets: 0 },
+    navigationSchema = {},
+    facts = {},
   } = state;
 
-  const hasIssues =
-    unresolvedErrors.length > 0 || failedDependencies.length > 0;
+  const reportPath = path.join(targetProjectPath, 'RETRANSIFY_REPORT.md');
 
-  const totalAutoHealed =
-    (autoHealStats.healedImports || 0) + (autoHealStats.healedAssets || 0);
+  // ── 1. Prepare Telemetry Payload ────────────────────────────
+  const payload = {
+    metrics: {
+      totalFiles: telemetry.length,
+      success: telemetry.filter((t) => t.status === 'success').length,
+      healed: telemetry.filter((t) => t.status === 'healed').length,
+      failed: telemetry.filter((t) => t.status === 'manual_action_required')
+        .length,
+    },
+    telemetry: telemetry,
+    pathMap: pathMap,
+    unresolvedIssues: unresolvedErrors.map((e) => ({
+      file: e.filePath,
+      reason: e.reason,
+      suggestion: e.suggestedAction,
+    })),
+    failedDeps: failedDependencies,
+    navigation: navigationSchema,
+    techStack: facts.tech || {},
+  };
 
-  const reportPath = path.join(
-    targetProjectPath,
-    'RETRANSIFY_ACTION_REQUIRED.md'
-  );
+  // ── 2. Build AI Prompt (Externalized) ───────────────────────
+  const prompt = buildReportPrompt(payload);
 
-  // إذا لم يكن هناك أخطاء أو مكتبات فاشلة، نكتب رسالة نجاح وننهي العمل
-  if (!hasIssues) {
-    let successReport = `# 🎉 Retransify Migration Successful\n\n`;
-    successReport += `All ${filesQueue.length} files were successfully transpiled to React Native. No manual intervention required!\n\n`;
-
-    if (totalAutoHealed > 0) {
-      successReport += `## ✨ Automatic Repairs Performed\n`;
-      successReport += `During the final polish phase, the AI auto-healer successfully fixed:\n`;
-      successReport += `- **${autoHealStats.healedImports}** broken import paths.\n`;
-      successReport += `- **${autoHealStats.healedAssets}** missing asset references.\n`;
-    }
-
-    await fs.writeFile(reportPath, successReport, 'utf8');
-    succeedSpinner('Project transpiled perfectly. Zero unresolved errors.');
-    return { ...state };
-  }
-
-  const totalFiles = (filesQueue?.length || 0) + (completedFiles?.length || 0);
-
-  // بناء تقرير الأخطاء بتنسيق Markdown
-  let reportContent = `# ⚠️ Retransify Migration Report: Manual Actions Required\n\n`;
-  reportContent += `Out of **${totalFiles}** files processed, **${unresolvedErrors.length}** files require manual intervention, and **${failedDependencies.length}** libraries failed to install.\n\n`;
-
-  if (totalAutoHealed > 0) {
-    reportContent += `## ✨ Automatic Repairs Performed\n`;
-    reportContent += `The system successfully auto-healed **${totalAutoHealed}** references during the final phase:\n`;
-    reportContent += `- **${autoHealStats.healedImports}** imports auto-corrected.\n`;
-    reportContent += `- **${autoHealStats.healedAssets}** assets auto-linked.\n\n`;
-    reportContent += `---\n\n`;
-  }
-
-  if (failedDependencies.length > 0) {
-    reportContent += `## 📦 Failed Dependencies (Install Manually)\n`;
-    reportContent += `The following libraries could not be installed automatically (likely due to typos or lack of native support):\n`;
-    failedDependencies.forEach((pkg) => {
-      reportContent += `- \`npx expo install ${pkg}\`\n`;
+  try {
+    const response = await executeModel(prompt, models, outputSchema, {
+      spinnerMessage: 'AI: Compiling final release document...',
     });
-    reportContent += `\n---\n\n`;
+
+    if (response && response.report) {
+      await fs.writeFile(reportPath, response.report, 'utf8');
+      succeedSpinner(
+        `Success! Final handoff report saved to: RETRANSIFY_REPORT.md`
+      );
+    } else {
+      throw new Error('AI returned empty report content');
+    }
+  } catch (err) {
+    printError(`Failed to generate AI report: ${err.message}`);
+    // Fallback to a basic report if AI fails
+    const fallbackReport = `# Retransify Migration Report\n\nMigration completed with ${unresolvedErrors.length} issues. AI generation failed.`;
+    await fs.writeFile(reportPath, fallbackReport, 'utf8');
   }
-
-  reportContent += `## 🛠️ File-Specific Issues\n\n`;
-
-  unresolvedErrors.forEach((err, index) => {
-    reportContent += `### ${index + 1}. \`${err.filePath}\`\n`;
-    reportContent += `- **Reason:** ${err.reason}\n`;
-    reportContent += `- **Suggested Action:** ${err.suggestedAction}\n\n`;
-    reportContent += `**Problematic Code Snippet:**\n`;
-    reportContent += '```tsx\n';
-    reportContent += `${err.codeSnippet}\n`;
-    reportContent += '```\n\n';
-    reportContent += `---\n`;
-  });
-
-  reportContent += `\n*Generated automatically by Retransify AI CLI.*`;
-
-  // كتابة الملف في جذر مشروع إكسبو
-  await fs.writeFile(reportPath, reportContent, 'utf8');
-
-  succeedSpinner(
-    `Migration completed with ${unresolvedErrors.length} unresolved errors. Check RETRANSIFY_ACTION_REQUIRED.md`
-  );
 
   return { ...state };
 }

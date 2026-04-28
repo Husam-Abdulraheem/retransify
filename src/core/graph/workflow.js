@@ -79,7 +79,7 @@ function buildWorkflow(models) {
 
   workflow.addNode(NODE_NAMES.GLOBAL_AUDIT, (state) => globalAuditNode(state));
 
-  workflow.addNode(NODE_NAMES.REPORTER, (state) => reporterNode(state));
+  workflow.addNode(NODE_NAMES.REPORTER, (state) => reporterNode(state, models));
   workflow.addNode(NODE_NAMES.AUTO_HEALER, (state) => autoHealerNode(state));
 
   // ── Define Static Edges ────────────────────────────
