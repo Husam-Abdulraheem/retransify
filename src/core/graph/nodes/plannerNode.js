@@ -3,6 +3,7 @@ import { AstManager } from '../../services/AstManager.js';
 import path from 'path';
 import { PathMapper } from '../../helpers/pathMapper.js';
 import { printStep, printSubStep, printWarning } from '../../utils/ui.js';
+import { BlueprintManager } from '../blueprints/BlueprintManager.js';
 
 /**
  * PlannerNode - Orders files and creates the paths map
@@ -20,96 +21,22 @@ import { printStep, printSubStep, printWarning } from '../../utils/ui.js';
 export async function plannerNode(state) {
   printStep('Planner — ordering files for conversion');
 
-  const { filesQueue, routeMap = {}, navigationSchema = {} } = state;
+  const {
+    filesQueue,
+    routeMap = {},
+    navigationSchema = {},
+    globalProviders = [],
+  } = state;
 
   // Deterministic Expo Router root (chosen by user): always `app/`
   const appRoot = 'app';
 
-  // ── 0.1. ALWAYS Inject Root Layout (The Host for Providers & Layouts) ────────────
-  const rootLayoutPath = `${appRoot}/_layout.tsx`;
-  if (!filesQueue.some((f) => f.relativeToProject === rootLayoutPath)) {
-    filesQueue.push({
-      filePath: rootLayoutPath,
-      relativeToProject: rootLayoutPath,
-      absolutePath: `__virtual/${rootLayoutPath}`,
-      isVirtual: true,
-      hasJSX: true,
-      content: [
-        '// [VIRTUAL FILE INJECTED BY RETRANSIFY]',
-        `import { Slot } from 'expo-router';`,
-        `import { ThemeProvider, DarkTheme, DefaultTheme } from '@react-navigation/native';`,
-        `import { useColorScheme } from 'nativewind';`,
-        `import { useEffect } from 'react';`,
-        `import { Appearance } from 'react-native';`,
-        ``,
-        `export default function RootLayout() {`,
-        `  const { colorScheme, setColorScheme } = useColorScheme();`,
-        ``,
-        `  // مزامنة حالة النظام الأولية مع NativeWind`,
-        `  useEffect(() => {`,
-        `    const systemTheme = Appearance.getColorScheme();`,
-        `    if (systemTheme) setColorScheme(systemTheme);`,
-        `  }, []);`,
-        ``,
-        `  return (`,
-        `    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>`,
-        `      <Slot />`,
-        `    </ThemeProvider>`,
-        `  );`,
-        `}`,
-      ].join('\n'),
-    });
-  }
-
-  // ── 0.2. Inject Virtual Files for Route Groups ────────────
-  if (navigationSchema.type === 'tabs' || navigationSchema.type === 'drawer') {
-    const groupName = navigationSchema.type === 'tabs' ? 'tabs' : 'drawer';
-    const groupLayoutPath = `${appRoot}/(${groupName})/_layout.tsx`;
-
-    // 1. Inject group layout
-    if (!filesQueue.some((f) => f.relativeToProject === groupLayoutPath)) {
-      const navComponent = navigationSchema.type === 'tabs' ? 'Tabs' : 'Drawer';
-      const importPath =
-        navigationSchema.type === 'drawer'
-          ? 'expo-router/drawer'
-          : 'expo-router';
-      filesQueue.push({
-        filePath: groupLayoutPath,
-        relativeToProject: groupLayoutPath,
-        absolutePath: `__virtual/${groupLayoutPath}`,
-        isVirtual: true,
-        hasJSX: true,
-        content: [
-          '// [VIRTUAL FILE INJECTED BY RETRANSIFY]',
-          `import { ${navComponent} } from '${importPath}';`,
-          `export default function GroupLayout() {`,
-          `  // CRITICAL: Prevent double-headers in Tabs/Drawer`,
-          `  return <${navComponent} screenOptions={{ headerShown: false }} />;`,
-          `}`,
-        ].join('\n'),
-      });
-    }
-
-    // 2. Inject redirect index
-    const rootIndexPath = `${appRoot}/index.tsx`;
-    if (!filesQueue.some((f) => f.relativeToProject === rootIndexPath)) {
-      filesQueue.push({
-        filePath: rootIndexPath,
-        relativeToProject: rootIndexPath,
-        absolutePath: `__virtual/${rootIndexPath}`,
-        isVirtual: true,
-        hasJSX: true,
-        content: [
-          '// [VIRTUAL FILE INJECTED BY RETRANSIFY]',
-          `// TARGET: This file MUST redirect the app root / to the navigation group /(${groupName}).`,
-          `// CRITICAL INSTRUCTION: You MUST import { Redirect } from 'expo-router' and return <Redirect href="/(${groupName})" />.`,
-          `// DO NOT redirect to "/". You MUST redirect specifically to "/(${groupName})".`,
-          `import { Redirect } from 'expo-router';`,
-          `export default function Index() { return null; }`,
-        ].join('\n'),
-      });
-    }
-  }
+  // ── 0. Inject Blueprints (Root Layout, Group Layout, Redirects) ────────────
+  BlueprintManager.injectBlueprints(
+    filesQueue,
+    navigationSchema,
+    globalProviders
+  );
 
   // ── 1. Generate path map using PathMapper (using new routeMap) ──
   const pathMap = PathMapper.generateMap(
@@ -217,28 +144,11 @@ export async function plannerNode(state) {
       printSubStep(`Mapped main App component to ${groupIndexPath}`);
     } else {
       // ── Priority 3: Virtual index file (STRICTLY AT ROOT) ──────────
-      // This file is a placeholder, it should never be inside (tabs)
-      filesQueue.push({
-        filePath: rootIndexPath,
-        relativeToProject: rootIndexPath,
-        absolutePath: `__virtual/${rootIndexPath}`,
-        isVirtual: true,
-        hasJSX: true,
-        content: [
-          '// [VIRTUAL FILE INJECTED BY RETRANSIFY]',
-          `import { View, Text } from 'react-native';`,
-          `export default function Index() {`,
-          `  return (`,
-          `    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>`,
-          `      <Text>No explicit route or App component found.</Text>`,
-          `    </View>`,
-          `  );`,
-          `}`,
-        ].join('\n'),
-      });
-      pathMap[rootIndexPath] = rootIndexPath;
-      printWarning(
-        `No root index found. Injected virtual fallback: ${rootIndexPath}`
+      BlueprintManager.ensureFallbackIndex(
+        filesQueue,
+        pathMap,
+        groupIndexPath,
+        rootIndexPath
       );
     }
   } else if (!homeResolution) {

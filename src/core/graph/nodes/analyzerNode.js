@@ -310,13 +310,13 @@ async function buildContextStore(filesQueue, projectPath, tsProject) {
     const absolutePath = resolveAbsolutePath(fileObj, projectPath);
 
     try {
-      const { summary, hasJSX } = await extractFileSummary(
+      const { summary, hasJSX, role } = await extractFileSummary(
         tsProject,
         absolutePath,
         filePath
       );
 
-      enrichedFiles.push({ ...fileObj, hasJSX });
+      enrichedFiles.push({ ...fileObj, hasJSX, role: role || 'component' });
 
       if (!summary) continue;
 
@@ -353,13 +353,14 @@ async function buildContextStore(filesQueue, projectPath, tsProject) {
 async function extractFileSummary(tsProject, absolutePath, relativePath) {
   const ext = path.extname(absolutePath);
   const validExts = ['.js', '.jsx', '.ts', '.tsx', '.mjs'];
-  if (!validExts.includes(ext)) return { summary: null, hasJSX: false };
+  if (!validExts.includes(ext))
+    return { summary: null, hasJSX: false, role: 'util' };
 
   let content;
   try {
     content = await fs.readFile(absolutePath, 'utf-8');
   } catch {
-    return { summary: null, hasJSX: false };
+    return { summary: null, hasJSX: false, role: 'util' };
   }
 
   // Add file to ts-morph (or update if exists)
@@ -369,7 +370,7 @@ async function extractFileSummary(tsProject, absolutePath, relativePath) {
       tsProject.getSourceFile(absolutePath) ||
       tsProject.createSourceFile(absolutePath, content, { overwrite: true });
   } catch {
-    return { summary: null, hasJSX: false };
+    return { summary: null, hasJSX: false, role: 'util' };
   }
 
   // Detect JSX
@@ -461,5 +462,26 @@ async function extractFileSummary(tsProject, absolutePath, relativePath) {
     summaryParts.push(`CONTENT_PREVIEW: ${content.slice(0, 200)}`);
   }
 
-  return { summary: summaryParts.join('\n'), hasJSX };
+  // 6. Semantic Role determination
+  let role = 'component';
+  const text = sourceFile.getFullText();
+
+  const isContext = text.includes('createContext');
+  const isProvider =
+    /export\s+(const|function)\s+[a-zA-Z0-9_]*Provider/.test(text) ||
+    (isContext && text.includes('Provider'));
+  const isHook = path.basename(relativePath).startsWith('use');
+  const isUtil =
+    !hasJSX &&
+    !isContext &&
+    !isHook &&
+    !isProvider &&
+    !relativePath.includes('app/');
+
+  if (isContext) role = 'context';
+  else if (isProvider) role = 'provider';
+  else if (isHook) role = 'hook';
+  else if (isUtil) role = 'util';
+
+  return { summary: summaryParts.join('\n'), hasJSX, role };
 }

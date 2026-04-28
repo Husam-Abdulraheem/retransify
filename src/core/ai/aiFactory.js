@@ -12,12 +12,14 @@ export function createFastModel() {
       model: process.env.AI_FAST_MODEL || 'llama-3.1-8b-instant',
       temperature: 0,
       maxRetries: 3,
+      maxTokens: 8192,
     });
   }
   return new ChatGoogleGenerativeAI({
     model: process.env.AI_FAST_MODEL || 'gemini-2.5-flash-lite',
     temperature: 0,
     maxRetries: 3,
+    maxTokens: 8192,
   });
 }
 
@@ -27,12 +29,14 @@ export function createSmartModel() {
       model: process.env.AI_SMART_MODEL || 'llama-3.3-70b-versatile',
       temperature: 0,
       maxRetries: 3,
+      maxTokens: 8192,
     });
   }
   return new ChatGoogleGenerativeAI({
     model: process.env.AI_SMART_MODEL || 'gemini-2.5-pro',
     temperature: 0,
     maxRetries: 6,
+    maxTokens: 8192,
   });
 }
 

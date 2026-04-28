@@ -8,15 +8,21 @@ import {
 
 /**
  * executeModel - Centralized AI model runner with structured output, fallbacks, and error handling.
- * 
+ *
  * @param {string} prompt - The prompt to send to the AI
  * @param {Object} models - { smartModel, fastModel }
  * @param {import('zod').ZodType|null} schema - Optional Zod schema for structured output
  * @param {Object} options - { spinnerMessage, filePath }
  * @returns {Promise<Object|string|null>} - Parsed object if schema provided, raw string otherwise.
  */
-export async function executeModel(prompt, models, schema = null, options = {}) {
-  const { spinnerMessage = 'AI: Processing...', filePath = 'unknown' } = options;
+export async function executeModel(
+  prompt,
+  models,
+  schema = null,
+  options = {}
+) {
+  const { spinnerMessage = 'AI: Processing...', filePath = 'unknown' } =
+    options;
 
   if (!models.smartModel) {
     printError(`ModelRunner: smartModel is missing for ${filePath}`);
@@ -36,7 +42,9 @@ export async function executeModel(prompt, models, schema = null, options = {}) 
       model = primaryModel.withFallbacks({ fallbacks: [fallbackModel] });
     } else {
       // Use raw text output with fallback
-      model = models.smartModel.withFallbacks({ fallbacks: [models.fastModel] });
+      model = models.smartModel.withFallbacks({
+        fallbacks: [models.fastModel],
+      });
     }
 
     const response = await model.invoke(prompt);
@@ -60,12 +68,16 @@ export async function executeModel(prompt, models, schema = null, options = {}) 
       err.message?.includes('overloaded');
 
     if (isTransient) {
-      printWarning(`Transient API error for ${filePath}, will retry: ${err.message}`);
+      printWarning(
+        `Transient API error for ${filePath}, will retry: ${err.message}`
+      );
       // Throwing so the LangGraph retryNode can catch it via state.errors starting with TRANSIENT:
       throw new Error(`TRANSIENT:${err.message}`);
     }
 
-    printError(`AI execution failed permanently for ${filePath}: ${err.message}`);
+    printError(
+      `AI execution failed permanently for ${filePath}: ${err.message}`
+    );
     throw err;
   }
 }

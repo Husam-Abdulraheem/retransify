@@ -152,7 +152,13 @@ export class PathMapper {
       const oldPath = file.relativeToProject;
       let refinedPath;
 
-      if (routeMap[oldPath]) {
+      // Semantic Role Protection
+      if (
+        file.role &&
+        ['context', 'provider', 'hook', 'util', 'data'].includes(file.role)
+      ) {
+        refinedPath = this.determineNewPath(file);
+      } else if (routeMap[oldPath]) {
         refinedPath = routeMap[oldPath];
 
         if (routeGroup) {
