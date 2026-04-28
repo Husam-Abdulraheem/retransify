@@ -6,7 +6,7 @@
 import pc from 'picocolors';
 import ora from 'ora';
 
-// ── Internal spinner instance ──────────────────────────────────
+// ── Internal state ─────────────────────────────────────────────
 let _spinner = null;
 
 // Handle terminal resize to prevent "ghosting" or broken lines
@@ -74,10 +74,6 @@ export function printBanner(modelName) {
 
 // ── Spinner Controls ───────────────────────────────────────────
 
-/**
- * Stops any running spinner and starts a new one with the given text.
- * @param {string} text
- */
 export function startSpinner(text) {
   if (_spinner) _spinner.stop();
   _spinner = ora({ text: pc.cyan(text), color: 'cyan' }).start();
@@ -105,7 +101,7 @@ export function updateSubSpinner(text, indent = 0) {
   if (_spinner) {
     const prefix = indent > 0 ? '│  '.repeat(indent) : '';
     _spinner.prefixText = pc.dim(`     ${prefix}├─ `);
-    _spinner.text = pc.cyan(text);
+    _spinner.text = pc.white(text);
   }
 }
 
@@ -181,7 +177,7 @@ export function printWarning(msg) {
 /** Bold white step heading — used for major workflow phases */
 export function printStep(label) {
   console.log('');
-  console.log(pc.bold(pc.white(`  ▶  ${label}`)));
+  console.log(pc.bold(pc.white(`  ⚡ ${label}`)));
 }
 
 /** Dim secondary detail line — used inside node logs */
@@ -192,16 +188,18 @@ export function printDetail(msg) {
 // ── File Processing Logs ───────────────────────────────────────
 
 /** Shown when a new file enters the pipeline */
-export function printFileStart(filePath, remaining) {
+export function printFileStart(filePath, count) {
   console.log('');
-  console.log(
-    pc.bold(pc.blue(`  📄 ${filePath}`) + pc.dim(` (${remaining} remaining)`))
-  );
+  const countStr = count.toString().padStart(2, ' ');
+  const counter = pc.dim('[') + pc.cyan(pc.bold(countStr)) + pc.dim(']');
+  console.log(`  ${pc.white('📄')} ${counter}  ${pc.bold(pc.white(filePath))}`);
 }
 
 /** Shown when a file completes successfully */
 export function printFileSuccess(filePath) {
-  console.log(pc.green(`  ✔  Done → ${filePath}`));
+  console.log(
+    `  ${pc.green('✨')} ${pc.green('Transpiled:')} ${pc.white(pc.bold(filePath))}`
+  );
 }
 
 /** Shown when a file is skipped or blocked */
@@ -232,14 +230,6 @@ export function printTreeLine(msg, indent = 1) {
 }
 
 /**
- * Prints a file written notification with icon
- * @param {string} filePath
- */
-export function printFileWritten(filePath) {
-  console.log(pc.bold(pc.white(`📁 File written: ${filePath}`)));
-}
-
-/**
  * Legacy wrapper: Tree-style sub-step last branch └─
  * @param {string} msg
  */
@@ -249,17 +239,18 @@ export function printSubStepLast(msg) {
 
 /**
  * Clean metadata block — printed once right after the banner.
- * @param {{ target: string, stack: string, queue: number }} info
+ * @param {{ target: string, stack: string, initialFiles: number }} info
  */
-export function printMeta({ target, stack, queue }) {
+export function printMeta({ target, stack, initialFiles }) {
   console.log(pc.cyan(`  ℹ  Target : ${target}`));
   if (stack) {
-    // Standardize stack name display (Vite, React Native)
     const displayStack = stack.charAt(0).toUpperCase() + stack.slice(1);
     console.log(pc.cyan(`  ℹ  Stack  : ${displayStack}`));
   }
   console.log(
-    pc.cyan(`  ℹ  Queue  : ${queue} file${queue !== 1 ? 's' : ''} to process`)
+    pc.cyan(
+      `  ℹ  Initial Scan : ${initialFiles} file${initialFiles !== 1 ? 's' : ''} detected`
+    )
   );
   console.log('');
 }
@@ -271,7 +262,13 @@ export function printMeta({ target, stack, queue }) {
  *
  * @param {{ completed: number, failed: number, outputPath: string, elapsedMs: number }} stats
  */
-export function printSummaryBox({ completed, failed, outputPath, elapsedMs }) {
+export function printSummaryBox({
+  completed,
+  failed,
+  skipped = 0,
+  outputPath,
+  elapsedMs,
+}) {
   const elapsedSec = (elapsedMs / 1000).toFixed(1);
   const width = 52;
   const topBorder = '  ╔' + '═'.repeat(width) + '╗';
@@ -306,6 +303,9 @@ export function printSummaryBox({ completed, failed, outputPath, elapsedMs }) {
   console.log(
     pad(' ✖  Files failed    : ', failed, failed > 0 ? pc.red : pc.dim)
   );
+  if (skipped > 0) {
+    console.log(pad(' ⏩ Files skipped   : ', skipped, pc.yellow));
+  }
   console.log(pad(' ⏱  Time elapsed    : ', `${elapsedSec}s`, pc.yellow));
   console.log(pad(' 📂 Output path     : ', outputPath, pc.cyan));
   console.log(pc.cyan(bottomBorder));
@@ -364,7 +364,6 @@ export const ui = {
   printSubStep,
   printSubStepLast,
   printTreeLine,
-  printFileWritten,
   warn: printWarning,
   error: printError,
   info: printInfo,
