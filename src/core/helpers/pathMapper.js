@@ -132,16 +132,58 @@ export class PathMapper {
   }
 
   /**
+   * Universal Route Classifier (Tabs/Drawer/Stack)
+   */
+  static determineExpoRoutePath(fileRole, expoPath, navigationSchema) {
+    if (fileRole !== 'route') {
+      return expoPath;
+    }
+
+    // Strip app/ prefix and .tsx extension for analysis
+    const rawRoute = expoPath
+      .replace(/^app\//, '')
+      .replace(/\.tsx$/, '')
+      .replace(/^\/+|\/+$/g, '');
+
+    const expoBaseRoute = rawRoute === '' ? 'index' : rawRoute;
+
+    const isDynamic =
+      expoBaseRoute.includes('[') || expoBaseRoute.includes('*');
+    const isDeepNested = expoBaseRoute.includes('/');
+
+    const navType = navigationSchema?.type || 'tabs';
+    const mainRoutes = navigationSchema?.mainRoutes || [];
+
+    let isTopLevelGroup = false;
+    if (mainRoutes.length > 0) {
+      // mainRoutes from agent might be web-style (/dashboard) or expo-style (app/dashboard.tsx)
+      const normalizedMainRoutes = mainRoutes.map(
+        (t) =>
+          t
+            .replace(/^app\//, '')
+            .replace(/\.tsx$/, '')
+            .replace(/^\/+|\/+$/g, '') || 'index'
+      );
+      isTopLevelGroup = normalizedMainRoutes.includes(expoBaseRoute);
+    }
+
+    // Final Decision
+    if (isDynamic || isDeepNested || !isTopLevelGroup) {
+      return `app/${expoBaseRoute}.tsx`;
+    } else {
+      if (navType === 'none' || navType === 'stack') {
+        return `app/${expoBaseRoute}.tsx`;
+      } else {
+        return `app/(${navType})/${expoBaseRoute}.tsx`;
+      }
+    }
+  }
+
+  /**
    * Generates a map of old paths to new paths using Structural Mirroring.
    */
   static generateMap(files, routeMap = {}, navigationSchema = {}) {
     const pathMap = {};
-    const routeGroup =
-      navigationSchema.type === 'tabs'
-        ? '(tabs)'
-        : navigationSchema.type === 'drawer'
-          ? '(drawer)'
-          : null;
 
     for (const file of files) {
       if (file.isVirtual) {
@@ -159,46 +201,18 @@ export class PathMapper {
       ) {
         refinedPath = this.determineNewPath(file);
       } else if (routeMap[oldPath]) {
-        refinedPath = routeMap[oldPath];
-
-        if (routeGroup) {
-          const normalizedTabs = (navigationSchema.tabs || []).map((p) =>
-            p.toLowerCase()
-          );
-          const normalizedDrawer = (navigationSchema.drawerScreens || []).map(
-            (p) => p.toLowerCase()
-          );
-          const normalizedPath = refinedPath.toLowerCase();
-
-          // Determine groupBase dynamically.
-          // If the target path is in app/ (root) or src/app/ (nested), we must find where it starts.
-          const groupBase = refinedPath.startsWith('src/app/')
-            ? 'src/app'
-            : 'app';
-
-          if (!refinedPath.includes(`${groupBase}/${routeGroup}/`)) {
-            if (
-              (navigationSchema.type === 'tabs' &&
-                normalizedTabs.includes(normalizedPath)) ||
-              (navigationSchema.type === 'drawer' &&
-                normalizedDrawer.includes(normalizedPath))
-            ) {
-              refinedPath = refinedPath.replace(
-                `${groupBase}/`,
-                `${groupBase}/${routeGroup}/`
-              );
-            }
-          }
-        }
+        const baseExpoPath = routeMap[oldPath];
+        refinedPath = this.determineExpoRoutePath(
+          'route',
+          baseExpoPath,
+          navigationSchema
+        );
       } else {
         refinedPath = this.determineNewPath(file);
       }
 
-      // Uniform casing for routing paths in app/ or src/app/
-      if (
-        refinedPath.startsWith('app/') ||
-        refinedPath.startsWith('src/app/')
-      ) {
+      // Uniform casing for routing paths in app/
+      if (refinedPath.startsWith('app/')) {
         refinedPath = refinedPath
           .split('/')
           .map((segment) =>
@@ -210,14 +224,6 @@ export class PathMapper {
       }
 
       pathMap[oldPath] = refinedPath;
-      if (
-        oldPath.startsWith('src/') &&
-        !refinedPath.startsWith('src/') &&
-        !refinedPath.startsWith('app/')
-      ) {
-        // Warning: potential loss of src prefix for non-app file
-        // console.log(`[PathMapper] Mapping ${oldPath} -> ${refinedPath}`);
-      }
     }
 
     return pathMap;

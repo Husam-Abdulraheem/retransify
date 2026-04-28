@@ -543,7 +543,18 @@ export class RouteAnalyzer {
         linksCount++;
     }
 
-    return { inputsCount, formsCount, linksCount };
+    const text = sourceFile.getFullText().toLowerCase();
+    const hasDrawerHint =
+      /drawer|sidebar|hamburger|menu|nav_menu|side_menu/.test(text);
+    const hasTabsHint = /tabs|tab_bar|bottom_nav/.test(text);
+
+    return {
+      inputsCount,
+      formsCount,
+      linksCount,
+      hasDrawerHint,
+      hasTabsHint,
+    };
   }
 
   static _extractComponentName(node) {

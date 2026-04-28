@@ -10,19 +10,13 @@ import {
 import { buildLayoutAgentPrompt } from '../../prompt/layoutPrompt.js';
 const layoutAgentSchema = z.object({
   type: z
-    .enum(['tabs', 'drawer', 'stack'])
+    .enum(['tabs', 'drawer', 'stack', 'none'])
     .describe('The primary navigation structure for the application root'),
-  tabs: z
+  mainRoutes: z
     .array(z.string())
     .default([])
     .describe(
-      'List of route paths (from routeMap values) that should be tabs. Typically 2-5 screens.'
-    ),
-  drawerScreens: z
-    .array(z.string())
-    .default([])
-    .describe(
-      'List of route paths that should be drawer items, if drawer layout is chosen.'
+      'List of route paths (from routeMap values) that should be primary navigation items. Typically 2-5 screens.'
     ),
   modals: z
     .array(z.string())
@@ -42,8 +36,7 @@ const layoutAgentSchema = z.object({
 export async function runLayoutAgent(routeMap, routeMetadata, models) {
   const fallbackSchema = {
     type: 'stack',
-    tabs: [],
-    drawerScreens: [],
+    mainRoutes: [],
     modals: [],
   };
 

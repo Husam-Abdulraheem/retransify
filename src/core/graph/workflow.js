@@ -309,7 +309,7 @@ export async function runMigrationWorkflow(
           'Installing react-native-gesture-handler and react-native-reanimated...'
         );
         await runSilentCommand(
-          'npx expo install react-native-gesture-handler react-native-reanimated',
+          'npx expo install react-native-gesture-handler react-native-reanimated @react-navigation/drawer',
           targetProjectPath
         );
         succeedSpinner('Drawer dependencies installed successfully.');

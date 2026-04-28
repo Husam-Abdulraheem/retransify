@@ -12,10 +12,14 @@ export async function reporterNode(state) {
     filesQueue,
     completedFiles,
     failedDependencies = [],
+    autoHealStats = { healedImports: 0, healedAssets: 0 },
   } = state;
 
   const hasIssues =
     unresolvedErrors.length > 0 || failedDependencies.length > 0;
+
+  const totalAutoHealed =
+    (autoHealStats.healedImports || 0) + (autoHealStats.healedAssets || 0);
 
   const reportPath = path.join(
     targetProjectPath,
@@ -24,7 +28,16 @@ export async function reporterNode(state) {
 
   // إذا لم يكن هناك أخطاء أو مكتبات فاشلة، نكتب رسالة نجاح وننهي العمل
   if (!hasIssues) {
-    const successReport = `# 🎉 Retransify Migration Successful\n\nAll ${filesQueue.length} files were successfully transpiled to React Native. No manual intervention required!`;
+    let successReport = `# 🎉 Retransify Migration Successful\n\n`;
+    successReport += `All ${filesQueue.length} files were successfully transpiled to React Native. No manual intervention required!\n\n`;
+
+    if (totalAutoHealed > 0) {
+      successReport += `## ✨ Automatic Repairs Performed\n`;
+      successReport += `During the final polish phase, the AI auto-healer successfully fixed:\n`;
+      successReport += `- **${autoHealStats.healedImports}** broken import paths.\n`;
+      successReport += `- **${autoHealStats.healedAssets}** missing asset references.\n`;
+    }
+
     await fs.writeFile(reportPath, successReport, 'utf8');
     succeedSpinner('Project transpiled perfectly. Zero unresolved errors.');
     return { ...state };
@@ -35,6 +48,14 @@ export async function reporterNode(state) {
   // بناء تقرير الأخطاء بتنسيق Markdown
   let reportContent = `# ⚠️ Retransify Migration Report: Manual Actions Required\n\n`;
   reportContent += `Out of **${totalFiles}** files processed, **${unresolvedErrors.length}** files require manual intervention, and **${failedDependencies.length}** libraries failed to install.\n\n`;
+
+  if (totalAutoHealed > 0) {
+    reportContent += `## ✨ Automatic Repairs Performed\n`;
+    reportContent += `The system successfully auto-healed **${totalAutoHealed}** references during the final phase:\n`;
+    reportContent += `- **${autoHealStats.healedImports}** imports auto-corrected.\n`;
+    reportContent += `- **${autoHealStats.healedAssets}** assets auto-linked.\n\n`;
+    reportContent += `---\n\n`;
+  }
 
   if (failedDependencies.length > 0) {
     reportContent += `## 📦 Failed Dependencies (Install Manually)\n`;

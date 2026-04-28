@@ -50,7 +50,27 @@ export async function diskWriterNode(state) {
     );
 
     await fs.ensureDir(path.dirname(absoluteDestPath));
-    await fs.writeFile(absoluteDestPath, generatedCode, 'utf-8');
+
+    let finalCode = generatedCode;
+    const normalizedDestPath = destPath.replace(/\\/g, '/');
+    const isRootLayout = normalizedDestPath.endsWith('app/_layout.tsx');
+    const stylingTech = state.facts?.tech?.styling;
+    const usesNativeWind =
+      stylingTech === 'NativeWind' || stylingTech === 'Tailwind';
+
+    if (isRootLayout && usesNativeWind) {
+      if (
+        !finalCode.includes('import "../nativewind"') &&
+        !finalCode.includes("import '../nativewind'")
+      ) {
+        printSubStep(
+          '[AST Injector] Auto-injected NativeWind global import into Root Layout.'
+        );
+        finalCode = `import "../nativewind";\n` + finalCode;
+      }
+    }
+
+    await fs.writeFile(absoluteDestPath, finalCode, 'utf-8');
 
     printFileWritten(destPath);
     printSubStepLast(`Saved: ${destPath} ✔`);

@@ -20,7 +20,9 @@ export class BlueprintManager {
 
     // 2. Group Layout & Group Redirect Index (If applicable, BOILERPLATE)
     if (isGroupNav) {
-      this._injectGroupLayout(filesQueue, appRoot, groupName);
+      const screens =
+        navigationSchema.screens || navigationSchema.mainRoutes || [];
+      this._injectGroupLayout(filesQueue, appRoot, groupName, screens);
       this._injectRedirectIndex(filesQueue, appRoot, groupName);
     }
   }
@@ -65,7 +67,7 @@ export class BlueprintManager {
     }
   }
 
-  static _injectGroupLayout(filesQueue, appRoot, groupName) {
+  static _injectGroupLayout(filesQueue, appRoot, groupName, screens = []) {
     const groupLayoutPath = `${appRoot}/(${groupName})/_layout.tsx`;
     if (!filesQueue.some((f) => f.relativeToProject === groupLayoutPath)) {
       filesQueue.push({
@@ -75,7 +77,7 @@ export class BlueprintManager {
         isVirtual: true,
         blueprintType: 'BOILERPLATE',
         hasJSX: true,
-        content: generateGroupLayout(groupName),
+        content: generateGroupLayout(groupName, screens),
       });
     }
   }

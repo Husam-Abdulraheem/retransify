@@ -14,13 +14,13 @@ Analyze the provided routes and their Extracted AST Metadata (inputs, forms, and
 
 Rules:
 1. Identify the Main Navigation (type):
-   - If a root or index route contains multiple navigation links (typically 2-4), choose 'tabs'.
-   - If there are many links (5+) or complex hierarchical structures, choose 'drawer'.
-   - If there are very few links across all files, default to 'stack'.
+   - 'tabs': If a root or index route contains multiple navigation links (typically 2-5).
+   - 'drawer': If there are many links (5+) or if a sidebar/hamburger menu is detected in the web UI.
+   - 'stack' or 'none': If there is no clear groupable primary navigation.
 2. Identify Modals:
    - If a specific route has a high count of inputs/forms and NO navigation links (like a Login, Signup, or Add Item form), add its Expo Path to the 'modals' array.
 3. Organize the Screens:
-   - Identify which screens belong in the main Tabs or Drawer and list their Expo paths inside the 'tabs' or 'drawerScreens' arrays respectively.
+   - Identify which screens are the "Main" destinations that should be directly accessible via the primary navigation (Tabs or Drawer). List their Expo paths (starting with 'app/') in the 'mainRoutes' array.
 
 --- ROUTE MAP (Original -> Expo Path) ---
 ${JSON.stringify(routeMap, null, 2)}
