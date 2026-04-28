@@ -1,10 +1,11 @@
 import path from 'path';
 import fs from 'fs-extra';
-import { SyntaxKind } from 'ts-morph';
+import { SyntaxKind, Node } from 'ts-morph';
 import { AstManager } from '../../services/AstManager.js';
 import { FrameworkDetector } from '../../detectors/FrameworkDetector.js';
 import { setupNativeWind } from '../../services/StyleConfigurator.js';
 import { ContextStore } from '../helpers/ContextStore.js';
+import { ContractRegistry } from '../helpers/ContractRegistry.js';
 import { PROJECT_PROFILES } from '../../config/profiles.js';
 import {
   printStep,
@@ -85,17 +86,16 @@ export async function analyzerNode(state) {
   }
 
   // ── 4. Scan files with ts-morph and extract summaries ─────────
-  const { contextStore, enrichedFiles } = await buildContextStore(
-    filesQueue,
-    projectPath,
-    tsProject
-  );
+  const { contextStore, contractRegistry, enrichedFiles } =
+    await buildContextStore(filesQueue, projectPath, tsProject);
 
   printSubStep(`Indexed ${contextStore.size} files in ContextStore`);
+  printSubStep(`Registered contracts for ${contractRegistry.size} files`);
 
   return {
     facts,
     vectorStore: contextStore,
+    contractRegistry,
     filesQueue: enrichedFiles,
   };
 }
@@ -290,17 +290,21 @@ function getWritePhaseIgnores(tech) {
 // ── Build ContextStore with ts-morph ─────────────────────────────────────────
 
 /**
- * Scans files with ts-morph, extracts AST summaries, and stores them in ContextStore.
- * No embeddings, no vectors — pure deterministic Key-Value storage.
+ * Scans files with ts-morph, extracts AST summaries (ContextStore) and
+ * structured function contracts (ContractRegistry).
+ *
+ * Both stores are populated in a single pass over the file queue to keep
+ * analysis O(n) — no separate scan is needed for contracts.
  *
  * @param {Array} filesQueue - Array of file objects
  * @param {string} projectPath
  * @param {import('ts-morph').Project} tsProject
- * @returns {{ contextStore: ContextStore, enrichedFiles: Array }}
+ * @returns {{ contextStore: ContextStore, contractRegistry: ContractRegistry, enrichedFiles: Array }}
  */
 async function buildContextStore(filesQueue, projectPath, tsProject) {
   startSubSpinner(`Indexing ${filesQueue.length} files...`);
   const contextStore = new ContextStore();
+  const contractRegistry = new ContractRegistry();
   const enrichedFiles = [];
 
   for (const fileObj of filesQueue) {
@@ -310,7 +314,7 @@ async function buildContextStore(filesQueue, projectPath, tsProject) {
     const absolutePath = resolveAbsolutePath(fileObj, projectPath);
 
     try {
-      const { summary, hasJSX, role } = await extractFileSummary(
+      const { summary, hasJSX, role, sourceFile } = await extractFileSummary(
         tsProject,
         absolutePath,
         filePath
@@ -320,6 +324,7 @@ async function buildContextStore(filesQueue, projectPath, tsProject) {
 
       if (!summary) continue;
 
+      // ── ContextStore (text summaries for LLM RAG context) ──────────
       contextStore.addDocuments([
         {
           pageContent: summary,
@@ -331,6 +336,24 @@ async function buildContextStore(filesQueue, projectPath, tsProject) {
           },
         },
       ]);
+
+      // ── ContractRegistry (structured signatures for validation) ────
+      // Only populate when we have a live sourceFile reference. If
+      // extractFileSummary hit the catch-fallback, sourceFile is null.
+      if (sourceFile) {
+        try {
+          const contracts = extractFileContracts(sourceFile);
+          if (contracts.length > 0) {
+            contractRegistry.registerFile(filePath, contracts);
+          }
+        } catch (contractErr) {
+          // Non-fatal: contract extraction failure must never block the
+          // main analysis pipeline.
+          printWarning(
+            `ContractRegistry: skipped ${filePath} — ${contractErr.message}`
+          );
+        }
+      }
     } catch (err) {
       printWarning(`Analyzer skipped ${filePath}: ${err.message}`);
       enrichedFiles.push({ ...fileObj, hasJSX: false });
@@ -338,7 +361,7 @@ async function buildContextStore(filesQueue, projectPath, tsProject) {
   }
 
   stopSpinner();
-  return { contextStore, enrichedFiles };
+  return { contextStore, contractRegistry, enrichedFiles };
 }
 
 /**
@@ -429,19 +452,65 @@ async function extractFileSummary(tsProject, absolutePath, relativePath) {
       });
     }
 
-    // 4. Hooks — full signatures (name, params, return type)
-    const hooks = sourceFile
+    // 4. Hooks — full signatures (name, params, return type).
+    // Covers both `function useX()` declarations AND `const useX = () =>`
+    // arrow exports. Destructured params are rendered as `{ key1, key2 }`
+    // instead of the lossy `param0: any` produced by the old approach.
+    const fnHooks = sourceFile
       .getFunctions()
       .filter((f) => f.getName()?.startsWith('use'));
-    if (hooks.length > 0) {
+
+    const arrowHooks = sourceFile.getVariableDeclarations().filter((v) => {
+      const init = v.getInitializer();
+      return (
+        init &&
+        (init.getKind() === SyntaxKind.ArrowFunction ||
+          init.getKind() === SyntaxKind.FunctionExpression) &&
+        v.getName()?.startsWith('use')
+      );
+    });
+
+    const allHooks = [
+      ...fnHooks.map((h) => ({
+        name: h.getName(),
+        parameters: h.getParameters(),
+        returnTypeText: h.getReturnType().getText(),
+      })),
+      ...arrowHooks.map((v) => {
+        const init = v.getInitializer();
+        return {
+          name: v.getName(),
+          parameters: init.getParameters ? init.getParameters() : [],
+          returnTypeText: init.getReturnType
+            ? init.getReturnType().getText()
+            : 'unknown',
+        };
+      }),
+    ];
+
+    if (allHooks.length > 0) {
       summaryParts.push('HOOKS:');
-      hooks.forEach((h) => {
-        const params = h
-          .getParameters()
-          .map((p) => `${p.getName()}: ${p.getType().getText()}`)
+      allHooks.forEach(({ name, parameters, returnTypeText }) => {
+        const params = parameters
+          .map((p) => {
+            const nameNode = p.getNameNode();
+            // Render destructured patterns as `{ key1, key2 }` so the LLM
+            // immediately sees the expected shape, not a synthetic `__0`.
+            if (
+              nameNode &&
+              nameNode.getKind() === SyntaxKind.ObjectBindingPattern
+            ) {
+              const keys = nameNode
+                .getElements()
+                .map((el) => el.getName())
+                .join(', ');
+              return `{ ${keys} }: ${p.getType().getText()}`;
+            }
+            return `${p.getName()}: ${p.getType().getText()}`;
+          })
           .join(', ');
-        const returnType = h.getReturnType().getText().slice(0, 120);
-        summaryParts.push(`  ${h.getName()}(${params}): ${returnType}`);
+        const returnType = returnTypeText.slice(0, 200);
+        summaryParts.push(`  ${name}(${params}): ${returnType}`);
       });
     }
 
@@ -483,5 +552,138 @@ async function extractFileSummary(tsProject, absolutePath, relativePath) {
   else if (isHook) role = 'hook';
   else if (isUtil) role = 'util';
 
-  return { summary: summaryParts.join('\n'), hasJSX, role };
+  // Return the live sourceFile reference so buildContextStore can pass it
+  // directly to extractFileContracts without re-parsing.
+  return { summary: summaryParts.join('\n'), hasJSX, role, sourceFile };
+}
+
+// ── Contract Extraction Helpers ──────────────────────────────────────────────
+
+/**
+ * Extracts structured FunctionContract objects for every exported function,
+ * arrow function, and hook found in a source file.
+ *
+ * Covers four patterns:
+ *   1. `export function foo(params) {}`
+ *   2. `export default function foo(params) {}`
+ *   3. `export const foo = (params) => {}`  (ArrowFunction)
+ *   4. `export const foo = function(params) {}`  (FunctionExpression)
+ *
+ * @param {import('ts-morph').SourceFile} sourceFile
+ * @returns {import('../helpers/ContractRegistry.js').FunctionContract[]}
+ */
+function extractFileContracts(sourceFile) {
+  const contracts = [];
+
+  // ── 1. Named function declarations ──────────────────────────────────────
+  for (const fn of sourceFile.getFunctions()) {
+    const name = fn.getName();
+    // Include exported functions and all hooks (hooks are always relevant
+    // even when not explicitly exported in JS files).
+    if (!fn.isExported() && !name?.startsWith('use')) continue;
+    if (!name) continue;
+
+    contracts.push({
+      name,
+      kind: 'function',
+      parameters: fn.getParameters().map(buildParameterContract),
+      returnType: fn.getReturnType().getText(),
+      isDefault: false,
+    });
+  }
+
+  // ── 2. Default export function ───────────────────────────────────────────
+  for (const fn of sourceFile.getFunctions()) {
+    if (fn.isDefaultExport()) {
+      contracts.push({
+        name: 'default',
+        kind: 'function',
+        parameters: fn.getParameters().map(buildParameterContract),
+        returnType: fn.getReturnType().getText(),
+        isDefault: true,
+      });
+    }
+  }
+
+  // ── 3. Exported variable declarations (arrow / function expressions) ─────
+  for (const varDecl of sourceFile.getVariableDeclarations()) {
+    const init = varDecl.getInitializer();
+    if (!init) continue;
+
+    const kind = init.getKind();
+    const isArrow = kind === SyntaxKind.ArrowFunction;
+    const isFnExpr = kind === SyntaxKind.FunctionExpression;
+    if (!isArrow && !isFnExpr) continue;
+
+    const name = varDecl.getName();
+    if (!name) continue;
+
+    // Include if exported OR if it's a hook (starts with 'use').
+    const isExported = varDecl.isExported?.();
+    const isHook = name.startsWith('use');
+    if (!isExported && !isHook) continue;
+
+    // ts-morph arrow/function expressions expose getParameters() directly.
+    const params = init.getParameters ? init.getParameters() : [];
+    const returnType = init.getReturnType
+      ? init.getReturnType().getText()
+      : 'unknown';
+
+    contracts.push({
+      name,
+      kind: 'arrow',
+      parameters: params.map(buildParameterContract),
+      returnType,
+      isDefault: false,
+    });
+  }
+
+  return contracts;
+}
+
+/**
+ * Converts a single ts-morph ParameterDeclaration into a ParameterContract.
+ *
+ * The key improvement over the old lossy approach is in how destructured
+ * parameters are handled: instead of returning `param0: any`, we inspect the
+ * ObjectBindingPattern to collect the actual property names the function
+ * expects, giving the LLM (and the future Verifier) the exact required shape.
+ *
+ * @param {import('ts-morph').ParameterDeclaration} param
+ * @returns {import('../helpers/ContractRegistry.js').ParameterContract}
+ */
+function buildParameterContract(param) {
+  const nameNode = param.getNameNode();
+  const isDestructured =
+    Node.isObjectBindingPattern(nameNode) ||
+    (nameNode && nameNode.getKind() === SyntaxKind.ObjectBindingPattern);
+
+  let destructuredKeys = [];
+  let displayName = param.getName();
+
+  if (isDestructured && Node.isObjectBindingPattern(nameNode)) {
+    // Extract each binding element's key name, ignoring rest elements.
+    destructuredKeys = nameNode
+      .getElements()
+      .filter((el) => !Node.isBindingElement(el) || !el.getDotDotDotToken())
+      .map((el) => {
+        // getPropertyNameNode() is the key when there's renaming (e.g. { foo: bar })
+        // getName() returns the local variable name (e.g. bar).
+        // We want the *key* (what the callee defines), so prefer getPropertyNameNode.
+        const propName = el.getPropertyNameNode();
+        return propName ? propName.getText() : el.getName();
+      })
+      .filter(Boolean);
+
+    displayName = `{ ${destructuredKeys.join(', ')} }`;
+  }
+
+  return {
+    name: displayName,
+    type: param.getType().getText(),
+    isDestructured,
+    destructuredKeys,
+    isOptional: param.isOptional(),
+    defaultValue: param.getInitializer()?.getText() ?? null,
+  };
 }
