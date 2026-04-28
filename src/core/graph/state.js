@@ -79,6 +79,19 @@ export const GraphState = Annotation.Root({
     default: () => null,
   }),
 
+  // ── Contract Registry ─────────────────────────────────────────
+  // ContractRegistry instance (populated in AnalyzerNode, updated in
+  // ContextUpdaterNode) — stores structured, machine-readable function
+  // and hook signatures for cross-file contract validation.
+  // Unlike ContextStore's lossy text summaries, this holds the exact
+  // parameter shapes (including destructured keys and types) that both
+  // the Executor (prompt injection) and SemanticVerifier (arg-count /
+  // shape validation) will consume in subsequent phases.
+  contractRegistry: Annotation({
+    reducer: (_, x) => x,
+    default: () => null,
+  }),
+
   // ── State Management ─────────────────────────────────────────
   // Number of Healing attempts for current file (reset with each new file)
   healAttempts: Annotation({
@@ -198,6 +211,11 @@ export const GraphState = Annotation.Root({
       ...new Set([...prev, ...(Array.isArray(x) ? x : [x])]),
     ],
     default: () => [],
+  }),
+  // Number of items auto-healed during final polish
+  autoHealStats: Annotation({
+    reducer: (prev, x) => ({ ...prev, ...x }),
+    default: () => ({ healedImports: 0, healedAssets: 0 }),
   }),
 });
 
