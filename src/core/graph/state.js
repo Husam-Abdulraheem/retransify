@@ -203,7 +203,7 @@ export const GraphState = Annotation.Root({
     default: () => ({}),
   }),
 
-  // إضافة الحقول المفقودة لمنع تسرب البيانات (Data Leaks)
+  // Add missing fields to prevent Data Leaks
   generatedDependencies: Annotation({
     reducer: (_, x) => x,
     default: () => [],
@@ -227,6 +227,12 @@ export const GraphState = Annotation.Root({
   autoHealStats: Annotation({
     reducer: (prev, x) => ({ ...prev, ...x }),
     default: () => ({ healedImports: 0, healedAssets: 0 }),
+  }),
+  // ── Telemetry ────────────────────────────────────────────────
+  // List of processing results for each file (success, healed, manual_action_required)
+  telemetry: Annotation({
+    reducer: (prev, x) => [...prev, ...(Array.isArray(x) ? x : [x])],
+    default: () => [],
   }),
 });
 

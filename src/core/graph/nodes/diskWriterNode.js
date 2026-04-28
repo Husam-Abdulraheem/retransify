@@ -87,10 +87,18 @@ export async function diskWriterNode(state) {
       });
     }
 
+    // ── 4. Record Telemetry ─────────────────────────────────────
+    const telemetryEntry = {
+      file: filePath,
+      status: state.healAttempts === 0 ? 'success' : 'healed',
+      attempts: 1 + (state.healAttempts || 0),
+    };
+
     return {
       completedFiles: filePath,
       errorLog: [],
       unresolvedErrors,
+      telemetry: [telemetryEntry],
     };
   } catch (err) {
     printError(`Write failed: ${err.message}`);
@@ -106,7 +114,7 @@ export async function diskWriterNode(state) {
   }
 }
 
-// 🚨 التعديل المعماري: الثقة المطلقة في PathMapper 🚨
+// 🚨 Architectural Modification: Absolute trust in PathMapper 🚨
 function resolveDestPath(filePath, pathMap) {
   let targetPath = pathMap?.[filePath] || filePath;
   return normalizePath(targetPath);

@@ -110,8 +110,9 @@ export async function healerNode(state, models = {}) {
     contractContext
   );
 
+  let response = null;
   try {
-    const response = await executeModel(fixPrompt, models, outputSchema, {
+    response = await executeModel(fixPrompt, models, outputSchema, {
       spinnerMessage: `AI Healing: Fixing ${filePath}...`,
       filePath,
     });
@@ -147,10 +148,20 @@ export async function healerNode(state, models = {}) {
       suggestedAction:
         'Manually convert this component to React Native primitives (View, Text).',
     };
+    const telemetryEntry = {
+      file: filePath,
+      status: 'manual_action_required',
+      attempts: 1 + newAttemptCount,
+      ai_reason:
+        response?.suggestedManualAction ||
+        'Maximum healing attempts reached without full resolution.',
+    };
+
     printSubStep(`Marked for manual intervention`, 1);
     return {
       healAttempts: newAttemptCount,
       unresolvedErrors: [errorRecord],
+      telemetry: [telemetryEntry],
     };
   }
 
