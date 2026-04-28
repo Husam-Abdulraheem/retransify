@@ -46,7 +46,7 @@ export async function executorNode(state, models = {}) {
   }
 
   const filePath = currentFile.relativeToProject || currentFile.filePath;
-  printSubStep('Converting file via AI...');
+  printSubStep('AI Transpilation...');
 
   // 🚨 SHORT-CIRCUIT: Bypass AI for BOILERPLATE templates. SKELETON templates go to AI.
   if (currentFile.isVirtual && currentFile.blueprintType === 'BOILERPLATE') {
@@ -92,21 +92,15 @@ export async function executorNode(state, models = {}) {
               (doc) => `--- ${doc.metadata.filePath} ---\n${doc.pageContent}`
             )
             .join('\n\n');
-          if (ragContext) {
-            printSubStep(
-              `RAG: ${contextDocs.length} imported files retrieved (deterministic)`
-            );
-          }
         }
 
         // b) Structured signatures from ContractRegistry
         if (contractRegistry) {
           contractContext = contractRegistry.toPromptContext(localPaths);
-          if (contractContext) {
-            printSubStep(
-              `Contracts: injecting exact signatures for imported functions`
-            );
-          }
+        }
+
+        if (ragContext || contractContext) {
+          printSubStep(`JIT Context: ${localPaths.length} local dependencies`);
         }
       }
     } catch (err) {
@@ -167,7 +161,7 @@ export async function executorNode(state, models = {}) {
       .replace(/```$/im, '')
       .trim();
 
-    printSubStep(`AI Generated: ${generatedCode.length} chars ✔`);
+    printSubStep(`AI Generation complete ✔`);
 
     return {
       generatedCode,
