@@ -3,6 +3,8 @@ import { SyntaxKind } from 'ts-morph';
 import { AstManager } from '../../services/AstManager.js';
 import { printStep, printSubStep, printWarning } from '../../utils/ui.js';
 import { resolveAbsolutePath, normalizePath } from '../../utils/pathUtils.js';
+import path from 'path';
+import { SemanticVerifier } from '../../scanners/SemanticVerifier.js';
 
 /**
  * VerifierNode - Audits the generated React Native code using AST structural checks
@@ -40,6 +42,31 @@ export async function verifierNode(state) {
     { relativeToProject: targetRelativePath },
     targetProjectPath
   );
+
+  // 1. Fast Semantic Verification (Fail-Fast)
+  const semanticErrors = SemanticVerifier.verify(
+    generatedCode,
+    targetRelativePath,
+    state
+  );
+
+  if (semanticErrors.length > 0) {
+    currentFile.needsHealing = true;
+    currentFile.verificationErrors = semanticErrors;
+
+    if (isRetry) {
+      printSubStep(
+        `Semantic Verification failed (${semanticErrors.length} errors)`,
+        1
+      );
+    } else {
+      printWarning(
+        `Semantic Verification failed for ${displayPath} (${semanticErrors.length} errors)`
+      );
+    }
+
+    return { errors: semanticErrors, missingDependencies: [] };
+  }
 
   // 🚨 3. حقن الكود الجديد (React Native) في المترجم بدلاً من الكود القديم!
   const sourceFile = AstManager.upsertExpoFile(
