@@ -136,7 +136,36 @@ async function setupExpoConfig(projectPath) {
     await fs.writeFile(babelConfigPath, baseBabelContent);
   }
 
-  // 3. Ensure tsconfig.json explicitly maps @/* dynamically based on project structure
+  // 3. Setup NativeWind Interop for expo-image
+  await setupNativeWindInterop(projectPath);
+
+  // 4. Ensure tsconfig.json explicitly maps @/* dynamically based on project structure
+  await setupTsConfig(projectPath);
+}
+
+/**
+ * Creates nativewind.ts for CSS Interop (Fixes expo-image className issue)
+ */
+async function setupNativeWindInterop(projectPath) {
+  const nativeWindPath = path.join(projectPath, 'nativewind.ts');
+  const content = `import { cssInterop } from "react-native-css-interop";
+import { Image } from "expo-image";
+
+// Enable Tailwind classes for expo-image
+cssInterop(Image, {
+  className: {
+    target: "style",
+  },
+});
+`;
+  await fs.writeFile(nativeWindPath, content);
+  printSubStep('Created nativewind.ts for CSS Interop');
+}
+
+/**
+ * Configure tsconfig.json with correct paths
+ */
+async function setupTsConfig(projectPath) {
   const tsConfigPath = path.join(projectPath, 'tsconfig.json');
   let tsConfig = {};
   if (await fs.pathExists(tsConfigPath)) {

@@ -47,10 +47,14 @@ export async function executorNode(state, models = {}) {
   const filePath = currentFile.relativeToProject || currentFile.filePath;
   printSubStep('Converting file via AI...');
 
-  // 🚨 SHORT-CIRCUIT: Virtual files have pre-set content — skip disk I/O
+  // 🚨 SHORT-CIRCUIT: Bypass AI for BOILERPLATE templates. SKELETON templates go to AI.
+  if (currentFile.isVirtual && currentFile.blueprintType === 'BOILERPLATE') {
+    printSubStep(`[Blueprint] Bypassing AI for BOILERPLATE file: ${filePath}`);
+    return { generatedCode: currentFile.content || '// Empty boilerplate' };
+  }
+
   if (!currentFile.isVirtual) {
     const absolutePath = resolveAbsolutePath(currentFile, state.projectPath);
-
     try {
       currentFile.content = await fs.readFile(absolutePath, 'utf-8');
     } catch (err) {
@@ -60,12 +64,6 @@ export async function executorNode(state, models = {}) {
     if (!currentFile.content || currentFile.content.trim() === '') {
       printWarning(`Empty file, skipping AI: ${filePath}`);
       return { generatedCode: '// Empty file' };
-    }
-  } else {
-    printSubStep(`[VIRTUAL] Using injected content for: ${filePath}`);
-    if (!currentFile.content || currentFile.content.trim() === '') {
-      printWarning(`Virtual file has no content, skipping: ${filePath}`);
-      return { generatedCode: '// Empty virtual file' };
     }
   }
 
@@ -151,6 +149,22 @@ export async function executorNode(state, models = {}) {
       .replace(/^```[a-z]*\n?/im, '')
       .replace(/```$/im, '')
       .trim();
+
+    // 🚨 Deterministic Injection Interceptor
+    const isRootLayout = fileContext.targetPath === 'app/_layout.tsx';
+    const usesNativeWind =
+      facts?.tech?.styling === 'NativeWind' ||
+      facts?.tech?.styling === 'Tailwind';
+
+    if (isRootLayout && usesNativeWind) {
+      if (
+        !generatedCode.includes('import "../nativewind"') &&
+        !generatedCode.includes("import '../nativewind'")
+      ) {
+        printSubStep('Interceptor: Injecting mandatory nativewind import');
+        generatedCode = `import "../nativewind";\n` + generatedCode;
+      }
+    }
 
     printSubStep(`AI Generated: ${generatedCode.length} chars ✔`);
 
