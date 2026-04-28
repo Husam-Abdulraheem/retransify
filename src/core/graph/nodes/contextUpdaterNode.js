@@ -2,7 +2,7 @@
 import path from 'path';
 import { SyntaxKind, Node } from 'ts-morph';
 import { AstManager } from '../../services/AstManager.js';
-import { printSubStep, printWarning } from '../../utils/ui.js';
+import { printWarning } from '../../utils/ui.js';
 import { normalizePath } from '../../utils/pathUtils.js';
 
 /**
@@ -42,8 +42,6 @@ export async function contextUpdaterNode(state) {
       },
     ]);
 
-    printSubStep('ContextStore updated with native summary');
-
     // ── Update ContractRegistry with post-conversion signatures ───────────
     // The contracts from the analysis phase reflect the original *web* code.
     // Now that the file has been converted, we evict the stale contracts and
@@ -59,7 +57,6 @@ export async function contextUpdaterNode(state) {
         if (newContracts.length > 0) {
           contractRegistry.registerFile(filePath, newContracts);
         }
-        printSubStep('ContractRegistry updated with native signatures');
       } catch (contractErr) {
         // Non-fatal: a failure here must never block the pipeline.
         printWarning(`ContractRegistry update failed: ${contractErr.message}`);
@@ -165,14 +162,14 @@ function extractContractsFromCode(code, filePath) {
     }
 
     return contracts;
-  } catch (err) {
+  } catch {
     // Non-fatal: return empty array so caller can still register nothing
     return [];
   } finally {
     if (sourceFile) {
       try {
         tsProject.removeSourceFile(sourceFile);
-      } catch (e) {
+      } catch {
         // Ignore cleanup errors
       }
     }

@@ -159,7 +159,6 @@ export async function fixBrokenImports(targetProjectPath) {
 
   // 3. Output the diagnostic report
   if (report.length > 0) {
-    console.log('\n🔍 Inspecting Physical Imports...');
     report.forEach((line) => {
       if (line.includes('[✔]')) printSubStep(line, 1);
       else printWarning(line);

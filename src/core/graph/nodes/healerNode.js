@@ -47,9 +47,7 @@ export async function healerNode(state, models = {}) {
     currentFile?.relativeToProject || currentFile?.filePath || 'unknown';
   const newAttemptCount = (healAttempts || 0) + 1;
 
-  printSubStep(
-    `🚑 AI Healing attempt ${newAttemptCount}/${MAX_HEAL_ATTEMPTS}...`
-  );
+  printSubStep(`🚑 Healing Attempt ${newAttemptCount}/${MAX_HEAL_ATTEMPTS}...`);
 
   if (!models.smartModel) {
     printError('HealerNode: no smartModel');
@@ -119,7 +117,7 @@ export async function healerNode(state, models = {}) {
     });
 
     if (response && response.code && response.code.length > 50) {
-      printSubStep(`✨ Fix generated. Re-verifying...`, 1);
+      printSubStep(`✨ Fix applied. Validating...`, 1);
       return {
         generatedCode: response.code,
         healAttempts: newAttemptCount,

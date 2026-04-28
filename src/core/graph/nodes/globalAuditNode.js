@@ -1,8 +1,12 @@
 // src/core/graph/nodes/globalAuditNode.js
 import { exec } from 'child_process';
 import util from 'util';
-import path from 'path';
-import { printStep, printWarning } from '../../utils/ui.js';
+import {
+  printStep,
+  startSpinner,
+  succeedSpinner,
+  failSpinner,
+} from '../../utils/ui.js';
 import { normalizePath } from '../../utils/pathUtils.js';
 
 const execAsync = util.promisify(exec);
@@ -12,7 +16,8 @@ const execAsync = util.promisify(exec);
  * This provides 100% accurate diagnostics by considering node_modules and actual tsconfig.
  */
 export async function globalAuditNode(state) {
-  printStep('Global Audit — running native TypeScript compiler check');
+  printStep('Global Audit — Native Compiler Check');
+  startSpinner('Running native TypeScript compiler check (tsc)...');
 
   const { targetProjectPath, unresolvedErrors = [] } = state;
   const newErrorsFound = [];
@@ -22,7 +27,7 @@ export async function globalAuditNode(state) {
     // نستخدم --noEmit للتأكد من صحة الكود دون توليد ملفات JS
     await execAsync('npx tsc --noEmit', { cwd: targetProjectPath });
 
-    // إذا نجح الأمر بدون أخطاء، ننتقل للخطوة التالية
+    succeedSpinner('Global Audit — No errors found.');
   } catch (error) {
     // 2. تحليل مخرجات tsc في حالة وجود أخطاء (وهو المتوقع دائماً مع كود AI)
     const tscOutput = (error.stdout || '') + (error.stderr || '');
@@ -61,12 +66,14 @@ export async function globalAuditNode(state) {
         }
       }
     }
-  }
 
-  if (newErrorsFound.length > 0) {
-    printWarning(
-      `Global Audit intercepted ${newErrorsFound.length} true TypeScript errors. Added to report.`
-    );
+    if (newErrorsFound.length > 0) {
+      failSpinner(
+        `Global Audit intercepted ${newErrorsFound.length} true TypeScript errors.`
+      );
+    } else {
+      succeedSpinner('Global Audit finished (no new errors found).');
+    }
   }
 
   // تحديث الـ state (الـ Reducer سيقوم بعملية الإلحاق تلقائياً)

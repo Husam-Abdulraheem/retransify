@@ -1,9 +1,9 @@
 // src/core/graph/nodes/verifierNode.js
 import { SyntaxKind } from 'ts-morph';
 import { AstManager } from '../../services/AstManager.js';
-import { printStep, printSubStep, printWarning } from '../../utils/ui.js';
+import { printSubStep, printWarning } from '../../utils/ui.js';
 import { resolveAbsolutePath, normalizePath } from '../../utils/pathUtils.js';
-import path from 'path';
+
 import { SemanticVerifier } from '../../scanners/SemanticVerifier.js';
 
 /**
@@ -30,7 +30,7 @@ export async function verifierNode(state) {
   const displayPath = normalizePath(filePath);
 
   if (!isRetry) {
-    printStep(`Verifier — inspecting ${displayPath}`);
+    printSubStep(`Structural Audit — inspecting ${displayPath}`);
   }
 
   const missingDependencies = new Set();
@@ -328,7 +328,7 @@ export async function verifierNode(state) {
     if (isRetry) {
       printSubStep(`Verified ✔`, 1);
     } else {
-      printSubStep(`Verified: ${displayPath} ✔`, 1);
+      printSubStep(`Structural Audit passed ✔`, 1);
     }
   }
 

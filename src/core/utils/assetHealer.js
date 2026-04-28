@@ -183,7 +183,6 @@ export async function fixBrokenAssets(targetProjectPath) {
   }
 
   if (report.length > 0) {
-    console.log('\n🖼️ Inspecting Static Assets...');
     report.forEach((line) => {
       if (line.includes('[✔]')) printSubStep(line, 1);
       else printWarning(line);

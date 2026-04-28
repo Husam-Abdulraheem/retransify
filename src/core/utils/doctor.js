@@ -5,7 +5,14 @@ import { checkConfigurations } from './configChecker.js';
 import { checkWebLeakage } from './webLeakScanner.js';
 import { fixBrokenImports } from './importHealer.js';
 import { fixBrokenAssets } from './assetHealer.js';
-import { printError, printStep } from './ui.js';
+import {
+  printError,
+  printStep,
+  printSuccess,
+  printInfo,
+  printDetail,
+} from './ui.js';
+import pc from 'picocolors';
 
 /**
  * The entry point for the 'retransify doctor' command.
@@ -14,7 +21,7 @@ import { printError, printStep } from './ui.js';
  * @param {string} targetProjectPath - The path to the Expo project
  */
 export async function runDoctor(targetProjectPath) {
-  console.log('\n🩺 Retransify Doctor is inspecting the project...\n');
+  printStep('Retransify Doctor — Project Inspection');
 
   // 🚨 1. The Guard Clause (Fail-Fast Mechanism)
   const pkgPath = path.join(targetProjectPath, 'package.json');
@@ -37,20 +44,15 @@ export async function runDoctor(targetProjectPath) {
 
   // 2. فحص الإعدادات الأساسية
   const configStatus = await checkConfigurations(targetProjectPath);
-  console.log('');
 
   // 3. فحص تسرب أكواد الويب (HTML/DOM)
   const webStatus = await checkWebLeakage(targetProjectPath);
-  console.log('');
 
   // 4. فحص وإصلاح المسارات المكسورة (الميزة القاتلة - Killer Feature)
   const importStatus = await fixBrokenImports(targetProjectPath);
-  console.log('');
 
   // 5. فحص وإصلاح الأصول الثابتة (Images, Fonts, etc.)
   const assetStatus = await fixBrokenAssets(targetProjectPath);
-
-  console.log('\n---------------------------------------------------');
 
   // القرار النهائي للسلامة: نجاح كل الفحوصات بنسبة 100%
   const isHealthy =
@@ -60,14 +62,34 @@ export async function runDoctor(targetProjectPath) {
     assetStatus.manualCount === 0;
 
   if (isHealthy) {
-    console.log(
-      '✅ Success: Project architecture looks solid and production-ready!'
+    printSuccess(
+      'Success: Project architecture looks solid and production-ready!'
     );
   } else {
-    printError(
-      '❌ Issues Found: Your project requires attention before it can run properly on native.'
+    printError('Issues Found: Your project requires attention.');
+
+    if (importStatus.manualCount > 0) {
+      printDetail(
+        pc.red(
+          `✖ ${importStatus.manualCount} imports require manual resolution.`
+        )
+      );
+    }
+    if (assetStatus.manualCount > 0) {
+      printDetail(
+        pc.red(
+          `✖ ${assetStatus.manualCount} static assets are missing or broken.`
+        )
+      );
+    }
+    if (!configStatus || !webStatus) {
+      printDetail(pc.red('✖ Configuration or web-leakage issues detected.'));
+    }
+
+    console.log('');
+    printInfo(
+      'Please resolve the items marked with [⚠] above to ensure a stable build.'
     );
-    console.log('Please review the manual actions and warnings listed above.');
   }
 }
 
