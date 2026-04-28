@@ -52,14 +52,16 @@ Our latest architectural overhaul introduces cutting-edge capabilities:
   - **Verifier Node**: Actively analyzes AST structure to mathematically flag leftover DOM elements, syntax errors, and faulty routing.
   - **Healer Node**: Dynamically corrects AI-generated code based on verifier feedback without user intervention.
   - **Auto-Installer Node**: Maps and installs React Native-compatible alternatives for web packages.
+  - **🔍 Global Audit Node**: Runs the native TypeScript compiler (`tsc --noEmit`) on the final project to intercept deep architectural errors.
+  - **🩹 Auto-Healer Node**: Performs a final "polish" pass to automatically fix broken relative imports, missing assets, and style mismatches.
+  - **📊 Reporter Node**: Generates a comprehensive AI-powered handoff report (`RETRANSIFY_REPORT.md`) summarizing the conversion success, healed items, and manual actions required.
 - **🛤️ Intelligent Route Projection**:
   - Automatically maps React Router / Next.js routes to the Expo `app/` directory structure.
-  - Supports dynamic segments, groups, and complex layout nesting.
+  - **Home Screen Resolver**: A specialized AST-tracing chain that discovers the *true* entry component by following the bootstrap path (e.g., `main.tsx` → `App.tsx` → Route `/`), rather than relying on filename guessing.
 - **🛡️ Resilience & Reliability**:
   - **Structural Contract Enforcement (AST-driven)**: Eliminates cross-file "hallucination" by extracting precise, machine-readable function signatures (parameters, destructured shapes, and types) into a central **ContractRegistry**.
   - **Authoritative Prompting**: Injects exact call-site contracts into the LLM workspace, ensuring functions are called with the correct object shapes.
   - **Cross-File Verification**: The Verifier mathematically validates that generated code conforms to imported function contracts before finalizing the file.
-  - **Strict Type Diagnostics**: Uses an ephemeral strict TypeScript project pass to catch deep type-safety violations across file boundaries.
   - **Multi-Model Fallback**: Automatically retries transient API errors (503/429) and switches providers if necessary.
 - **🎨 NativeWind v4 Integration**:
   - Complete support for modern styling. Detects Tailwind setups, configures `global.css`, and handles responsive class mappings.
@@ -73,30 +75,33 @@ Our latest architectural overhaul introduces cutting-edge capabilities:
 
 ## 🛠️ Architecture & Workflow
 
-Retransify utilizes a rigorous agentic graph logic to ensure maximum output reliability:
+Retransify utilizes a rigorous agentic graph logic to ensure maximum output reliability. The process is divided into **Pre-flight Resolution** (detecting stack, resolving home screen, installing baseline deps) and the **Conversion Loop**.
 
 ```mermaid
 graph TD;
     A[React Web Codebase] --> B[Analyzer Node];
-    B --> C[Planner Node];
-    C --> D[File Picker];
+    B --> C[Home Screen Resolver];
+    C --> D[Planner Node];
+    D --> E[File Picker];
 
     subgraph Iterative AI Graph Loop
-    D --> E[Executor Node];
-    E -- "Transient Error" --> R[Retry Handler];
-    R --> E;
-    E -- "Success" --> F[Verifier Node];
-    F -- "Missing Deps" --> G[Auto-Installer];
-    G --> F;
-    F -- "Syntax/DOM Error" --> H[Healer Node];
-    H --> F;
-    F -- "Approved" --> I[Context Updater];
-    I --> J[Disk Writer];
-    J --> D;
+    E --> F[Executor Node];
+    F -- "Transient Error" --> R[Retry Handler];
+    R --> F;
+    F -- "Success" --> G[Verifier Node];
+    G -- "Missing Deps" --> H[Auto-Installer];
+    H --> G;
+    G -- "Syntax/DOM Error" --> I[Healer Node];
+    I --> G;
+    G -- "Approved" --> J[Context Updater];
+    J --> K[Disk Writer];
+    K --> E;
     end
 
-    D -- "Queue Empty" --> K[Final TS Verification];
-    K --> L[Ready Expo Project];
+    E -- "Queue Empty" --> L[Global Audit (tsc)];
+    L --> M[Auto-Healer];
+    M --> N[AI Reporter];
+    N --> O[Ready Expo Project];
 ```
 
 ## 🚀 Getting Started
