@@ -33,6 +33,7 @@ export async function filePickerNode(state) {
     return {
       filesQueue: remainingFiles,
       currentFile: null, // Will re-invoke for the next file
+      skippedFiles: filePath,
     };
   }
 
@@ -49,6 +50,7 @@ export async function filePickerNode(state) {
     return {
       filesQueue: remainingFiles,
       currentFile: null,
+      skippedFiles: filePath,
     };
   }
 
@@ -59,10 +61,11 @@ export async function filePickerNode(state) {
     return {
       filesQueue: remainingFiles,
       currentFile: null,
+      skippedFiles: filePath,
     };
   }
 
-  printFileStart(filePath, remainingFiles.length);
+  printFileStart(filePath, remainingFiles.length + 1);
 
   // Read file content if not present
   let fileWithContent = nextFile;

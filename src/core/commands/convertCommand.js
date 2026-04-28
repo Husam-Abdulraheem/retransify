@@ -13,7 +13,7 @@ export async function handleConvert(projectPath, sdkVersion = null) {
     printMeta({
       target: projectPath,
       stack,
-      queue: files.length,
+      initialFiles: files.length,
     });
 
     // Run LangGraph Workflow

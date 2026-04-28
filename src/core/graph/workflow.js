@@ -368,8 +368,6 @@ export async function runMigrationWorkflow(
   // ── 6. Build and Run Graph ──────────────────────────────────
   //  ⚠️  LangGraph logs MUST be visible — no spinner wrapper here
   printStep('Running AI conversion pipeline');
-  console.log(''); // Breathing room before streaming logs
-
   const graph = buildWorkflow(models);
 
   try {
@@ -385,6 +383,7 @@ export async function runMigrationWorkflow(
     printSummaryBox({
       completed,
       failed,
+      skipped: finalState.skippedFiles?.length || 0,
       outputPath: targetProjectPath,
       elapsedMs: Date.now() - startTime,
     });

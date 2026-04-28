@@ -116,6 +116,17 @@ export const GraphState = Annotation.Root({
     default: () => [],
   }),
 
+  // Files intentionally skipped (e.g. web entry points)
+  skippedFiles: Annotation({
+    reducer: (prev, x) => {
+      const set = new Set(prev);
+      if (Array.isArray(x)) x.forEach((f) => set.add(f));
+      else set.add(x);
+      return Array.from(set);
+    },
+    default: () => [],
+  }),
+
   // ── Global Providers ─────────────────────────────────────────
   // Providers detected in the project (e.g., Redux Provider, Theme Provider)
   globalProviders: Annotation({
