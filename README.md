@@ -56,14 +56,18 @@ Our latest architectural overhaul introduces cutting-edge capabilities:
   - Automatically maps React Router / Next.js routes to the Expo `app/` directory structure.
   - Supports dynamic segments, groups, and complex layout nesting.
 - **🛡️ Resilience & Reliability**:
+  - **Structural Contract Enforcement (AST-driven)**: Eliminates cross-file "hallucination" by extracting precise, machine-readable function signatures (parameters, destructured shapes, and types) into a central **ContractRegistry**.
+  - **Authoritative Prompting**: Injects exact call-site contracts into the LLM workspace, ensuring functions are called with the correct object shapes.
+  - **Cross-File Verification**: The Verifier mathematically validates that generated code conforms to imported function contracts before finalizing the file.
+  - **Strict Type Diagnostics**: Uses an ephemeral strict TypeScript project pass to catch deep type-safety violations across file boundaries.
   - **Multi-Model Fallback**: Automatically retries transient API errors (503/429) and switches providers if necessary.
-  - **Deterministic RAG**: Fetches full signatures for explicitly defined local imports to ensure type safety.
 - **🎨 NativeWind v4 Integration**:
   - Complete support for modern styling. Detects Tailwind setups, configures `global.css`, and handles responsive class mappings.
 - **⚙️ Dynamic Expo Configuration**:
   - Automatically syncs `app.json` metadata (name, slug, scheme) with the source project's `package.json` to ensure professional branding and valid deep-linking out of the box.
 - **🩺 Retransify Doctor**:
   - A built-in diagnostic tool to verify the health of the migrated project and fix broken dependencies.
+
 
 ---
 
