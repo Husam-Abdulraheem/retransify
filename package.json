@@ -47,6 +47,24 @@
   "author": "Husam Abdulraheem",
   "license": "Apache-2.0",
   "type": "module",
+  "files": [
+    "src/",
+    "assets/",
+    "cli.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Husam-Abdulraheem/retransify.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Husam-Abdulraheem/retransify/issues"
+  },
+  "homepage": "https://github.com/Husam-Abdulraheem/retransify#readme",
   "devDependencies": {
     "@commitlint/cli": "^20.4.2",
     "@commitlint/config-conventional": "^20.4.2",
@@ -62,11 +80,11 @@
     "vitest": "^4.0.18"
   },
   "lint-staged": {
-    "/src/**/*.{js,mjs,jsx,ts,tsx}": [
+    "src/**/*.{js,mjs,jsx,ts,tsx}": [
       "eslint --fix",
       "prettier --write"
     ],
-    "/*.{js,mjs,cjs}": [
+    "*.{js,mjs,cjs}": [
       "eslint --fix",
       "prettier --write"
     ]

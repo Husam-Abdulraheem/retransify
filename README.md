@@ -2,6 +2,10 @@
 
 <div align="center">
 
+<img src="assets/logo.png" width="200" alt="Retransify Logo" />
+
+<br />
+
 ![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)
 ![Node](https://img.shields.io/badge/node-v22-green.svg)
 ![Platform](https://img.shields.io/badge/platform-React%20Native%20%7C%20Expo-blueviolet.svg)
@@ -109,33 +113,34 @@ graph TD;
 ### Prerequisites
 
 - [Node.js](https://nodejs.org/) (v22 recommended)
-- [npm](https://www.npmjs.com/) or [yarn](https://yarnpkg.com/)
-- Developer API Key for **Gemini** (Primary) or **Groq** (Secondary)
+- [npm](https://www.npmjs.com/)
+- Developer API Key for **Gemini** (Primary)
 
 ### Installation
 
-1. **Clone the repository**:
-   ```bash
-   git clone <repository-url>
-   cd retransify
-   npm install
-   ```
+You can install Retransify globally to use it anywhere:
 
-2. **Link the CLI locally**:
-   ```bash
-   npm link
-   ```
+```bash
+npm install -g retransify
+```
 
-### Configuration
+*Alternatively, for development:*
+1. Clone the repo and `cd retransify`
+2. Run `npm install`
+3. Run `npm link`
 
-Create a `.env` file in the root project directory:
+### 🔑 Configuration (API Key)
 
-```env
-AI_PROVIDER=gemini
-GEMINI_API_KEY=your_gemini_api_key
-GROQ_API_KEY=your_groq_api_key
-# Optional: Set secondary model for fallback
-SECONDARY_MODEL=gemini-1.5-flash
+Retransify requires an AI provider to think. The easiest way is to set your Google API Key in your environment:
+
+**Windows (PowerShell):**
+```powershell
+$env:GOOGLE_API_KEY = "your_key_here"
+```
+
+**Mac / Linux:**
+```bash
+export GOOGLE_API_KEY="your_key_here"
 ```
 
 ---
@@ -143,10 +148,17 @@ SECONDARY_MODEL=gemini-1.5-flash
 ## 📱 Usage
 
 ### 🏎️ Convert a Project
-Migrate your React web project to Expo:
+Navigate to your directory and run the conversion. Retransify will **interactively** ask you for the new project name:
+
 ```bash
-retransify convert ./path-to-react-app --sdk 54
+retransify convert ./path-to-react-app
 ```
+
+**What happens next?**
+1. ⌨️ **Input**: You'll be prompted for a project name (default is `your-app-mobile`).
+2. 🏗️ **Scaffold**: A clean Expo SDK 54 project is created.
+3. 🧠 **AI Flow**: The agentic graph starts analyzing and converting your files one by one.
+4. 🩺 **Self-Heal**: The tool automatically fixes DOM leaks and missing native dependencies.
 
 ### 🩺 Health Check
 Verify and fix dependencies in a migrated project:

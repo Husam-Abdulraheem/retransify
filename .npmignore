@@ -1,0 +1,32 @@
+# Development
+.gemini/
+.husky/
+.vscode/
+.cursor/
+.github/
+docs/
+__tests__/
+vitest.config.ts
+package-lock.json
+eslint.config.mjs
+.prettierrc
+commitlint.config.cjs
+
+# Local Config
+.env
+.env.*
+.env.example
+
+# Local test projects
+ToDoBoard/
+converted-expo-app/
+*-mobile/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Git
+.gitignore
+.gitattributes

@@ -78,28 +78,23 @@ export function optimizeFileContext(state, currentFile) {
   const metadata = state.routeMetadata?.[currentFileKey];
   const hasDynamicData = metadata?.requiredData?.length > 0;
 
-  let relevantAssets = [];
+  const relevantAssets = hasDynamicData
+    ? [...new Set(Object.values(state.pathMap).filter(isAssetPath))]
+    : (() => {
+        // Static file: send only assets whose filename (or stem) appears in the code
+        const assetSet = new Set();
+        Object.values(state.pathMap).forEach((mappedPath) => {
+          if (!isAssetPath(mappedPath)) return;
 
-  if (hasDynamicData) {
-    // Dynamic data file: send ALL assets because it may need a full lookup map
-    relevantAssets = [
-      ...new Set(Object.values(state.pathMap).filter(isAssetPath)),
-    ];
-  } else {
-    // Static file: send only assets whose filename (or stem) appears in the code
-    const assetSet = new Set();
-    Object.values(state.pathMap).forEach((mappedPath) => {
-      if (!isAssetPath(mappedPath)) return;
+          const fileName = mappedPath.split('/').pop(); // e.g. logo.svg
+          const stem = fileName.split('.')[0]; // e.g. logo
 
-      const fileName = mappedPath.split('/').pop(); // e.g. logo.svg
-      const stem = fileName.split('.')[0]; // e.g. logo
-
-      if (content.includes(fileName) || content.includes(stem)) {
-        assetSet.add(mappedPath);
-      }
-    });
-    relevantAssets = [...assetSet];
-  }
+          if (content.includes(fileName) || content.includes(stem)) {
+            assetSet.add(mappedPath);
+          }
+        });
+        return [...assetSet];
+      })();
 
   return { relevantPaths, relevantAssets };
 }

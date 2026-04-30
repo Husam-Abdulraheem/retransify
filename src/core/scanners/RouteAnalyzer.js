@@ -2,11 +2,7 @@ import { SyntaxKind } from 'ts-morph';
 import { AstManager } from '../services/AstManager.js';
 import path from 'path';
 import fs from 'fs-extra';
-import {
-  normalizePath,
-  joinPaths,
-  getRelativePath,
-} from '../utils/pathUtils.js';
+import { getRelativePath } from '../utils/pathUtils.js';
 import { ui } from '../utils/ui.js';
 
 export class RouteAnalyzer {

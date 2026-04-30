@@ -9,6 +9,11 @@ import { getActiveModelName } from '../core/ai/aiFactory.js';
 export async function runCLI() {
   printBanner(getActiveModelName());
 
+  // 1. Validate API Key
+  if (!validateApiKey()) {
+    return;
+  }
+
   const args = process.argv.slice(2);
 
   if (args.length === 0) {
@@ -76,4 +81,38 @@ function printHelp() {
   console.log(`    ${pc.dim('retransify convert ./my-react-app')}`);
   console.log(`    ${pc.dim('retransify doctor ./my-expo-app')}`);
   console.log('');
+}
+
+function validateApiKey() {
+  const geminiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+  const groqKey = process.env.GROQ_API_KEY;
+  const provider = process.env.AI_PROVIDER || 'gemini';
+
+  if (provider === 'gemini' && !geminiKey) {
+    console.log('');
+    console.log(pc.red(pc.bold('  Error: Gemini API Key not found.')));
+    console.log('');
+    console.log(`  To use Retransify, please set your Google API Key:`);
+    console.log(
+      `  ${pc.cyan('1.')} Get a free key at: ${pc.underline('https://aistudio.google.com/')}`
+    );
+    console.log(`  ${pc.cyan('2.')} Set it in your environment:`);
+    console.log(`     ${pc.dim('# Windows (PowerShell)')}`);
+    console.log(`     ${pc.white('$env:GOOGLE_API_KEY = "your_key_here"')}`);
+    console.log(`     ${pc.dim('# Mac/Linux')}`);
+    console.log(`     ${pc.white('export GOOGLE_API_KEY="your_key_here"')}`);
+    console.log('');
+    return false;
+  }
+
+  if (provider === 'groq' && !groqKey) {
+    console.log('');
+    console.log(pc.red(pc.bold('  Error: Groq API Key not found.')));
+    console.log('');
+    console.log(`  Please set your GROQ_API_KEY in your environment.`);
+    console.log('');
+    return false;
+  }
+
+  return true;
 }

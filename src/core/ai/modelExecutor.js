@@ -1,5 +1,4 @@
 import {
-  printSubStep,
   printWarning,
   printError,
   startSubSpinner,
@@ -72,7 +71,7 @@ export async function executeModel(
         `Transient API error for ${filePath}, will retry: ${err.message}`
       );
       // Throwing so the LangGraph retryNode can catch it via state.errors starting with TRANSIENT:
-      throw new Error(`TRANSIENT:${err.message}`);
+      throw new Error(`TRANSIENT:${err.message}`, { cause: err });
     }
 
     printError(

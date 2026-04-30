@@ -8,10 +8,11 @@ export default [
     ignores: [
       'node_modules/**',
       'converted-expo-app/**',
-      'templates/**',
+      'src/templates/**',
       'dist/**',
       'build/**',
-      'tests/fixtures/**',
+      '__tests__/**',
+      'docs/**',
     ],
   },
   js.configs.recommended,

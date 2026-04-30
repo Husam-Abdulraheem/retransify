@@ -13,7 +13,6 @@ export async function autoInstallerNode(state) {
     installAttempts = 0,
     targetProjectPath,
     currentFile,
-    errors = [],
     installedPackages = [],
   } = state;
 

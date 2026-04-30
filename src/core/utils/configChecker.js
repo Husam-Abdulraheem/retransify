@@ -40,7 +40,7 @@ export async function checkConfigurations(targetProjectPath) {
         printWarning(`[✖] app.json is missing 'expo-router' plugin.`);
         hasErrors = true;
       }
-    } catch (e) {
+    } catch {
       printWarning(`[✖] app.json is malformed and cannot be parsed.`);
       hasErrors = true;
     }

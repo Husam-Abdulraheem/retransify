@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs-extra';
 import { AstManager } from '../services/AstManager.js';
 import { normalizePath } from './pathUtils.js';
-import { printSubStep, printWarning } from './ui.js';
+import { printSubStep } from './ui.js';
 
 /**
  * Ensures that the global.css import is present in the root layout file.
