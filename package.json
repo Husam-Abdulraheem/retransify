@@ -1,6 +1,6 @@
 {
   "name": "retransify",
-  "version": "1.0.0",
+  "version": "1.0.0-beta.1",
   "description": "CLI tool that autonomously converts React web projects into production-ready React Native (Expo) apps using AI and LangGraph agentic workflows.",
   "bin": {
     "retransify": "./cli.js"
