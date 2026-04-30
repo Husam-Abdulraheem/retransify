@@ -15,6 +15,7 @@ import { runLayoutAgent } from './nodes/layoutAgentNode.js';
 import { globalAuditNode } from './nodes/globalAuditNode.js';
 import { reporterNode } from './nodes/reporterNode.js';
 import { autoHealerNode } from './nodes/autoHealerNode.js';
+import { cacheLoaderNode } from './nodes/cacheLoaderNode.js';
 import { createModelPair } from '../ai/aiFactory.js';
 import { DependencyManager } from '../helpers/dependencyManager.js';
 import { RouteAnalyzer } from '../scanners/RouteAnalyzer.js';
@@ -22,6 +23,8 @@ import { ensureNativeProject } from '../services/ProjectInitializer.js';
 import { FrameworkDetector } from '../detectors/FrameworkDetector.js';
 import { getRealEntryPoint, inferSourceRoot } from './nodes/analyzerNode.js';
 import { HomeScreenResolver } from '../scanners/HomeScreenResolver.js';
+import { StatePersistenceService } from '../services/StatePersistenceService.js';
+import { calculateHash } from '../utils/hashUtils.js';
 import {
   startSpinner,
   stopSpinner,
@@ -81,6 +84,7 @@ function buildWorkflow(models) {
 
   workflow.addNode(NODE_NAMES.REPORTER, (state) => reporterNode(state, models));
   workflow.addNode(NODE_NAMES.AUTO_HEALER, (state) => autoHealerNode(state));
+  workflow.addNode(NODE_NAMES.CACHE_LOADER, (state) => cacheLoaderNode(state));
 
   // ── Define Static Edges ────────────────────────────
   workflow.setEntryPoint(NODE_NAMES.ANALYZER);
@@ -91,6 +95,7 @@ function buildWorkflow(models) {
   // After FilePicker -> check if there is a file to process
   workflow.addConditionalEdges(NODE_NAMES.FILE_PICKER, shouldProcessFile, {
     process: NODE_NAMES.EXECUTOR,
+    cache: NODE_NAMES.CACHE_LOADER, // 👈 New path for cached files
     skip: NODE_NAMES.FILE_PICKER, // Skipped file -> fetch next file
     done: NODE_NAMES.GLOBAL_AUDIT, // 👈 البدء بالفحص النهائي أولاً
   });
@@ -132,6 +137,9 @@ function buildWorkflow(models) {
   // After DiskWriter -> fetch next file or finish
   workflow.addEdge(NODE_NAMES.DISK_WRITER, NODE_NAMES.FILE_PICKER);
 
+  // After CacheLoader -> go straight to ContextUpdater (bypassing AI/Verifier/DiskWriter)
+  workflow.addEdge(NODE_NAMES.CACHE_LOADER, NODE_NAMES.CONTEXT_UPDATER);
+
   return workflow.compile();
 }
 
@@ -153,6 +161,23 @@ function shouldProcessFile(state) {
       return 'done';
     }
     return 'skip'; // Fetch next file
+  }
+
+  // Check if file is unchanged (Resume logic)
+  const sourcePath =
+    state.currentFile.relativeToProject || state.currentFile.filePath;
+  const currentHash = calculateHash(state.currentFile.content || '');
+  const persistentState = state.options?.persistentState;
+
+  if (
+    persistentState &&
+    StatePersistenceService.isUnchanged(
+      persistentState,
+      sourcePath,
+      currentHash
+    )
+  ) {
+    return 'cache';
   }
 
   return 'process'; // Process current file
@@ -248,6 +273,11 @@ export async function runMigrationWorkflow(
     fastModelOverride: options.fastModelOverride,
     smartModelOverride: options.smartModelOverride,
   });
+
+  // ── 1.5. Initialize Persistent State ──────────────────────────────
+  const persistentState =
+    await StatePersistenceService.loadState(targetProjectPath);
+  options.persistentState = persistentState;
 
   // ── 2. Initialize DependencyManager ───────────────────────────────
   const dependencyManager = new DependencyManager({

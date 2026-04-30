@@ -3,6 +3,8 @@ import path from 'path';
 import fs from 'fs-extra';
 import pc from 'picocolors';
 import { normalizePath, resolveAbsolutePath } from '../../utils/pathUtils.js';
+import { calculateHash } from '../../utils/hashUtils.js';
+import { StatePersistenceService } from '../../services/StatePersistenceService.js';
 import { CONFLICT_MAP, WEB_ONLY_BLOCKLIST } from '../../config/libraryRules.js';
 import {
   printSubStep,
@@ -71,6 +73,16 @@ export async function diskWriterNode(state) {
     }
 
     await fs.writeFile(absoluteDestPath, finalCode, 'utf-8');
+
+    // ── 3.5. Update Persistent State ─────────────────────────────
+    await StatePersistenceService.updateFile(
+      state.targetProjectPath,
+      filePath,
+      {
+        hash: calculateHash(currentFile.content || ''),
+        targetPath: destPath,
+      }
+    );
 
     printSubStepLast(`Saved as ${pc.white(pc.bold(destPath))} ✨`);
 

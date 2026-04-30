@@ -249,6 +249,7 @@ export const NODE_NAMES = {
   CONTEXT_UPDATER: 'contextUpdaterNode',
   DISK_WRITER: 'diskWriterNode',
   FILE_PICKER: 'filePickerNode', // Helper node: pulls next file from filesQueue
+  CACHE_LOADER: 'cacheLoaderNode', // Loads existing code from disk if hash matches
   RETRY_HANDLER: 'retryNode', // Handles transient 503/429 with exponential backoff
   GLOBAL_AUDIT: 'globalAuditNode',
   REPORTER: 'reporterNode',

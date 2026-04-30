@@ -27,16 +27,6 @@ export async function filePickerNode(state) {
   const [nextFile, ...remainingFiles] = filesQueue;
   const filePath = nextFile.relativeToProject || nextFile.filePath;
 
-  // ── Check previously completed files (resumption) ───────────
-  if (completedFiles.includes(filePath)) {
-    printFileSkip('Skipped (already done)', filePath);
-    return {
-      filesQueue: remainingFiles,
-      currentFile: null, // Will re-invoke for the next file
-      skippedFiles: filePath,
-    };
-  }
-
   // ── Check Web Mount files to delete ─────────────────────────
   // Only skip if the file is in the src/ root (e.g. src/main.tsx, src/index.tsx)
   // DO NOT skip virtual files (isVirtual) or non-src roots
@@ -69,10 +59,10 @@ export async function filePickerNode(state) {
 
   // Read file content if not present
   let fileWithContent = nextFile;
-  if (!nextFile.content && nextFile.filePath) {
+  if (!nextFile.content && nextFile.absolutePath) {
     try {
       const { readFile } = await import('fs/promises');
-      const absolutePath = nextFile.filePath;
+      const absolutePath = nextFile.absolutePath;
       const content = await readFile(absolutePath, 'utf-8');
       fileWithContent = { ...nextFile, content };
     } catch {
