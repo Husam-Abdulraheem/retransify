@@ -146,6 +146,11 @@ Retransify requires an AI provider to think. The easiest way is to set your Goog
 $env:GOOGLE_API_KEY = "your_key_here"
 ```
 
+**Windows (CMD):**
+```cmd
+set GOOGLE_API_KEY=your_key_here
+```
+
 **Mac / Linux:**
 ```bash
 export GOOGLE_API_KEY="your_key_here"

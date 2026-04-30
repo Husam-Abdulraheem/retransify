@@ -99,7 +99,9 @@ function validateApiKey() {
     console.log(`  ${pc.cyan('2.')} Set it in your environment:`);
     console.log(`     ${pc.dim('# Windows (PowerShell)')}`);
     console.log(`     ${pc.white('$env:GOOGLE_API_KEY = "your_key_here"')}`);
-    console.log(`     ${pc.dim('# Mac/Linux')}`);
+    console.log(`     ${pc.dim('# Windows (CMD)')}`);
+    console.log(`     ${pc.white('set GOOGLE_API_KEY=your_key_here')}`);
+    console.log(`     ${pc.dim('# Mac / Linux')}`);
     console.log(`     ${pc.white('export GOOGLE_API_KEY="your_key_here"')}`);
     console.log('');
     return false;
