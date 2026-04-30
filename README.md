@@ -1,18 +1,17 @@
-# ⚛️ Retransify (React to React Native/Expo CLI)
-
 <div align="center">
+  <img src="assets/logo.png" width="200" alt="Retransify Logo" />
+  <h1>Retransify</h1>
+  <p><b>React Web to React Native/Expo CLI</b></p>
 
-<img src="assets/logo.png" width="200" alt="Retransify Logo" />
+  ![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)
+  ![Node](https://img.shields.io/badge/node-v22-green.svg)
+  ![Platform](https://img.shields.io/badge/platform-React%20Native%20%7C%20Expo-blueviolet.svg)
+  ![AI Powered](https://img.shields.io/badge/AI-LangGraph%20powered-FF9900.svg)
+  ![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)
 
-<br />
+  <br />
 
-![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)
-![Node](https://img.shields.io/badge/node-v22-green.svg)
-![Platform](https://img.shields.io/badge/platform-React%20Native%20%7C%20Expo-blueviolet.svg)
-![AI Powered](https://img.shields.io/badge/AI-LangGraph%20powered-FF9900.svg)
-![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)
-
-**Autonomously transition your existing React Web codebases to Production-Ready React Native Expo Mobile Apps via intelligent AI parsing.**
+  **Autonomously transition your existing React Web codebases to Production-Ready React Native Expo Mobile Apps via intelligent AI parsing.**
 
 </div>
 
