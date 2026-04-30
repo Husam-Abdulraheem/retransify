@@ -1,5 +1,5 @@
 {
-  "name": "retransify-local",
+  "name": "retransify",
   "version": "1.0.0",
   "description": "CLI tool that autonomously converts React web projects into production-ready React Native (Expo) apps using AI and LangGraph agentic workflows.",
   "bin": {

@@ -1,5 +1,6 @@
 import path from 'path';
 import pc from 'picocolors';
+import readline from 'readline';
 import { handleConvert } from '../core/commands/convertCommand.js';
 import { runDoctor } from '../core/utils/doctor.js';
 import { printBanner } from '../core/utils/ui.js';
@@ -26,14 +27,29 @@ export async function runCLI() {
       projectPath = path.resolve(projectPath);
     }
 
-    // Parse --sdk flag
-    let sdkVersion = null;
-    const sdkIndex = args.indexOf('--sdk');
-    if (sdkIndex !== -1 && args[sdkIndex + 1]) {
-      sdkVersion = args[sdkIndex + 1];
-    }
+    // 2. Extract default name
+    const defaultName = `${path.basename(projectPath)}-mobile`;
 
-    await handleConvert(projectPath, sdkVersion);
+    // 3. Prompt user for project name
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+
+    const projectName = await new Promise((resolve) => {
+      rl.question(
+        `\n${pc.cyan('?')} Project name ${pc.dim(`(${defaultName})`)}: `,
+        (answer) => {
+          rl.close();
+          resolve(answer.trim() || defaultName);
+        }
+      );
+    });
+
+    // 4. Form final absolute path
+    const targetProjectPath = path.resolve(process.cwd(), projectName);
+
+    await handleConvert(projectPath, targetProjectPath);
     return;
   }
 
@@ -50,14 +66,14 @@ function printHelp() {
   console.log('');
   console.log(`  ${pc.bold('Usage:')}`);
   console.log(
-    `    ${pc.cyan('retransify convert')} ${pc.dim('<path-to-react-project>')} ${pc.dim('[--sdk <version>]')}`
+    `    ${pc.cyan('retransify convert')} ${pc.dim('<path-to-react-project>')}`
   );
   console.log(
     `    ${pc.cyan('retransify doctor')}  ${pc.dim('<path-to-expo-project>')}`
   );
   console.log('');
   console.log(`  ${pc.bold('Examples:')}`);
-  console.log(`    ${pc.dim('retransify convert ./my-react-app --sdk 52')}`);
+  console.log(`    ${pc.dim('retransify convert ./my-react-app')}`);
   console.log(`    ${pc.dim('retransify doctor ./my-expo-app')}`);
   console.log('');
 }

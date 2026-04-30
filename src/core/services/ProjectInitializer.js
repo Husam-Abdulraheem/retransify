@@ -23,7 +23,7 @@ const __dirname = path.dirname(__filename);
  */
 export async function ensureNativeProject(
   sourceProjectPath,
-  sdkVersion,
+  targetProjectPath,
   dependencyManager
 ) {
   if (!dependencyManager) {
@@ -32,7 +32,7 @@ export async function ensureNativeProject(
     );
   }
 
-  const projectPath = path.join(process.cwd(), 'converted-expo-app');
+  const projectPath = targetProjectPath;
 
   // If project exists and is valid
   if (await fs.pathExists(projectPath)) {
@@ -57,7 +57,7 @@ export async function ensureNativeProject(
   printSubStep('Scaffolding from local SDK template');
 
   try {
-    const templateName = `sdk-${sdkVersion || 54}`;
+    const templateName = 'sdk-54';
     const templatePath = path.join(__dirname, '../../templates', templateName);
 
     if (!(await fs.pathExists(templatePath))) {

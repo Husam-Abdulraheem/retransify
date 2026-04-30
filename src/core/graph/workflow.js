@@ -230,11 +230,13 @@ function shouldHealOrContinue(state) {
  * Runs the full migration workflow
  *
  * @param {string} projectPath - Web React project path
+ * @param {string} targetProjectPath - Target Expo project path
  * @param {Array} filesQueue - Array of file objects from FileScanner
- * @param {Object} options - { sdkVersion, provider, fastModelOverride, smartModelOverride }
+ * @param {Object} options - { provider, fastModelOverride, smartModelOverride }
  */
 export async function runMigrationWorkflow(
   projectPath,
+  targetProjectPath,
   filesQueue,
   options = {}
 ) {
@@ -256,12 +258,11 @@ export async function runMigrationWorkflow(
   //  ⚠️  stopSpinner BEFORE ensureNativeProject because it runs npm/npx internally
   printStep('Setting up React Native base project');
   stopSpinner();
-  const { projectPath: targetProjectPath, assetMap } =
-    await ensureNativeProject(
-      projectPath,
-      options.sdkVersion,
-      dependencyManager
-    );
+  const { assetMap } = await ensureNativeProject(
+    projectPath,
+    targetProjectPath,
+    dependencyManager
+  );
   printInfo(`Output path: ${targetProjectPath}`);
 
   // ── 3.5. Phase 1: Pre-flight Dependency Resolution & Route Extraction ────────────────
