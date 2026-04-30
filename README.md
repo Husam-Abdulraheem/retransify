@@ -1,19 +1,28 @@
-<div align="center">
-  <img src="assets/logo.png" width="200" alt="Retransify Logo" />
-  <h1>Retransify</h1>
-  <p><b>React Web to React Native/Expo CLI</b></p>
+<table align="center" style="border-collapse: collapse; border: none;">
+  <tr style="border: none;">
+    <td align="center" style="border: none; padding: 20px;">
+      <img src="assets/logo.png" width="180" alt="Retransify Logo" />
+    </td>
+    <td style="border: none; padding: 20px; vertical-align: middle;">
+      <h1>Retransify</h1>
+      <p>
+        <img src="https://img.shields.io/npm/v/retransify.svg" alt="npm version" />
+        <img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License" />
+        <img src="https://img.shields.io/badge/node-v22-green.svg" alt="Node" />
+        <br />
+        <img src="https://img.shields.io/badge/platform-React%20Native%20%7C%20Expo-blueviolet.svg" alt="Platform" />
+        <img src="https://img.shields.io/badge/AI-LangGraph%20powered-FF9900.svg" alt="AI Powered" />
+        <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs Welcome" />
+      </p>
+    </td>
+  </tr>
+</table>
 
-  ![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)
-  ![Node](https://img.shields.io/badge/node-v22-green.svg)
-  ![Platform](https://img.shields.io/badge/platform-React%20Native%20%7C%20Expo-blueviolet.svg)
-  ![AI Powered](https://img.shields.io/badge/AI-LangGraph%20powered-FF9900.svg)
-  ![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)
+<p align="center">
+  <b>Autonomously transition your existing React Web codebases to Production-Ready React Native Expo Mobile Apps via intelligent AI parsing.</b>
+</p>
 
-  <br />
-
-  **Autonomously transition your existing React Web codebases to Production-Ready React Native Expo Mobile Apps via intelligent AI parsing.**
-
-</div>
+---
 
 ## 📋 Table of Contents
 
