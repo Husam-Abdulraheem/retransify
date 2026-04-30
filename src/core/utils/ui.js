@@ -266,6 +266,7 @@ export function printSummaryBox({
   completed,
   failed,
   skipped = 0,
+  unresolved = 0,
   outputPath,
   elapsedMs,
 }) {
@@ -300,6 +301,9 @@ export function printSummaryBox({
   console.log(header);
   console.log(pc.cyan(midBorder));
   console.log(pad(' ✔  Files converted : ', completed, pc.green));
+  if (unresolved > 0) {
+    console.log(pad(' ⚠  Files with issues: ', unresolved, pc.yellow));
+  }
   console.log(
     pad(' ✖  Files failed    : ', failed, failed > 0 ? pc.red : pc.dim)
   );

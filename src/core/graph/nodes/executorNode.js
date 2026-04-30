@@ -177,7 +177,7 @@ export async function executorNode(state, models = {}) {
 
     printError(`Failed permanently: ${filePath} - ${err.message}`);
     return {
-      generatedCode: null,
+      generatedCode: currentFile.content || '// Conversion failed',
       errors: [`AI Conversion failed: ${err.message}`],
     };
   }

@@ -108,14 +108,14 @@ function buildWorkflow(models) {
   // After Executor -> check if generation succeeded
   workflow.addConditionalEdges(NODE_NAMES.EXECUTOR, didExecutorSucceed, {
     success: NODE_NAMES.VERIFIER,
-    failure: NODE_NAMES.FILE_PICKER, // Permanent failure -> move to next file
+    failure: NODE_NAMES.DISK_WRITER, // Go to disk even on failure to save 'as is'
     retry: NODE_NAMES.RETRY_HANDLER, // Transient 503/429 -> wait and retry same file
   });
 
-  // After RetryNode -> either retry same file (→ Executor) or give up (→ FilePicker)
+  // After RetryNode -> either retry same file (→ Executor) or give up (→ DiskWriter)
   workflow.addConditionalEdges(NODE_NAMES.RETRY_HANDLER, afterRetry, {
     retry: NODE_NAMES.EXECUTOR, // Same file re-enters Executor (order preserved)
-    abort: NODE_NAMES.FILE_PICKER, // Max retries exceeded -> skip to next file
+    abort: NODE_NAMES.DISK_WRITER, // Max retries exceeded -> save 'as is'
   });
 
   // After Verifier -> either Healer (if failed) or ContextUpdater (if succeeded)
@@ -189,14 +189,16 @@ const MAX_RETRY = 3;
  * Did ExecutorNode succeed in generating the code?
  */
 function didExecutorSucceed(state) {
-  if (!state.generatedCode || state.generatedCode.length < 10) {
+  const hasErrors = state.errors && state.errors.length > 0;
+
+  if (!state.generatedCode || state.generatedCode.length < 10 || hasErrors) {
     const isTransient = state.errors?.some((e) => e.startsWith('TRANSIENT:'));
     if (isTransient) {
       printWarning('[Workflow] Transient API error — routing to RetryNode...');
       return 'retry';
     }
     printWarning(
-      '[Workflow] ExecutorNode failed permanently — moving to next file'
+      `[Workflow] ExecutorNode ${hasErrors ? 'encountered errors' : 'failed'} — routing to DiskWriter`
     );
     return 'failure';
   }
@@ -414,6 +416,7 @@ export async function runMigrationWorkflow(
     printSummaryBox({
       completed,
       failed,
+      unresolved: finalState.unresolvedErrors?.length || 0,
       skipped: finalState.skippedFiles?.length || 0,
       outputPath: targetProjectPath,
       elapsedMs: Date.now() - startTime,

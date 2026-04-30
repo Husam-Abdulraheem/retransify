@@ -87,11 +87,16 @@ export async function diskWriterNode(state) {
     printSubStepLast(`Saved as ${pc.white(pc.bold(destPath))} ✨`);
 
     const unresolvedErrors = [];
-    if (state.errors && state.errors.length > 0 && state.healAttempts >= 3) {
+    if (state.errors && state.errors.length > 0) {
       const aiSuggestion = state.lastHealAnalysis?.suggestedManualAction;
+      const firstError = state.errors[0];
+      const isHealLimit = state.healAttempts >= 3;
+
       unresolvedErrors.push({
         filePath,
-        reason: `Exceeded max heal attempts (3). Remaining errors: ${state.errors.length}. First error: ${state.errors[0]}`,
+        reason: isHealLimit
+          ? `Exceeded max heal attempts (3). Remaining errors: ${state.errors.length}. First: ${firstError}`
+          : `AI Conversion failed or skipped. Error: ${firstError}`,
         codeSnippet: (generatedCode || '').substring(0, 800) + '...',
         suggestedAction: aiSuggestion
           ? `AI Recommendation: ${aiSuggestion}`
@@ -100,9 +105,14 @@ export async function diskWriterNode(state) {
     }
 
     // ── 4. Record Telemetry ─────────────────────────────────────
+    let status = state.healAttempts === 0 ? 'success' : 'healed';
+    if (unresolvedErrors.length > 0) {
+      status = 'manual_action_required';
+    }
+
     const telemetryEntry = {
       file: filePath,
-      status: state.healAttempts === 0 ? 'success' : 'healed',
+      status,
       attempts: 1 + (state.healAttempts || 0),
     };
 
