@@ -6,6 +6,24 @@ dotenv.config();
 
 const PROVIDER = process.env.AI_PROVIDER || 'gemini';
 
+import { thesisMetrics } from '../utils/thesisMetrics.js';
+
+const getTelemetryCallbacks = () => {
+  if (!process.env.THESIS_MODE) return [];
+  return [
+    {
+      handleLLMEnd: async (output) => {
+        let tokens = 0;
+        if (output?.llmOutput?.tokenUsage) {
+          const usage = output.llmOutput.tokenUsage;
+          tokens = (usage.promptTokens || 0) + (usage.completionTokens || 0);
+        }
+        thesisMetrics.addTokens(tokens);
+      },
+    },
+  ];
+};
+
 export function createFastModel() {
   if (PROVIDER === 'groq') {
     return new ChatGroq({
@@ -13,6 +31,7 @@ export function createFastModel() {
       temperature: 0,
       maxRetries: 3,
       maxTokens: 8192,
+      callbacks: getTelemetryCallbacks(),
     });
   }
   return new ChatGoogleGenerativeAI({
@@ -20,6 +39,7 @@ export function createFastModel() {
     temperature: 0,
     maxRetries: 3,
     maxTokens: 8192,
+    callbacks: getTelemetryCallbacks(),
   });
 }
 
@@ -30,6 +50,7 @@ export function createSmartModel() {
       temperature: 0,
       maxRetries: 3,
       maxTokens: 8192,
+      callbacks: getTelemetryCallbacks(),
     });
   }
   return new ChatGoogleGenerativeAI({
@@ -37,6 +58,7 @@ export function createSmartModel() {
     temperature: 0,
     maxRetries: 6,
     maxTokens: 8192,
+    callbacks: getTelemetryCallbacks(),
   });
 }
 

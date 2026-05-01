@@ -1,8 +1,11 @@
 import { scanProject } from '../scanners/FileScanner.js';
 import { runMigrationWorkflow } from '../graph/workflow.js';
 import { startSpinner, failSpinner, printMeta } from '../utils/ui.js';
+import { thesisMetrics } from '../utils/thesisMetrics.js';
 
 export async function handleConvert(sourceProjectPath, targetProjectPath) {
+  if (process.env.THESIS_MODE) thesisMetrics.startTimer(sourceProjectPath);
+
   // Scan project files
   startSpinner('Scanning project...');
 
@@ -17,9 +20,19 @@ export async function handleConvert(sourceProjectPath, targetProjectPath) {
     });
 
     // Run LangGraph Workflow
-    await runMigrationWorkflow(sourceProjectPath, targetProjectPath, files, {
-      provider: process.env.AI_PROVIDER || 'gemini',
-    });
+    const finalState = await runMigrationWorkflow(
+      sourceProjectPath,
+      targetProjectPath,
+      files,
+      {
+        provider: process.env.AI_PROVIDER || 'gemini',
+      }
+    );
+
+    if (process.env.THESIS_MODE) {
+      thesisMetrics.setTotalLLOC(files);
+      thesisMetrics.saveMetrics(finalState?.telemetry || []);
+    }
   } catch (err) {
     failSpinner(`Scan failed: ${err.message}`);
     throw err;
