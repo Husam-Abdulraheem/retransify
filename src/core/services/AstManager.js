@@ -1,4 +1,6 @@
 import { Project } from 'ts-morph';
+import fs from 'fs-extra';
+import path from 'path';
 
 let webProjectInstance = null;
 let expoProjectInstance = null;
@@ -59,6 +61,17 @@ export class AstManager {
           },
         },
       });
+
+      // ── NEW: Automatically load global type definitions from disk ────────
+      if (targetProjectPath) {
+        const shimPath = path.join(targetProjectPath, 'nativewind-env.d.ts');
+        if (fs.existsSync(shimPath)) {
+          const content = fs.readFileSync(shimPath, 'utf-8');
+          expoProjectInstance.createSourceFile('nativewind-env.d.ts', content, {
+            overwrite: true,
+          });
+        }
+      }
     }
     return expoProjectInstance;
   }
@@ -85,7 +98,7 @@ export class AstManager {
    * @returns {import('ts-morph').Project} A fresh strict ts-morph Project
    */
   static getStrictVerificationProject(baseUrl) {
-    return new Project({
+    const project = new Project({
       useInMemoryFileSystem: true,
       skipAddingFilesFromTsConfig: true,
       skipFileDependencyResolution: false,
@@ -108,6 +121,19 @@ export class AstManager {
         },
       },
     });
+
+    // ── NEW: Automatically load global type definitions from disk ────────
+    if (baseUrl) {
+      const shimPath = path.join(baseUrl, 'nativewind-env.d.ts');
+      if (fs.existsSync(shimPath)) {
+        const content = fs.readFileSync(shimPath, 'utf-8');
+        project.createSourceFile('nativewind-env.d.ts', content, {
+          overwrite: true,
+        });
+      }
+    }
+
+    return project;
   }
 
   /**

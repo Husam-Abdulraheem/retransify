@@ -23,6 +23,12 @@ const outputSchema = z.object({
     .describe(
       'Specific instructions for the developer if this automated fix fails (e.g., manual library replacement).'
     ),
+  requiredDependencies: z
+    .array(z.string())
+    .optional()
+    .describe(
+      'New npm package names (exact install names) introduced in the fix that are NOT already installed. The pipeline will run "npx expo install" for each. Leave empty if no new packages were added.'
+    ),
 });
 
 /**
@@ -110,19 +116,29 @@ export async function healerNode(state, models = {}) {
     contractContext
   );
 
-  let response = null;
   try {
-    response = await executeModel(fixPrompt, models, outputSchema, {
+    const response = await executeModel(fixPrompt, models, outputSchema, {
       spinnerMessage: `AI Healing: Fixing ${filePath}...`,
       filePath,
+      isHealerRetry: true,
     });
 
     if (response && response.code && response.code.length > 50) {
+      const aiDeclaredDeps = (response.requiredDependencies || []).filter(
+        (pkg) => pkg && !installedPackages.includes(pkg)
+      );
+      if (aiDeclaredDeps.length > 0) {
+        printSubStep(
+          `Healer declared ${aiDeclaredDeps.length} new dep(s): ${aiDeclaredDeps.join(', ')}`,
+          1
+        );
+      }
       printSubStep(`✨ Fix applied. Validating...`, 1);
       return {
         generatedCode: response.code,
         healAttempts: newAttemptCount,
         errors: [],
+        missingDependencies: aiDeclaredDeps,
         lastHealAnalysis: {
           analysis: response.analysis,
           suggestedManualAction: response.suggestedManualAction,
@@ -138,30 +154,11 @@ export async function healerNode(state, models = {}) {
 
   printSubStep(`Failed to generate fix`, 1);
 
-  // If this was the last attempt, record as unresolved
+  // If this was the last attempt, simply return the count and let DiskWriter handle the failure state
   if (newAttemptCount >= MAX_HEAL_ATTEMPTS) {
-    const errorRecord = {
-      filePath: currentFile?.relativeToProject || filePath,
-      reason: `Failed to generate a valid AI fix after max attempts (${MAX_HEAL_ATTEMPTS}). Remaining errors: ${errors.length}.`,
-      codeSnippet:
-        (generatedCode || '').substring(0, 500) + '...\n// (Code truncated)',
-      suggestedAction:
-        'Manually convert this component to React Native primitives (View, Text).',
-    };
-    const telemetryEntry = {
-      file: filePath,
-      status: 'manual_action_required',
-      attempts: 1 + newAttemptCount,
-      ai_reason:
-        response?.suggestedManualAction ||
-        'Maximum healing attempts reached without full resolution.',
-    };
-
     printSubStep(`Marked for manual intervention`, 1);
     return {
       healAttempts: newAttemptCount,
-      unresolvedErrors: [errorRecord],
-      telemetry: [telemetryEntry],
     };
   }
 

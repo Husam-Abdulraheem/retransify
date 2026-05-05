@@ -242,6 +242,7 @@ export const GraphState = Annotation.Root({
 export const NODE_NAMES = {
   ANALYZER: 'analyzerNode',
   PLANNER: 'plannerNode',
+  NORMALIZER: 'normalizerNode',
   EXECUTOR: 'executorNode',
   VERIFIER: 'verifierNode',
   HEALER: 'healerNode',

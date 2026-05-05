@@ -4,6 +4,7 @@ import { GraphState, NODE_NAMES, MAX_HEAL_ATTEMPTS } from './state.js';
 import { analyzerNode } from './nodes/analyzerNode.js';
 import { plannerNode } from './nodes/plannerNode.js';
 import { executorNode } from './nodes/executorNode.js';
+import { normalizerNode } from './nodes/normalizerNode.js';
 import { verifierNode } from './nodes/verifierNode.js';
 import { healerNode } from './nodes/healerNode.js';
 import { retryNode } from './nodes/retryNode.js';
@@ -62,6 +63,11 @@ function buildWorkflow(models) {
 
   workflow.addNode(NODE_NAMES.FILE_PICKER, (state) => filePickerNode(state));
 
+  // Normalizer: cleans raw web source before AI transpilation (fast model pass)
+  workflow.addNode(NODE_NAMES.NORMALIZER, (state) =>
+    normalizerNode(state, models)
+  );
+
   workflow.addNode(NODE_NAMES.EXECUTOR, (state) => executorNode(state, models));
 
   workflow.addNode(NODE_NAMES.VERIFIER, (state) => verifierNode(state));
@@ -94,11 +100,14 @@ function buildWorkflow(models) {
 
   // After FilePicker -> check if there is a file to process
   workflow.addConditionalEdges(NODE_NAMES.FILE_PICKER, shouldProcessFile, {
-    process: NODE_NAMES.EXECUTOR,
-    cache: NODE_NAMES.CACHE_LOADER, // 👈 New path for cached files
+    process: NODE_NAMES.NORMALIZER, // 👈 Pre-clean web source before AI transpilation
+    cache: NODE_NAMES.CACHE_LOADER, // New path for cached files
     skip: NODE_NAMES.FILE_PICKER, // Skipped file -> fetch next file
-    done: NODE_NAMES.GLOBAL_AUDIT, // 👈 البدء بالفحص النهائي أولاً
+    done: NODE_NAMES.GLOBAL_AUDIT, // Start final audit phase
   });
+
+  // Normalizer always feeds into Executor (non-fatal: failures pass content unchanged)
+  workflow.addEdge(NODE_NAMES.NORMALIZER, NODE_NAMES.EXECUTOR);
 
   workflow.addEdge(NODE_NAMES.GLOBAL_AUDIT, NODE_NAMES.AUTO_HEALER); // 👈 ثم تشغيل المعالج التلقائي
 

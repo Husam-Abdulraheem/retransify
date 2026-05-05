@@ -4,6 +4,7 @@ import {
   startSubSpinner,
   stopSpinner,
 } from '../utils/ui.js';
+import { thesisMetrics } from '../utils/thesisMetrics.js';
 
 /**
  * executeModel - Centralized AI model runner with structured output, fallbacks, and error handling.
@@ -47,6 +48,27 @@ export async function executeModel(
     }
 
     const response = await model.invoke(prompt);
+
+    // ── Record Thesis Metrics ──────────────────────────────────────
+    if (process.env.THESIS_MODE) {
+      // Extract tokens from LangChain usage_metadata (standard in newer versions)
+      const inputTokens = response.usage_metadata?.input_tokens || 0;
+      const outputTokens = response.usage_metadata?.output_tokens || 0;
+
+      // Get model name from response metadata or fallback to the provided model's property
+      const actualModelName =
+        response.response_metadata?.model_name ||
+        models.smartModel?.model || // Google Generative AI uses .model
+        models.smartModel?.modelName || // Other providers might use .modelName
+        'gemini-3-flash-preview';
+
+      thesisMetrics.recordModelUsage({
+        modelName: actualModelName,
+        inputTokens,
+        outputTokens,
+        isHealerRetry: options.isHealerRetry || false,
+      });
+    }
 
     if (spinnerMessage) {
       stopSpinner();

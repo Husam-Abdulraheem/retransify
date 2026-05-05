@@ -16,6 +16,12 @@ const outputSchema = z.object({
     .describe(
       'The complete converted React Native code. You MUST format this code legibly with proper newlines and indentation. DO NOT minify.'
     ),
+  requiredDependencies: z
+    .array(z.string())
+    .optional()
+    .describe(
+      'An array of NEW npm package names (exact install names) that you introduced in the generated code and are NOT already in the pre-installed or installed packages list. Example: ["@react-native-community/datetimepicker", "expo-av"]. Leave empty if you used only pre-installed packages.'
+    ),
 });
 
 /**
@@ -161,11 +167,25 @@ export async function executorNode(state, models = {}) {
       .replace(/```$/im, '')
       .trim();
 
+    // Collect AI-declared new dependencies, excluding already-installed ones
+    const aiDeclaredDeps = (response.requiredDependencies || []).filter(
+      (pkg) => pkg && !installedPackages.includes(pkg)
+    );
+
+    if (aiDeclaredDeps.length > 0) {
+      printSubStep(
+        `AI declared ${aiDeclaredDeps.length} new dep(s): ${aiDeclaredDeps.join(', ')}`
+      );
+    }
+
     printSubStep(`AI Generation complete ✔`);
 
     return {
       generatedCode,
       errors: [],
+      // Feed into missingDependencies so autoInstallerNode picks them up
+      // via the existing pipeline without any new routing logic.
+      missingDependencies: aiDeclaredDeps,
     };
   } catch (err) {
     if (err.message?.startsWith('TRANSIENT:')) {
