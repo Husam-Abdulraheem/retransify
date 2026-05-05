@@ -1,4 +1,5 @@
 import { Command } from 'commander';
+import fs from 'fs';
 import path from 'path';
 import pc from 'picocolors';
 import readline from 'readline';
@@ -24,17 +25,36 @@ export async function runCLI() {
   program
     .name(pc.cyan('retransify'))
     .description(pc.dim(pkg.description))
-    .version(pkg.version, '-v, --version', 'Output the current version');
+    .version(pkg.version, '-v, --version', 'Output the current version')
+    .option('-n, --name <name>', 'Name for the new mobile project')
+    .option('-o, --output <dir>', 'Custom output directory (overrides name)')
+    .option('-f, --force', 'Overwrite target directory if it exists');
 
   program
     .command('convert', { isDefault: true })
+    .alias('c')
     .description('Transpile a React web project to React Native (Expo)')
     .argument('[path]', 'Path to the source React project', '.')
-    .option('-n, --name <name>', 'Name for the new mobile project')
-    .option('-o, --output <dir>', 'Custom output directory (overrides name)')
-    .action(async (source, options) => {
-      const projectPath = path.resolve(source);
-      const defaultName = `${path.basename(projectPath)}-mobile`;
+    .action(async (source) => {
+      const options = program.opts();
+      const sourcePath = path.resolve(source);
+
+      // Validation: Check if source path exists
+      if (!fs.existsSync(sourcePath)) {
+        console.error(
+          `\n${pc.red('Error:')} Source path ${pc.bold(source)} does not exist.`
+        );
+        process.exit(1);
+      }
+
+      // Validation: Check if it's a JS/TS project (has package.json)
+      if (!fs.existsSync(path.join(sourcePath, 'package.json'))) {
+        console.warn(
+          `\n${pc.yellow('Warning:')} No ${pc.bold('package.json')} found in ${pc.dim(sourcePath)}. Is this a React project?`
+        );
+      }
+
+      const defaultName = `${path.basename(sourcePath)}-mobile`;
 
       let projectName = options.name;
       let targetProjectPath;
@@ -61,15 +81,31 @@ export async function runCLI() {
         targetProjectPath = path.resolve(process.cwd(), projectName);
       }
 
-      await handleConvert(projectPath, targetProjectPath);
+      // Force handling: Check if target exists
+      if (fs.existsSync(targetProjectPath) && !options.force) {
+        console.error(
+          `\n${pc.red('Error:')} Target directory ${pc.bold(path.basename(targetProjectPath))} already exists.`
+        );
+        console.log(`  Use ${pc.cyan('--force')} to overwrite it.\n`);
+        process.exit(1);
+      }
+
+      await handleConvert(sourcePath, targetProjectPath);
     });
 
   program
     .command('doctor')
+    .alias('d')
     .description('Verify the health of a converted Expo project')
     .argument('[path]', 'Path to the generated Expo project', '.')
     .action(async (target) => {
       const projectPath = path.resolve(target);
+      if (!fs.existsSync(projectPath)) {
+        console.error(
+          `\n${pc.red('Error:')} Path ${pc.bold(target)} does not exist.`
+        );
+        process.exit(1);
+      }
       await runDoctor(projectPath);
     });
 
@@ -77,10 +113,16 @@ export async function runCLI() {
   program.addHelpText(
     'after',
     `
+${pc.bold('Aliases:')}
+  ${pc.cyan('c')}, ${pc.dim('convert')}
+  ${pc.cyan('d')}, ${pc.dim('doctor')}
+
 ${pc.bold('Examples:')}
-  ${pc.cyan('$ retransify .')}                             ${pc.dim('# Convert project in current folder')}
-  ${pc.cyan('$ retransify ./my-app --name mobile-app')}    ${pc.dim('# Convert with a specific name')}
-  ${pc.cyan('$ retransify doctor ./mobile-app')}           ${pc.dim('# Run health check on output')}
+  ${pc.cyan('$ retransify .')}                             ${pc.dim('# Convert current folder (Interactive)')}
+  ${pc.cyan('$ retransify ./web-app --name mobile')}       ${pc.dim('# Convert with specific name')}
+  ${pc.cyan('$ retransify ./web-app --force')}              ${pc.dim('# Overwrite existing target folder')}
+  ${pc.cyan('$ retransify c ./web-app -o ./out')}          ${pc.dim('# Use alias and custom output')}
+  ${pc.cyan('$ retransify d ./mobile-app')}                ${pc.dim('# Run health check (alias)')}
 
 ${pc.bold('Documentation:')}
   ${pc.underline('https://github.com/Husam-Abdulraheem/retransify')}

@@ -135,8 +135,14 @@ graph TD;
 
 ### Installation
 
-You can install Retransify globally to use it anywhere:
+**The Recommended Way (npx):**
+You don't even need to install Retransify! Just run it directly using `npx`:
+```bash
+npx retransify <path-to-react-project>
+```
 
+**Global Installation:**
+If you prefer to have it available globally:
 ```bash
 npm install -g retransify
 ```
@@ -169,25 +175,54 @@ export GOOGLE_API_KEY="your_key_here"
 
 ## 📱 Usage
 
-### 🏎️ Convert a Project
-Navigate to your directory and run the conversion. Retransify will **interactively** ask you for the new project name:
+Retransify is designed to be extremely easy to use. You can either run it as a standalone command or use its subcommands and aliases.
+
+### 🏎️ Convert a Project (Recommended)
+Navigate to your project or specify the path. If no project name is provided, Retransify will ask you interactively.
 
 ```bash
-retransify convert ./path-to-react-app
+# Simplest way (converts current folder)
+retransify .
+
+# Specify source path
+retransify ./my-web-app
+
+# Using the full command and a specific name
+retransify convert ./my-web-app --name my-mobile-app
 ```
 
-**What happens next?**
-1. ⌨️ **Input**: You'll be prompted for a project name (default is `your-app-mobile`).
-2. 🏗️ **Scaffold**: A clean Expo SDK 54 project is created.
-3. 🧠 **AI Flow**: The agentic graph starts analyzing and converting your files one by one.
-4. 🩺 **Self-Heal**: The tool automatically fixes DOM leaks and missing native dependencies.
-5. 📊 **Metrics**: If `THESIS_MODE=true` is set, check `retransify-metrics.csv` for a detailed conversion audit.
+### ⌨️ Available Commands & Aliases
+
+| Command | Alias | Description |
+| :--- | :--- | :--- |
+| `convert` | `c` | **(Default)** Transpile React Web to Expo React Native |
+| `doctor` | `d` | Verify the health of a converted Expo project |
+
+### 🛠️ Options
+
+| Option | Shorthand | Description |
+| :--- | :--- | :--- |
+| `--name` | `-n` | Specify the name for the new mobile project |
+| `--output` | `-o` | Specify a custom output directory |
+| `--force` | `-f` | Overwrite the target directory if it already exists |
+| `--version` | `-v` | Output the current version of Retransify |
+| `--help` | `-h` | Display help for any command |
 
 ### 🩺 Health Check
 Verify and fix dependencies in a migrated project:
 ```bash
+# Using alias
+retransify d ./path-to-expo-app
+
+# Using full command
 retransify doctor ./path-to-expo-app
 ```
+
+**What happens during conversion?**
+1. 🏗️ **Scaffold**: A clean Expo SDK 54 project is created.
+2. 🧠 **AI Flow**: The agentic graph starts analyzing and converting your files one by one.
+3. 🩺 **Self-Heal**: The tool automatically fixes DOM leaks and missing native dependencies.
+4. 📊 **Metrics**: If `THESIS_MODE=true` is set, check `retransify-metrics.csv` for a detailed conversion audit.
 
 ---
 
