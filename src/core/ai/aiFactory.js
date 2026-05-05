@@ -6,24 +6,6 @@ dotenv.config();
 
 const PROVIDER = process.env.AI_PROVIDER || 'gemini';
 
-import { thesisMetrics } from '../utils/thesisMetrics.js';
-
-const getTelemetryCallbacks = () => {
-  if (!process.env.THESIS_MODE) return [];
-  return [
-    {
-      handleLLMEnd: async (output) => {
-        let tokens = 0;
-        if (output?.llmOutput?.tokenUsage) {
-          const usage = output.llmOutput.tokenUsage;
-          tokens = (usage.promptTokens || 0) + (usage.completionTokens || 0);
-        }
-        thesisMetrics.addTokens(tokens);
-      },
-    },
-  ];
-};
-
 export function createFastModel() {
   if (PROVIDER === 'groq') {
     return new ChatGroq({
@@ -31,15 +13,13 @@ export function createFastModel() {
       temperature: 0,
       maxRetries: 3,
       maxTokens: 8192,
-      callbacks: getTelemetryCallbacks(),
     });
   }
   return new ChatGoogleGenerativeAI({
-    model: process.env.AI_FAST_MODEL || 'gemini-2.5-flash-lite',
+    model: process.env.AI_FAST_MODEL || 'gemini-3-flash-preview',
     temperature: 0,
     maxRetries: 3,
     maxTokens: 8192,
-    callbacks: getTelemetryCallbacks(),
   });
 }
 
@@ -50,15 +30,13 @@ export function createSmartModel() {
       temperature: 0,
       maxRetries: 3,
       maxTokens: 8192,
-      callbacks: getTelemetryCallbacks(),
     });
   }
   return new ChatGoogleGenerativeAI({
-    model: process.env.AI_SMART_MODEL || 'gemini-2.5-pro',
+    model: process.env.AI_SMART_MODEL || 'gemini-3.1-pro-preview',
     temperature: 0,
     maxRetries: 6,
     maxTokens: 8192,
-    callbacks: getTelemetryCallbacks(),
   });
 }
 
@@ -70,7 +48,7 @@ export function getActiveModelName() {
   if (PROVIDER === 'groq') {
     return process.env.AI_SMART_MODEL || 'llama-3.3-70b-versatile';
   }
-  return process.env.AI_SMART_MODEL || 'gemini-2.5-pro';
+  return process.env.AI_SMART_MODEL || 'gemini-3.1-pro-preview';
 }
 
 export function createEmbeddings() {

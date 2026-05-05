@@ -53,7 +53,7 @@ export function printBanner(modelName) {
     '  ╚═╝  ╚═╝╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚══╝╚══════╝╚═╝╚═╝        ╚═╝   '
   );
   const tagline = pc.dim('  React → React Native · Powered by AI');
-  const version = pc.dim('  v1.0.0');
+  const version = pc.dim('  v1.0.0-beta.2');
   const separator = pc.dim('  ' + '─'.repeat(80));
 
   console.log('');

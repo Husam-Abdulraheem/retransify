@@ -59,9 +59,10 @@ Our latest architectural overhaul introduces cutting-edge capabilities:
 - **🧠 Cyclical AI Workflow (Powered by LangGraph)**:
   - **Analyzer Node**: Uses `ts-morph` to extract the full tech stack, entry points, and source roots without guessing.
   - **Planner Node**: Generates a deterministic conversion map and file priority queue.
+  - **Normalizer Node**: Pre-cleans raw web source code (removes ghost props, dead imports, and enforces strict TS interfaces) using a fast AI pass to prevent "garbage-in → garbage-out".
   - **Layout Agent Node**: Synthesizes complex `expo-router` structures (Tabs, Drawers, Modals) with perfect preservation of global providers.
-  - **Executor Node**: Transforms components with high fidelity, injecting JIT context (RAG) for localized imports.
-  - **Verifier Node**: Actively analyzes AST structure to mathematically flag leftover DOM elements, syntax errors, and faulty routing.
+  - **Executor Node**: Transforms components with high fidelity, injecting JIT context (RAG) and **dynamically declaring new npm dependencies** as needed.
+  - **Verifier Node**: Actively analyzes AST structure using loaded global type definitions (Shims) to mathematically flag leftover DOM elements and syntax errors.
   - **Healer Node**: Dynamically corrects AI-generated code based on verifier feedback without user intervention.
   - **Auto-Installer Node**: Maps and installs React Native-compatible alternatives for web packages.
   - **🔍 Global Audit Node**: Runs the native TypeScript compiler (`tsc --noEmit`) on the final project to intercept deep architectural errors.
@@ -70,11 +71,18 @@ Our latest architectural overhaul introduces cutting-edge capabilities:
 - **🛤️ Intelligent Route Projection**:
   - Automatically maps React Router / Next.js routes to the Expo `app/` directory structure.
   - **Home Screen Resolver**: A specialized AST-tracing chain that discovers the *true* entry component by following the bootstrap path (e.g., `main.tsx` → `App.tsx` → Route `/`), rather than relying on filename guessing.
+- **🔄 Hybrid Resume System**:
+  - Intelligent resumption of interrupted migrations using **content hashing**.
+  - Automatically skips files that haven't changed since the last run to save time and API costs.
+- **📊 Academic Telemetry (Thesis Mode)**:
+  - Deep tracking of **LLOC** (Logical Lines of Code), **Token Usage** (Input/Output), and **Cost Estimation (USD)**.
+  - Automatically generates a comprehensive `retransify-metrics.csv` for auditing and academic performance analysis.
+  - Enabled via `THESIS_MODE=true` environment variable.
 - **🛡️ Resilience & Reliability**:
-  - **Structural Contract Enforcement (AST-driven)**: Eliminates cross-file "hallucination" by extracting precise, machine-readable function signatures (parameters, destructured shapes, and types) into a central **ContractRegistry**.
-  - **Authoritative Prompting**: Injects exact call-site contracts into the LLM workspace, ensuring functions are called with the correct object shapes.
-  - **Cross-File Verification**: The Verifier mathematically validates that generated code conforms to imported function contracts before finalizing the file.
-  - **Multi-Model Fallback**: Automatically retries transient API errors (503/429) and switches providers if necessary.
+  - **Fail-Safe Disk Writing**: Atomic file operations to prevent code corruption during interruptions.
+  - **Transient Error Handling**: Automatic retries for API errors (503/429) with exponential backoff.
+  - **Enhanced Summary Reporting**: The CLI now tracks "Files with issues" separately from failures, providing a granular look at items requiring manual polish.
+  - **Structural Contract Enforcement (AST-driven)**: Eliminates cross-file "hallucination" by extracting precise signatures into a central **ContractRegistry**.
 - **🎨 NativeWind v4 Integration**:
   - Complete support for modern styling. Detects Tailwind setups, configures `global.css`, and handles responsive class mappings.
 - **⚙️ Dynamic Expo Configuration**:
@@ -97,7 +105,8 @@ graph TD;
     D --> E[File Picker];
 
     subgraph Iterative AI Graph Loop
-    E --> F[Executor Node];
+    E --> Norm[Normalizer Node];
+    Norm --> F[Executor Node];
     F -- "Transient Error" --> R[Retry Handler];
     R --> F;
     F -- "Success" --> G[Verifier Node];
@@ -172,6 +181,7 @@ retransify convert ./path-to-react-app
 2. 🏗️ **Scaffold**: A clean Expo SDK 54 project is created.
 3. 🧠 **AI Flow**: The agentic graph starts analyzing and converting your files one by one.
 4. 🩺 **Self-Heal**: The tool automatically fixes DOM leaks and missing native dependencies.
+5. 📊 **Metrics**: If `THESIS_MODE=true` is set, check `retransify-metrics.csv` for a detailed conversion audit.
 
 ### 🩺 Health Check
 Verify and fix dependencies in a migrated project:

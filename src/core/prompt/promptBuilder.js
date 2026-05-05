@@ -185,16 +185,20 @@ ${
     : ''
 }
 
-4. DEPENDENCIES & LIBRARIES MAP:
-   - Base Expo Libraries (Pre-installed): ${COMMON_DEPENDENCIES.join(', ')}
-   - Installed Packages in Environment: ${installedPackages.join(', ')}
-   - STRICT ENGINEERING RULE: You are forbidden to use or import ANY library outside the compiled 'Installed Packages in Environment' list. You are strictly forbidden to invent or introduce new libraries.
+4. DEPENDENCIES & LIBRARIES (EXPO-FIRST DYNAMIC RESOLUTION):
+   - Base Expo Libraries (Pre-installed, use freely): ${COMMON_DEPENDENCIES.join(', ')}
+   - Already Installed in Environment (use freely): ${installedPackages.join(', ')}
+   - EXPO-FIRST PRIORITY (CRITICAL): When a web library has no direct React Native equivalent, you MUST search for a replacement in this strict priority order:
+     1. An official **Expo SDK** module (e.g., expo-av, expo-camera, expo-sensors). Prefer Expo modules above all others.
+     2. A well-known **React Native Community** package (e.g., @react-native-community/datetimepicker).
+     3. A **React Native** compatible third-party library. Only choose this if no Expo or Community option exists.
    - DYNAMIC LIBRARY RESOLUTION: You MUST strictly follow this translation map for known libraries:
      ${JSON.stringify(LEGACY_TO_EXPO_MAP, null, 2)}
-   - FORBIDDEN LIBRARIES HANDLING: 
+   - FORBIDDEN LIBRARIES HANDLING:
      Blocklist: ${WEB_ONLY_BLOCKLIST.join(', ')}
      If the original code imports ANY library from this blocklist, or ANY library built exclusively for the Web/DOM, you MUST delete the import. Reverse-engineer its logic and implement the equivalent using pure React Native/Expo features.
    - ICONS ABSTRACTION: Standardize ALL third-party icon libraries to use '@expo/vector-icons' exclusively.
+   - [REQUIRED OUTPUT FIELD — CRITICAL]: After choosing any package NOT in the pre-installed or already-installed lists above, you MUST declare its exact npm install name in the 'requiredDependencies' array in your JSON response. The pipeline will call 'npx expo install' for each entry automatically. If you only used pre-installed packages, return an empty array.
 
 5. MOBILE UI/UX & LAYOUT ADAPTATION (CRITICAL - FIXES OVERLAPPING & OVERFLOW):
    - [IMAGES & DIMENSION COLLAPSE (CRITICAL)]: Convert all HTML <img> tags to the <Image> component imported EXCLUSIVELY from 'expo-image' (import { Image } from 'expo-image';). 
@@ -387,7 +391,7 @@ STRICT HEALING PRINCIPLES & CONSTRAINTS
 4. WEB DOM LEAKAGE & EXPO COMPLIANCE (CRITICAL): If the error complains about unsupported Web DOM elements (e.g., 'div', 'span', 'img') or React Router dead links, you MUST replace them with React Native/Expo Router equivalents. This project uses Expo Router v3+, so ALWAYS use 'expo-router' components (<Link href="/...">, <Stack>, <Tabs>) and hooks ('useLocalSearchParams', 'useRouter').
 ${isNativeWind ? "5. STYLING: This project uses NativeWind. Do NOT remove 'className' properties. DO NOT use StyleSheet.create." : "5. STYLING: This project uses standard StyleSheet. Do NOT use 'className'."}
 ${isLayoutFile ? '6. LAYOUT ARCHITECTURE (CRITICAL): This is an Expo Router layout file. The Navigator (<Stack> or <Tabs> or <Slot>) MUST be the root visual component. Do NOT wrap Navigation elements in <View> or <ScrollView>.' : '6. SCREEN COMPLIANCE: Direct rendering constraint applies. Ensure you use standard native scrolling elements like <ScrollView> where appropriate.'}
-7. DEPENDENCY RESTRICTION: You are FORBIDDEN to use any external library outside this compiled list: [${installedPackages.join(', ')}]. If a fix requires a missing package, implement it using standard React Native APIs.
+7. DEPENDENCY RESTRICTION (EXPO-FIRST): Prefer Expo SDK modules (e.g., expo-av, expo-camera) first, then React Native Community packages, then general RN-compatible libraries. If you introduce a package not already in the installed list [${installedPackages.join(', ')}], you MUST declare it in the 'requiredDependencies' array. The pipeline will install it via 'npx expo install' automatically.
 8. NO SUPPRESSION: Do NOT use @ts-ignore or 'any' assertions to bypass errors. You must structurally fix the logic.
 9. CODE FORMATTING: You MUST format output code legibly with proper newlines. DO NOT minify.
 10. FAILURE ANALYSIS (CRITICAL): In addition to the code, you MUST fill the 'analysis' and 'suggestedManualAction' fields:
