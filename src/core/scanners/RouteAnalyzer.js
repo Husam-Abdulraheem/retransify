@@ -828,8 +828,8 @@ export class RouteAnalyzer {
           ? el.getOpeningElement().getTagNameNode().getText()
           : el.getTagNameNode().getText();
 
-      // 🚨 نلتقط مزودات السياق فقط (مثل CartProvider).
-      // يُمنع التقاط مكونات الواجهة (مثل Layout) لتجنب انهيار الـ Stack
+      // 🚨 We only capture context providers (e.g., CartProvider).
+      // It is forbidden to capture interface components (e.g., Layout) to avoid Stack collapse.
       if (tagName.endsWith('Provider')) {
         const resolved = this._resolveImportWithType(
           sourceFile,

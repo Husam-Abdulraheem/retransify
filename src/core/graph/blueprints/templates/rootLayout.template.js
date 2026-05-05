@@ -1,5 +1,5 @@
 export function generateRootLayout(providers = []) {
-  // 1. توليد استيرادات مزودات الحالة (Dynamic Imports)
+  // 1. Generate state provider imports (Dynamic Imports)
   const providerImports = providers
     .map((p) => {
       if (p.isDefault) {
@@ -9,17 +9,17 @@ export function generateRootLayout(providers = []) {
     })
     .join('\n');
 
-  // 2. توليد التغليف الديناميكي لمزودات الحالة (Dynamic Wrappers)
+  // 2. Generate dynamic wrapping for state providers (Dynamic Wrappers)
   let openingTags = '';
   let closingTags = '';
 
   providers.forEach((p) => {
     openingTags += `        <${p.name}>\n`;
-    // إضافة وسم الإغلاق بالعكس للحفاظ على الترتيب الهرمي (LIFO)
+    // Add closing tags in reverse to maintain hierarchical order (LIFO)
     closingTags = `        </${p.name}>\n` + closingTags;
   });
 
-  // 3. دمج إعداداتك الثابتة مع البيانات الديناميكية
+  // 3. Merge your static settings with dynamic data
   return [
     '// [VIRTUAL BLUEPRINT: ROOT LAYOUT]',
     `import "../nativewind";`,
@@ -29,7 +29,7 @@ export function generateRootLayout(providers = []) {
     `import { useEffect } from 'react';`,
     `import { Appearance } from 'react-native';`,
     `import { SafeAreaProvider } from 'react-native-safe-area-context';`,
-    providerImports, // استيرادات الـ Contexts والـ Providers هنا
+    providerImports, // Context and Provider imports go here
     ``,
     `export default function RootLayout() {`,
     `  const { colorScheme, setColorScheme } = useColorScheme();`,
@@ -43,9 +43,9 @@ export function generateRootLayout(providers = []) {
     `  return (`,
     `    <SafeAreaProvider>`,
     `      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>`,
-    openingTags, // فتح مزودات الحالة الديناميكية
+    openingTags, // Open dynamic state providers
     `          <Slot />`,
-    closingTags, // إغلاق مزودات الحالة الديناميكية
+    closingTags, // Close dynamic state providers
     `      </ThemeProvider>`,
     `    </SafeAreaProvider>`,
     `  );`,

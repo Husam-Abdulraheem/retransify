@@ -42,19 +42,19 @@ export async function runDoctor(targetProjectPath) {
     return;
   }
 
-  // 2. فحص الإعدادات الأساسية
+  // 2. Check basic configurations
   const configStatus = await checkConfigurations(targetProjectPath);
 
-  // 3. فحص تسرب أكواد الويب (HTML/DOM)
+  // 3. Check for web code leakage (HTML/DOM)
   const webStatus = await checkWebLeakage(targetProjectPath);
 
-  // 4. فحص وإصلاح المسارات المكسورة (الميزة القاتلة - Killer Feature)
+  // 4. Check and fix broken paths
   const importStatus = await fixBrokenImports(targetProjectPath);
 
-  // 5. فحص وإصلاح الأصول الثابتة (Images, Fonts, etc.)
+  // 5. Check and fix static assets (Images, Fonts, etc.)
   const assetStatus = await fixBrokenAssets(targetProjectPath);
 
-  // القرار النهائي للسلامة: نجاح كل الفحوصات بنسبة 100%
+  // Final safety decision: Success if all checks pass 100%
   const isHealthy =
     configStatus &&
     webStatus &&

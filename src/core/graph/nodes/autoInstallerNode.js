@@ -22,7 +22,7 @@ export async function autoInstallerNode(state) {
   if (installAttempts >= 2) {
     printWarning(`Auto-installer circuit breaker activated for ${filePath}`);
 
-    // سجل المكتبات الفاشلة للتقرير النهائي
+    // Log failed libraries for the final report
     const unresolvedErrors = missingDependencies.map((pkg) => ({
       filePath,
       reason: `Failed to auto-install package: '${pkg}'`,

@@ -23,22 +23,22 @@ export async function globalAuditNode(state) {
   const newErrorsFound = [];
 
   try {
-    // 1. تشغيل المترجم الحقيقي الخاص بـ Expo
-    // نستخدم --noEmit للتأكد من صحة الكود دون توليد ملفات JS
+    // 1. Running the actual Expo compiler
+    // Use --noEmit to ensure code correctness without generating JS files
     await execAsync('npx tsc --noEmit', { cwd: targetProjectPath });
 
     succeedSpinner('Global Audit — No errors found.');
   } catch (error) {
-    // 2. تحليل مخرجات tsc في حالة وجود أخطاء (وهو المتوقع دائماً مع كود AI)
+    // 2. Analyze tsc output in case of errors
     const tscOutput = (error.stdout || '') + (error.stderr || '');
 
-    // تقسيم المخرجات إلى سطور (كل خطأ في tsc يبدأ بمسار الملف)
+    // Splitting output into lines (each tsc error starts with the file path)
     const errorLines = tscOutput
       .split('\n')
       .filter((line) => line.includes('error TS'));
 
     for (const line of errorLines) {
-      // Regex لاستخراج مسار الملف ورسالة الخطأ
+      // Regex to extract file path and error message
       // Format: app/index.tsx(15,2): error TS2304: Cannot find name 'View'.
       const match = line.match(/^(.+?)\(\d+,\d+\):\s+(error\s+TS\d+:\s+.+)$/);
 
@@ -46,10 +46,10 @@ export async function globalAuditNode(state) {
         const rawFilePath = match[1];
         const errorMessage = match[2];
 
-        // تنظيف المسار ليكون مقروءاً في التقرير
+        // Cleaning the path to be readable in the report
         const cleanPath = normalizePath(rawFilePath);
 
-        // تجنب تكرار نفس رسالة الخطأ لنفس الملف (Deduplication)
+        // Avoiding duplicate error messages for the same file (Deduplication)
         const isAlreadyReported = unresolvedErrors.some(
           (err) => err.filePath === cleanPath && err.reason === errorMessage
         );
@@ -76,6 +76,6 @@ export async function globalAuditNode(state) {
     }
   }
 
-  // تحديث الـ state (الـ Reducer سيقوم بعملية الإلحاق تلقائياً)
+  // Updating the state (the Reducer will automatically append)
   return { unresolvedErrors: newErrorsFound };
 }

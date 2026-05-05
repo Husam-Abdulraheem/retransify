@@ -4,11 +4,11 @@ import path from 'path';
 import { printStep, printSubStep, printWarning } from './ui.js';
 import { normalizePath } from './pathUtils.js';
 
-// دالة مساعدة لجلب كل الملفات برمجياً بدون مكتبات خارجية
+// Helper function to get all files programmatically without external libraries
 async function getAllFiles(dirPath, arrayOfFiles = []) {
   const files = await fs.readdir(dirPath);
   for (const file of files) {
-    // تجاهل المجلدات الثقيلة
+    // Ignore heavy directories
     if (file === 'node_modules' || file === '.expo' || file === 'assets')
       continue;
 
@@ -30,7 +30,7 @@ export async function checkWebLeakage(targetProjectPath) {
   const allFiles = await getAllFiles(targetProjectPath);
   let leakCount = 0;
 
-  // Regex لاصطياد أشهر عناصر الويب الممنوعة
+  // Regex to catch the most common forbidden web elements
   const webPatterns = [
     { regex: /<\s*div\b/g, name: '<div> tag' },
     { regex: /<\s*span\b/g, name: '<span> tag' },
@@ -54,7 +54,7 @@ export async function checkWebLeakage(targetProjectPath) {
           `[⚠] Web Leakage: Found '${pattern.name}' inside '${relativeFilePath}'. This will crash the app.`
         );
         leakCount++;
-        break; // نكتفي بذكر أول تسريب في الملف لعدم إزعاج المطور
+        break; // We only mention the first leak in the file to avoid annoying the developer
       }
     }
   }

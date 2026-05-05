@@ -109,9 +109,9 @@ function buildWorkflow(models) {
   // Normalizer always feeds into Executor (non-fatal: failures pass content unchanged)
   workflow.addEdge(NODE_NAMES.NORMALIZER, NODE_NAMES.EXECUTOR);
 
-  workflow.addEdge(NODE_NAMES.GLOBAL_AUDIT, NODE_NAMES.AUTO_HEALER); // 👈 ثم تشغيل المعالج التلقائي
+  workflow.addEdge(NODE_NAMES.GLOBAL_AUDIT, NODE_NAMES.AUTO_HEALER); // Then run the auto-healer
 
-  workflow.addEdge(NODE_NAMES.AUTO_HEALER, NODE_NAMES.REPORTER); // 👈 وأخيراً التقرير
+  workflow.addEdge(NODE_NAMES.AUTO_HEALER, NODE_NAMES.REPORTER); // And finally the report
   workflow.addEdge(NODE_NAMES.REPORTER, END);
 
   // After Executor -> check if generation succeeded

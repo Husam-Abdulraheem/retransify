@@ -16,7 +16,7 @@ const ASSET_EXTENSIONS = [
   '.json',
 ];
 
-// دالة مساعدة لجمع كل الأصول الثابتة من القرص الصلب
+// Helper function to collect all static assets from the hard drive
 async function buildAssetDictionary(dirPath, dictionary = new Map()) {
   const files = await fs.readdir(dirPath);
   for (const file of files) {
@@ -49,7 +49,7 @@ export async function fixBrokenAssets(targetProjectPath) {
     'Doctor — Scanning for broken static assets (Images, Fonts, JSON)...'
   );
 
-  // 1. بناء قاموس الأصول الثابتة من القرص الصلب
+  // 1. Build a static asset dictionary from the hard drive
   const assetDictionary = await buildAssetDictionary(targetProjectPath);
   const expoProject = AstManager.getExpoProject(targetProjectPath);
   const sourceFiles = expoProject.getSourceFiles();
@@ -58,7 +58,7 @@ export async function fixBrokenAssets(targetProjectPath) {
   let manualCount = 0;
   const report = [];
 
-  // دالة المعالجة الداخلية لتجنب التكرار
+  // Internal processing function to avoid redundancy
   function processAssetPath(
     moduleSpecifier,
     currentDir,
@@ -83,7 +83,7 @@ export async function fixBrokenAssets(targetProjectPath) {
       targetPath = normalizePath(path.resolve(currentDir, moduleSpecifier));
     }
 
-    if (fs.existsSync(targetPath)) return false; // المسار سليم
+    if (fs.existsSync(targetPath)) return false; // Path is correct
 
     const fileName = path.basename(moduleSpecifier);
     const potentialMatches = dictionary.get(fileName);
@@ -93,13 +93,13 @@ export async function fixBrokenAssets(targetProjectPath) {
       let newPath;
 
       if (isAlias) {
-        // الحفاظ على استخدام @ عبر حساب المسار بالنسبة لجذر المشروع
+        // Maintain the use of @ by calculating the path relative to the project root
         const relToRoot = normalizePath(
           path.relative(projectPath, correctAbsolutePath)
         );
         newPath = `@/${relToRoot}`;
       } else {
-        // استخدام المسار النسبي كالمعتاد
+        // Use relative path as usual
         newPath = getRelativePath(currentDir, correctAbsolutePath);
         if (!newPath.startsWith('.')) newPath = `./${newPath}`;
       }
@@ -121,13 +121,13 @@ export async function fixBrokenAssets(targetProjectPath) {
     }
   }
 
-  // 2. الفحص والإصلاح
+  // 2. Inspection and Repair
   for (const sourceFile of sourceFiles) {
     const fileAbsolutePath = normalizePath(sourceFile.getFilePath());
     const currentDir = path.dirname(fileAbsolutePath);
     let fileModified = false;
 
-    // A. فحص الـ Imports العادية (import logo from './logo.png')
+    // A. Check standard Imports (import logo from './logo.png')
     const imports = sourceFile.getImportDeclarations();
     for (const importDecl of imports) {
       const moduleSpecifier = importDecl.getModuleSpecifierValue();
@@ -147,7 +147,7 @@ export async function fixBrokenAssets(targetProjectPath) {
       }
     }
 
-    // B. فحص الـ Require (<Image source={require('./logo.png')} />)
+    // B. Check Require (<Image source={require('./logo.png')} />)
     const callExpressions = sourceFile.getDescendantsOfKind(
       SyntaxKind.CallExpression
     );
@@ -170,7 +170,7 @@ export async function fixBrokenAssets(targetProjectPath) {
                 targetProjectPath,
                 report,
                 (newPath) => {
-                  // تعديل مسار الـ require في الـ AST
+                  // Modify the require path in the AST
                   args[0].replaceWithText(`'${newPath}'`);
                 }
               ) || fileModified;

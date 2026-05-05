@@ -114,7 +114,7 @@ export async function verifierNode(state) {
     }
   }
 
-  // 🚨 3. حقن الكود الجديد (React Native) في المترجم بدلاً من الكود القديم!
+  // 3. Injecting new code (React Native) into the compiler instead of the old code
   const mainProject = AstManager.getExpoProject(targetProjectPath);
 
   const sourceFile = AstManager.upsertExpoFile(

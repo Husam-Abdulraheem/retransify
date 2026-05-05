@@ -108,13 +108,13 @@ export async function fixBrokenImports(targetProjectPath) {
           // Calculate the new path
           let newPath;
           if (isAlias) {
-            // الحفاظ على الـ Alias عبر الحساب بالنسبة لجذر المشروع
+            // Maintain the Alias by calculating it relative to the project root
             const relToRoot = normalizePath(
               path.relative(targetProjectPath, correctAbsolutePath)
             );
             newPath = `@/${relToRoot}`;
           } else {
-            // المسار النسبي كالمعتاد
+            // Relative path as usual
             newPath = getRelativePath(currentDir, correctAbsolutePath);
             if (!newPath.startsWith('.')) {
               newPath = `./${newPath}`;

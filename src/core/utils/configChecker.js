@@ -11,12 +11,12 @@ export async function checkConfigurations(targetProjectPath) {
   const pkg = fs.existsSync(pkgPath) ? await fs.readJSON(pkgPath) : {};
   const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
 
-  // 1. فحص babel.config.js
+  // 1. Check babel.config.js
   const babelPath = path.join(targetProjectPath, 'babel.config.js');
   if (fs.existsSync(babelPath)) {
     const babelContent = await fs.readFile(babelPath, 'utf-8');
 
-    // فحص NativeWind فقط إذا كان موجوداً في الحزم
+    // Check NativeWind only if it exists in the packages
     if (allDeps['nativewind'] && !babelContent.includes('nativewind/babel')) {
       printWarning(
         `[✖] NativeWind detected in package.json but missing from babel.config.js.`
@@ -25,7 +25,7 @@ export async function checkConfigurations(targetProjectPath) {
     }
   }
 
-  // 2. فحص app.json (التأكد من وجود expo-router)
+  // 2. Check app.json (Ensure expo-router exists)
   const appJsonPath = path.join(targetProjectPath, 'app.json');
   if (fs.existsSync(appJsonPath)) {
     try {
