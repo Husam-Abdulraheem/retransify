@@ -4,7 +4,7 @@
       <img src="assets/logo.png" width="180" alt="Retransify Logo" />
     </td>
     <td style="border: none; padding: 20px; vertical-align: middle;">
-      <h1>Retransify</h1>
+      <img src="assets/toolName.png" alt="Retransify" height="50" />
       <p>
         <img src="https://img.shields.io/npm/v/retransify.svg" alt="npm version" />
         <img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License" />
@@ -40,7 +40,7 @@
 
 ## 📖 Overview
 
-**Retransify** is a sophisticated CLI tool engineered to dramatically accelerate the migration of React Web applications to React Native (Expo).
+**<img src="assets/toolName.png" alt="Retransify" height="20" />** is a sophisticated CLI tool engineered to dramatically accelerate the migration of React Web applications to React Native (Expo).
 
 Rebuilt on the latest **LangGraph** framework, Retransify acts as an intelligent set of collaborative autonomous agents. It structurally analyzes your web project down to the Abstract Syntax Tree (AST), understands deep functional relationships, logically maps complex web-routing structures, rewrites UI components flawlessly, and auto-installs mandatory mobile dependencies on the fly.
 
