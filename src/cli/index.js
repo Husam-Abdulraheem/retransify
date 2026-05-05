@@ -1,10 +1,15 @@
+import { Command } from 'commander';
 import path from 'path';
 import pc from 'picocolors';
 import readline from 'readline';
+import { createRequire } from 'module';
 import { handleConvert } from '../core/commands/convertCommand.js';
 import { runDoctor } from '../core/utils/doctor.js';
 import { printBanner } from '../core/utils/ui.js';
 import { getActiveModelName } from '../core/ai/aiFactory.js';
+
+const require = createRequire(import.meta.url);
+const pkg = require('../../package.json');
 
 export async function runCLI() {
   printBanner(getActiveModelName());
@@ -14,73 +19,79 @@ export async function runCLI() {
     return;
   }
 
-  const args = process.argv.slice(2);
+  const program = new Command();
 
-  if (args.length === 0) {
-    return printHelp();
-  }
+  program
+    .name(pc.cyan('retransify'))
+    .description(pc.dim(pkg.description))
+    .version(pkg.version, '-v, --version', 'Output the current version');
 
-  const command = args[0];
+  program
+    .command('convert', { isDefault: true })
+    .description('Transpile a React web project to React Native (Expo)')
+    .argument('[path]', 'Path to the source React project', '.')
+    .option('-n, --name <name>', 'Name for the new mobile project')
+    .option('-o, --output <dir>', 'Custom output directory (overrides name)')
+    .action(async (source, options) => {
+      const projectPath = path.resolve(source);
+      const defaultName = `${path.basename(projectPath)}-mobile`;
 
-  if (command === 'convert') {
-    const projectPathIndex = 1;
-    let projectPath = args[projectPathIndex];
+      let projectName = options.name;
+      let targetProjectPath;
 
-    if (!projectPath || projectPath.startsWith('--')) {
-      projectPath = process.cwd();
-    } else {
-      projectPath = path.resolve(projectPath);
-    }
+      if (options.output) {
+        targetProjectPath = path.resolve(process.cwd(), options.output);
+      } else {
+        if (!projectName) {
+          const rl = readline.createInterface({
+            input: process.stdin,
+            output: process.stdout,
+          });
 
-    // 2. Extract default name
-    const defaultName = `${path.basename(projectPath)}-mobile`;
-
-    // 3. Prompt user for project name
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
-
-    const projectName = await new Promise((resolve) => {
-      rl.question(
-        `\n${pc.cyan('?')} Project name ${pc.dim(`(${defaultName})`)}: `,
-        (answer) => {
-          rl.close();
-          resolve(answer.trim() || defaultName);
+          projectName = await new Promise((resolve) => {
+            rl.question(
+              `\n${pc.cyan('?')} ${pc.bold('Project name')} ${pc.dim(`(${defaultName})`)}: `,
+              (answer) => {
+                rl.close();
+                resolve(answer.trim() || defaultName);
+              }
+            );
+          });
         }
-      );
+        targetProjectPath = path.resolve(process.cwd(), projectName);
+      }
+
+      await handleConvert(projectPath, targetProjectPath);
     });
 
-    // 4. Form final absolute path
-    const targetProjectPath = path.resolve(process.cwd(), projectName);
+  program
+    .command('doctor')
+    .description('Verify the health of a converted Expo project')
+    .argument('[path]', 'Path to the generated Expo project', '.')
+    .action(async (target) => {
+      const projectPath = path.resolve(target);
+      await runDoctor(projectPath);
+    });
 
-    await handleConvert(projectPath, targetProjectPath);
-    return;
+  // Custom help formatting
+  program.addHelpText(
+    'after',
+    `
+${pc.bold('Examples:')}
+  ${pc.cyan('$ retransify .')}                             ${pc.dim('# Convert project in current folder')}
+  ${pc.cyan('$ retransify ./my-app --name mobile-app')}    ${pc.dim('# Convert with a specific name')}
+  ${pc.cyan('$ retransify doctor ./mobile-app')}           ${pc.dim('# Run health check on output')}
+
+${pc.bold('Documentation:')}
+  ${pc.underline('https://github.com/Husam-Abdulraheem/retransify')}
+`
+  );
+
+  if (process.argv.length <= 2) {
+    program.help();
   }
 
-  if (command === 'doctor') {
-    const projectPath = args[1] ? path.resolve(args[1]) : process.cwd();
-    await runDoctor(projectPath);
-    return;
-  }
-
-  printHelp();
-}
-
-function printHelp() {
-  console.log('');
-  console.log(`  ${pc.bold('Usage:')}`);
-  console.log(
-    `    ${pc.cyan('retransify convert')} ${pc.dim('<path-to-react-project>')}`
-  );
-  console.log(
-    `    ${pc.cyan('retransify doctor')}  ${pc.dim('<path-to-expo-project>')}`
-  );
-  console.log('');
-  console.log(`  ${pc.bold('Examples:')}`);
-  console.log(`    ${pc.dim('retransify convert ./my-react-app')}`);
-  console.log(`    ${pc.dim('retransify doctor ./my-expo-app')}`);
-  console.log('');
+  await program.parseAsync(process.argv);
 }
 
 function validateApiKey() {
